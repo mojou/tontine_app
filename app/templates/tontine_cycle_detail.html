@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Cycle #{{ cycle.cycle_number }} - Détails Tontine{% endblock %}
+
+{% block page_title %}
+<i class="fas fa-chart-line text-gradient"></i> Cycle de Tontine #{{ cycle.cycle_number }}
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Bouton Retour -->
+    <div class="mb-4">
+        <a href="{{ url_for('tontine_cycles') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Retour à la liste
+        </a>
+        {% if cycle.status == 'EN_COURS' and next_beneficiary and current_user.is_admin() %}
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#registerBenefitModal">
+            <i class="fas fa-money-bill-wave"></i> Enregistrer le bénéfice
+        </button>
+        {% endif %}
+        {% if cycle.status == 'EN_COURS' and current_user.role == 'PRESIDENT' %}
+        <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteCycleModal">
+            <i class="fas fa-trash"></i> Supprimer le cycle
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Informations générales -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informations générales</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Statut</small>
+                    <span class="badge badge-{% if cycle.status == 'EN_COURS' %}success{% else %}secondary{% endif %} badge-lg">
+                        {% if cycle.status == 'EN_COURS' %}
+                            <i class="fas fa-play-circle"></i> En cours
+                        {% else %}
+                            <i class="fas fa-check-circle"></i> Terminé
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Type de groupe</small>
+                    <span class="h5">{{ cycle.group_type }} membres</span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Montant par membre</small>
+                    <span class="h5">{{ "{:,.0f}".format(cycle.amount_per_member).replace(',', ' ') }} FCFA</span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Total collecté</small>
+                    <span class="h5 text-success">{{ "{:,.0f}".format(cycle.total_amount).replace(',', ' ') }} FCFA</span>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Date de début</small>
+                    <span>{{ cycle.start_date.strftime('%d/%m/%Y') if cycle.start_date else 'Non définie' }}</span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Date de fin</small>
+                    <span>{{ cycle.end_date.strftime('%d/%m/%Y') if cycle.end_date else 'En cours' }}</span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Bénéficiaires</small>
+                    <span class="h5">{{ beneficiaries|length }}/{{ cycle.total_members }}</span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <small class="text-muted text-uppercase font-weight-bold d-block">Progression</small>
+                    <span class="h5">{{ "%.1f"|format(cycle.progress_percentage) }}%</span>
+                </div>
+            </div>
+            
+            <!-- Barre de progression -->
+            <div class="progress mt-2" style="height: 20px;">
+                <div class="progress-bar bg-success progress-bar-striped" 
+                     role="progressbar" 
+                     style="width: {{ cycle.progress_percentage }}%;">
+                    {{ "%.1f"|format(cycle.progress_percentage) }}%
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prochain bénéficiaire (si cycle actif) -->
+    {% if cycle.status == 'EN_COURS' and next_beneficiary %}
+    <div class="card shadow mb-4 border-success">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-trophy"></i> Prochain bénéficiaire</h5>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-4 text-center">
+                    <div class="rounded-circle bg-success text-white d-inline-flex align-items-center justify-content-center" 
+                         style="width: 80px; height: 80px; font-size: 2rem;">
+                        {{ next_beneficiary.first_name[0]|upper }}{{ next_beneficiary.last_name[0]|upper }}
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <h4 class="mb-1">{{ next_beneficiary.full_name }}</h4>
+                    <p class="text-muted mb-1">
+                        <i class="fas fa-id-card"></i> Position {{ next_beneficiary.position_in_group }}/{{ cycle.total_members }}
+                    </p>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-phone"></i> {{ next_beneficiary.phone }}
+                    </p>
+                </div>
+                <div class="col-md-3 text-right">
+                    <div class="alert alert-info mb-0">
+                        <small>Montant brut</small>
+                        <h5 class="mb-0">{{ "{:,.0f}".format(cycle.total_amount).replace(',', ' ') }} FCFA</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Liste des bénéficiaires -->
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-users"></i> Bénéficiaires du cycle</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Position</th>
+                            <th>Bénéficiaire</th>
+                            <th>Date de bénéfice</th>
+                            <th>Montant brut (FCFA)</th>
+                            <th>Sanctions déduites (FCFA)</th>
+                            <th>Montant net (FCFA)</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for beneficiary in beneficiaries %}
+                        <tr>
+                            <td class="text-center font-weight-bold">{{ beneficiary.position }}</td>
+                            <td>
+                                <strong>{{ beneficiary.member_name }}</strong>
+                                <br>
+                                <small class="text-muted">ID #{{ beneficiary.member_id }}</small>
+                            </td>
+                            <td>{{ beneficiary.benefit_date.strftime('%d/%m/%Y') if beneficiary.benefit_date else 'Non défini' }}</td>
+                            <td class="text-right">{{ "{:,.0f}".format(beneficiary.gross_amount).replace(',', ' ') }}</td>
+                            <td class="text-right text-danger">{{ "{:,.0f}".format(beneficiary.sanctions_deducted).replace(',', ' ') }}</td>
+                            <td class="text-right font-weight-bold text-success">{{ "{:,.0f}".format(beneficiary.net_amount).replace(',', ' ') }}</td>
+                            <td>
+                                {% if beneficiary.payment_status == 'PAYE' %}
+                                    <span class="badge badge-success">Payé</span>
+                                {% else %}
+                                    <span class="badge badge-warning">En attente</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                                Aucun bénéficiaire enregistré pour ce cycle.
+                                {% if cycle.status == 'EN_COURS' and next_beneficiary %}
+                                <br>Le prochain bénéficiaire est <strong>{{ next_beneficiary.full_name }}</strong>.
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if beneficiaries %}
+                    <tfoot class="bg-light">
+                        <tr>
+                            <th colspan="3" class="text-right">TOTAUX :</th>
+                            <th class="text-right">{{ "{:,.0f}".format(beneficiaries|sum(attribute='gross_amount')).replace(',', ' ') }}</th>
+                            <th class="text-right text-danger">{{ "{:,.0f}".format(beneficiaries|sum(attribute='sanctions_deducted')).replace(',', ' ') }}</th>
+                            <th class="text-right text-success">{{ "{:,.0f}".format(beneficiaries|sum(attribute='net_amount')).replace(',', ' ') }}</th>
+                            <th></th>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Résumé financier -->
+    {% if beneficiaries %}
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card shadow border-left-success">
+                <div class="card-body">
+                    <div class="text-muted small">Total distribué</div>
+                    <div class="h3 text-success">{{ "{:,.0f}".format(beneficiaries|sum(attribute='net_amount')).replace(',', ' ') }} FCFA</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow border-left-danger">
+                <div class="card-body">
+                    <div class="text-muted small">Total sanctions</div>
+                    <div class="h3 text-danger">{{ "{:,.0f}".format(beneficiaries|sum(attribute='sanctions_deducted')).replace(',', ' ') }} FCFA</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow border-left-info">
+                <div class="card-body">
+                    <div class="text-muted small">Restant en caisse</div>
+                    <div class="h3 text-info">{{ "{:,.0f}".format(cycle.total_amount - beneficiaries|sum(attribute='net_amount')).replace(',', ' ') }} FCFA</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Enregistrement Bénéfice -->
+{% if cycle.status == 'EN_COURS' and next_beneficiary %}
+<div class="modal fade" id="registerBenefitModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill-wave"></i> Enregistrer le bénéfice
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form action="{{ url_for('register_benefit', cycle_id=cycle.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p>Confirmez le bénéfice pour :</p>
+                    <div class="alert alert-info">
+                        <strong>{{ next_beneficiary.full_name }}</strong><br>
+                        Position {{ next_beneficiary.position_in_group }}/{{ cycle.total_members }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Montant brut du cycle</label>
+                        <input type="text" class="form-control" value="{{ "{:,.0f}".format(cycle.total_amount).replace(',', ' ') }} FCFA" readonly disabled>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Mode de paiement</label>
+                        <select name="payment_mode" class="form-control" required>
+                            <option value="ESPECE">💰 Espèce</option>
+                            <option value="ORANGE_MONEY">📱 Orange Money</option>
+                            <option value="MTN_MOBILE">📱 MTN Mobile</option>
+                        </select>
+                    </div>
+                    
+                    <div class="alert alert-warning small">
+                        <i class="fas fa-info-circle"></i> 
+                        Le montant net sera automatiquement calculé après déduction des sanctions du membre.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Confirmer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal Suppression Cycle -->
+{% if cycle.status == 'EN_COURS' and current_user.role == 'PRESIDENT' %}
+<div class="modal fade" id="deleteCycleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Supprimer le cycle
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form action="{{ url_for('delete_tontine_cycle', cycle_id=cycle.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p>Êtes-vous sûr de vouloir supprimer ce cycle ?</p>
+                    <div class="alert alert-warning">
+                        <strong>Cycle #{{ cycle.cycle_number }}</strong><br>
+                        Groupe de {{ cycle.group_type }} membres<br>
+                        Montant total: {{ "{:,.0f}".format(cycle.total_amount).replace(',', ' ') }} FCFA
+                    </div>
+                    <p class="text-danger small">
+                        <i class="fas fa-info-circle"></i> 
+                        Cette action est irréversible.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.badge-lg {
+    padding: 8px 15px;
+    font-size: 0.9rem;
+    border-radius: 20px;
+}
+.border-left-success {
+    border-left: 4px solid #28a745;
+}
+.border-left-danger {
+    border-left: 4px solid #dc3545;
+}
+.border-left-info {
+    border-left: 4px solid #17a2b8;
+}
+.progress-bar {
+    transition: width 0.5s ease;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Tontine Manager{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0">
+                <i class="fas fa-calendar-alt text-primary"></i> {{ title }}
+            </h1>
+            <p class="text-muted">Rédigez le procès-verbal de la réunion</p>
+        </div>
+        <a href="{{ url_for('meetings') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            <form method="POST" id="meetingForm">
+                {{ form.hidden_tag() }}
+                
+                <!-- Informations de base -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-info-circle text-primary"></i>
+                        <strong>Informations de base</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="form-group">
+                                    {{ form.meeting_title.label }}
+                                    {{ form.meeting_title(class="form-control", placeholder="Ex: Réunion ordinaire du mois de...") }}
+                                    {% if form.meeting_title.errors %}
+                                        {% for error in form.meeting_title.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.meeting_date.label }}
+                                    {{ form.meeting_date(class="form-control", type="date") }}
+                                    {% if form.meeting_date.errors %}
+                                        {% for error in form.meeting_date.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- meeting_type supprimé car n'existe pas dans le formulaire -->
+                        
+                        <div class="form-group">
+                            {{ form.content.label }}
+                            {{ form.content(class="form-control", rows=6, placeholder="Contenu détaillé du procès-verbal...") }}
+                            {% if form.content.errors %}
+                                {% for error in form.content.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Ordre du jour -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-list-ol text-primary"></i>
+                        <strong>Ordre du jour</strong>
+                    </div>
+                    <div class="card-body">
+                        {{ form.agenda_items(class="form-control", rows=5, placeholder="1. Point 1\n2. Point 2\n3. Point 3") }}
+                        <small class="text-muted">Saisissez chaque point sur une nouvelle ligne.</small>
+                        {% if form.agenda_items.errors %}
+                            {% for error in form.agenda_items.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Bénéficiaire Tontine -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-hand-holding-usd text-success"></i>
+                        <strong>Bénéficiaire Tontine</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-5">
+                                <div class="form-group">
+                                    {{ form.beneficiary_member_id.label }}
+                                    {{ form.beneficiary_member_id(class="form-control") }}
+                                    {% if form.beneficiary_member_id.errors %}
+                                        {% for error in form.beneficiary_member_id.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    {{ form.benefit_amount.label }}
+                                    {{ form.benefit_amount(class="form-control", placeholder="0") }}
+                                    {% if form.benefit_amount.errors %}
+                                        {% for error in form.benefit_amount.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.payment_mode.label }}
+                                    {{ form.payment_mode(class="form-control") }}
+                                    {% if form.payment_mode.errors %}
+                                        {% for error in form.payment_mode.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.benefit_cycle_number.label }}
+                                    {{ form.benefit_cycle_number(class="form-control", placeholder="Numéro du cycle") }}
+                                    {% if form.benefit_cycle_number.errors %}
+                                        {% for error in form.benefit_cycle_number.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Prêt -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-hand-holding-usd text-warning"></i>
+                        <strong>Demande de prêt</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.loan_member_id.label }}
+                                    {{ form.loan_member_id(class="form-control") }}
+                                    {% if form.loan_member_id.errors %}
+                                        {% for error in form.loan_member_id.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.loan_amount.label }}
+                                    {{ form.loan_amount(class="form-control", placeholder="Montant") }}
+                                    {% if form.loan_amount.errors %}
+                                        {% for error in form.loan_amount.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.loan_duration.label }}
+                                    {{ form.loan_duration(class="form-control", placeholder="Durée en mois") }}
+                                    {% if form.loan_duration.errors %}
+                                        {% for error in form.loan_duration.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Aide Sociale -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-heart text-danger"></i>
+                        <strong>Aide Sociale</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.aid_member_id.label }}
+                                    {{ form.aid_member_id(class="form-control") }}
+                                    {% if form.aid_member_id.errors %}
+                                        {% for error in form.aid_member_id.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.aid_type.label }}
+                                    {{ form.aid_type(class="form-control") }}
+                                    {% if form.aid_type.errors %}
+                                        {% for error in form.aid_type.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.aid_amount.label }}
+                                    {{ form.aid_amount(class="form-control", placeholder="Montant") }}
+                                    {% if form.aid_amount.errors %}
+                                        {% for error in form.aid_amount.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sanction -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-gavel text-danger"></i>
+                        <strong>Sanction</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.sanction_member_id.label }}
+                                    {{ form.sanction_member_id(class="form-control") }}
+                                    {% if form.sanction_member_id.errors %}
+                                        {% for error in form.sanction_member_id.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.sanction_type.label }}
+                                    {{ form.sanction_type(class="form-control") }}
+                                    {% if form.sanction_type.errors %}
+                                        {% for error in form.sanction_type.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    {{ form.sanction_amount.label }}
+                                    {{ form.sanction_amount(class="form-control", placeholder="Montant") }}
+                                    {% if form.sanction_amount.errors %}
+                                        {% for error in form.sanction_amount.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Résolutions -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-check-circle text-primary"></i>
+                        <strong>Résolutions prises</strong>
+                    </div>
+                    <div class="card-body">
+                        {{ form.resolutions(class="form-control", rows=6, placeholder="Les résolutions suivantes ont été adoptées à l'unanimité...") }}
+                        {% if form.resolutions.errors %}
+                            {% for error in form.resolutions.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Prochaine réunion -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <i class="fas fa-calendar-alt text-info"></i>
+                        <strong>Prochaine réunion</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.next_meeting_date.label }}
+                                    {{ form.next_meeting_date(class="form-control", type="date") }}
+                                    <small class="text-muted">Optionnel - Date de la prochaine réunion</small>
+                                    {% if form.next_meeting_date.errors %}
+                                        {% for error in form.next_meeting_date.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Boutons -->
+                <div class="form-group d-flex justify-content-between">
+                    <a href="{{ url_for('meetings') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Annuler
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Enregistrer le PV
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    // Amélioration de l'interface utilisateur
+    document.addEventListener('DOMContentLoaded', function() {
+        // Ajout de la classe form-label si manquante
+        const labels = document.querySelectorAll('label');
+        labels.forEach(label => {
+            if (!label.classList.contains('form-label')) {
+                label.classList.add('form-label');
+                label.classList.add('font-weight-bold');
+            }
+        });
+        
+        // Ajout de placeholders
+        const textareas = document.querySelectorAll('textarea');
+        textareas.forEach(textarea => {
+            if (!textarea.placeholder && textarea.id.includes('agenda')) {
+                textarea.placeholder = "1. Appel à l'ordre\n2. Lecture du dernier PV\n3. État financier\n4. Demandes de prêts\n5. Divers";
+            }
+            if (!textarea.placeholder && textarea.id.includes('resolutions')) {
+                textarea.placeholder = "Les résolutions suivantes ont été adoptées...";
+            }
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}JSB Tontine{% endblock %}</title>
+    
+    <!-- Bootstrap 4 CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap4.min.css">
+    <!-- Datepicker -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f0f2f5;
+            overflow-x: hidden;
+        }
+        
+        .wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            transition: all 0.3s;
+            position: fixed;
+            height: 100vh;
+            z-index: 999;
+            overflow-y: auto;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .sidebar-header h3 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+        
+        .sidebar-header p {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+        
+        .sidebar .nav-item {
+            width: 100%;
+        }
+        
+        .sidebar .nav-link {
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.8);
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .sidebar .nav-link:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .sidebar .nav-link i {
+            width: 24px;
+            font-size: 1.1rem;
+        }
+        
+        /* Content */
+        .content {
+            margin-left: 280px;
+            width: calc(100% - 280px);
+            transition: all 0.3s;
+        }
+        
+        /* Navbar */
+        .navbar-custom {
+            background: white;
+            padding: 15px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .navbar-custom h4 {
+            margin: 0;
+            color: #1e3c72;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-info .user-name {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .user-info .user-role {
+            font-size: 0.75rem;
+            color: #666;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        /* Main content */
+        .main-content {
+            padding: 30px;
+        }
+        
+        /* Cards */
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .card-header {
+            background: white;
+            border-bottom: 1px solid #eee;
+            padding: 15px 20px;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0;
+        }
+        
+        .card-header.bg-primary {
+            background: linear-gradient(135deg, #1e3c72, #2a5298) !important;
+            color: white;
+        }
+        
+        /* Stats Cards */
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .stat-card i {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+        
+        .stat-card .stat-label {
+            color: #666;
+            font-size: 0.85rem;
+        }
+        
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table th {
+            border-top: none;
+            font-weight: 600;
+            color: #555;
+            background-color: #f8f9fa;
+        }
+        
+        .table td {
+            vertical-align: middle;
+        }
+        
+        /* Badges */
+        .badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        
+        .badge-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .badge-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .badge-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .badge-primary {
+            background: #1e3c72;
+            color: white;
+        }
+        
+        /* Buttons */
+        .btn {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #16305a, #1e3c72);
+            transform: translateY(-1px);
+        }
+        
+        /* Modal */
+        .modal-content {
+            border-radius: 12px;
+            border: none;
+        }
+        
+        .modal-header {
+            border-radius: 12px 12px 0 0;
+        }
+        
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                margin-left: -280px;
+            }
+            .sidebar.active {
+                margin-left: 0;
+            }
+            .content {
+                margin-left: 0;
+                width: 100%;
+            }
+            .navbar-custom {
+                padding: 10px 15px;
+            }
+            .main-content {
+                padding: 15px;
+            }
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        /* Loading spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-top-color: #1e3c72;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Utilities */
+        .text-gradient {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .cursor-pointer {
+            cursor: pointer;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="wrapper">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h3><i class="fas fa-hand-holding-usd"></i> JSB Tontine</h3>
+                <p>Gestion de cotisations</p>
+            </div>
+            
+            <!-- MENU DYNAMIQUE - basé sur le rôle de l'utilisateur -->
+            <ul class="nav flex-column">
+                {% if current_user.is_authenticated %}
+                    {% for item in get_user_menu() %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == item.url %}active{% endif %}" 
+                           href="{{ url_for(item.url) }}">
+                            <i class="{{ item.icon }}"></i> {{ item.name }}
+                        </a>
+                    </li>
+                    {% endfor %}
+                    
+                    <!-- Déconnexion -->
+                    <li class="nav-item mt-3">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> Déconnexion
+                        </a>
+                    </li>
+                {% else %}
+                    <!-- Menu pour les utilisateurs non connectés -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">
+                            <i class="fas fa-sign-in-alt"></i> Connexion
+                        </a>
+                    </li>
+                    <!-- <li class="nav-item">
+                         <a class="nav-link" href="{{ url_for('register') }} ">    -->
+                            <!-- <i class="fas fa-user-plus"></i> Inscription
+                        </a> --> 
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        
+        <!-- Content -->
+        <div class="content">
+            <nav class="navbar-custom">
+                <button type="button" id="sidebarToggle" class="btn btn-link d-md-none">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h4>{% block page_title %}{% endblock %}</h4>
+                
+                {% if current_user.is_authenticated %}
+                <div class="user-info">
+                    <div class="text-right">
+                        <div class="user-name">{{ current_user.username }}</div>
+                        <div class="user-role">
+                            {% if current_user.member %}
+                                {{ current_user.member.full_name }}
+                            {% endif %}
+                            <span class="badge badge-primary ml-1">{{ current_user.get_role_display() }}</span>
+                        </div>
+                    </div>
+                    <div class="user-avatar">
+                        {{ current_user.username[0]|upper }}
+                    </div>
+                </div>
+                {% else %}
+                <div class="user-info">
+                    <a href="{{ url_for('login') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-sign-in-alt"></i> Connexion
+                    </a>
+                    <!-- <a href="{{ url_for('register') }}" class="btn btn-success btn-sm">
+                        <i class="fas fa-user-plus"></i> Inscription
+                    </a> -->
+                </div>
+                {% endif %}
+            </nav>
+            
+            <main class="main-content">
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'danger' %}fa-exclamation-triangle{% elif category == 'warning' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %} mr-2"></i>
+                                {{ message }}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/locales/bootstrap-datepicker.fr.min.js"></script>
+    
+    <script>
+        // Sidebar toggle for mobile
+        $('#sidebarToggle').on('click', function() {
+            $('.sidebar').toggleClass('active');
+        });
+        
+        // Auto-hide alerts after 5 seconds
+        setTimeout(function() {
+            $('.alert').fadeOut('slow');
+        }, 5000);
+        
+        // Initialize datepickers
+        $('.datepicker').datepicker({
+            format: 'dd/mm/yyyy',
+            language: 'fr',
+            autoclose: true,
+            todayHighlight: true
+        });
+        
+        // Format numbers with thousand separators
+        function formatNumber(number) {
+            return new Intl.NumberFormat('fr-FR').format(number);
+        }
+        
+        // Format currency
+        function formatCurrency(amount) {
+            return formatNumber(amount) + ' FCFA';
+        }
+        
+        // Confirmation dialog for delete actions
+        $('.btn-delete, .delete-confirm').on('click', function(e) {
+            if (!confirm('Êtes-vous sûr de vouloir effectuer cette suppression ? Cette action est irréversible.')) {
+                e.preventDefault();
+                return false;
+            }
+            return true;
+        });
+        
+        // Show loading spinner on form submit
+        $('form').on('submit', function() {
+            var btn = $(this).find('button[type="submit"]');
+            if (btn.length) {
+                btn.html('<span class="loading-spinner mr-2"></span> Chargement...');
+                btn.prop('disabled', true);
+            }
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

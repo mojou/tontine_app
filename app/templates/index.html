@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+
+{% block title %}Accueil - JSB Tontine{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Hero Section avec image de fond */
+    .hero-section {
+        position: relative;
+        min-height: 85vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.6)), 
+                    url('{{ url_for('static', filename='images/lycee-bahouan.jpg') }}');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+        color: white;
+        text-align: center;
+    }
+    
+    .hero-content {
+        max-width: 800px;
+        padding: 2rem;
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 20px;
+        backdrop-filter: blur(2px);
+    }
+    
+    .hero-title {
+        font-size: 3.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .hero-subtitle {
+        font-size: 1.3rem;
+        margin-bottom: 2rem;
+        opacity: 0.95;
+    }
+    
+    .hero-buttons .btn {
+        margin: 0.5rem;
+        padding: 12px 30px;
+        font-size: 1.1rem;
+        border-radius: 50px;
+        transition: all 0.3s ease;
+    }
+    
+    .hero-buttons .btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+    }
+    
+    /* Section Bureau */
+    .bureau-section {
+        padding: 60px 0;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+    
+    .section-title {
+        text-align: center;
+        margin-bottom: 50px;
+    }
+    
+    .section-title h2 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1e3c72;
+        position: relative;
+        display: inline-block;
+        padding-bottom: 15px;
+    }
+    
+    .section-title h2:after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 4px;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        border-radius: 2px;
+    }
+    
+    .section-title p {
+        color: #666;
+        margin-top: 15px;
+        font-size: 1.1rem;
+    }
+    
+    /* Cartes Bureau */
+    .bureau-card {
+        background: white;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        text-align: center;
+        margin-bottom: 30px;
+        cursor: pointer;
+    }
+    
+    .bureau-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    }
+    
+    .bureau-photo {
+        width: 100%;
+        height: 250px;
+        object-fit: cover;
+        object-position: center;
+        background: #f0f2f5;
+    }
+    
+    .bureau-info {
+        padding: 20px;
+    }
+    
+    .bureau-name {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #1e3c72;
+        margin-bottom: 5px;
+    }
+    
+    .bureau-role {
+        color: #2a5298;
+        font-weight: 600;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+    }
+    
+    .bureau-role i {
+        margin-right: 5px;
+    }
+    
+    .bureau-desc {
+        color: #666;
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+    
+    .social-links {
+        margin-top: 15px;
+    }
+    
+    .social-links a {
+        color: #1e3c72;
+        margin: 0 8px;
+        transition: color 0.3s ease;
+    }
+    
+    .social-links a:hover {
+        color: #2a5298;
+    }
+    
+    /* Badge rôle */
+    .role-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-top: 8px;
+    }
+    
+    .role-president { background: #e74c3c; color: white; }
+    .role-secretaire { background: #3498db; color: white; }
+    .role-tresorier { background: #2ecc71; color: white; }
+    .role-censeur { background: #9b59b6; color: white; }
+    .role-communication { background: #f39c12; color: white; }
+    
+    /* Section Fonctionnalités */
+    .features-section {
+        padding: 60px 0;
+        background: white;
+    }
+    
+    .feature-card {
+        text-align: center;
+        padding: 30px 20px;
+        border-radius: 15px;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .feature-card:hover {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        color: white;
+    }
+    
+    .feature-card:hover .feature-icon,
+    .feature-card:hover .feature-title,
+    .feature-card:hover .feature-desc {
+        color: white;
+    }
+    
+    .feature-icon {
+        font-size: 3rem;
+        color: #1e3c72;
+        margin-bottom: 20px;
+    }
+    
+    .feature-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #333;
+    }
+    
+    .feature-desc {
+        color: #666;
+        font-size: 0.9rem;
+    }
+    
+    /* Section Statistiques */
+    .stats-section {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        color: white;
+        padding: 60px 0;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    
+    .stat-label {
+        font-size: 1rem;
+        opacity: 0.9;
+    }
+    
+    /* Fallback image */
+    .no-photo {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 250px;
+    }
+    
+    .no-photo i {
+        font-size: 4rem;
+        color: white;
+        opacity: 0.7;
+    }
+    
+    @media (max-width: 768px) {
+        .hero-title {
+            font-size: 2rem;
+        }
+        .hero-subtitle {
+            font-size: 1rem;
+        }
+        .bureau-photo {
+            height: 200px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section avec image du Lycée de Bahouan -->
+<section class="hero-section">
+    <div class="hero-content">
+        <h1 class="hero-title">
+            <i class="fas fa-hand-holding-usd"></i>JSB Tontine 
+        </h1>
+        <p class="hero-subtitle">
+            Gérez facilement votre tontine au <strong>Lycée de Bahouan</strong><br>
+            Cotisations, emprunts et bénéfices simplifiés
+        </p>
+        <div class="hero-buttons">
+            <!-- <a href="{{ url_for('register') }}" class="btn btn-success btn-lg">
+                <i class="fas fa-user-plus"></i> S'inscrire
+            </a> -->
+            <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">
+                <i class="fas fa-sign-in-alt"></i> Se connecter
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Section Bureau -->
+<section class="bureau-section">
+    <div class="container">
+        <div class="section-title">
+            <h2><i class="fas fa-users"></i> Bureau Exécutif</h2>
+            <p>L'équipe qui gère la tontine du Lycée de Bahouan</p>
+        </div>
+        
+        <div class="row">
+            <!-- Président -->
+            <div class="col-lg-4 col-md-3">
+                <div class="bureau-card">
+                    {% if president and president.photo %}
+                    <img src="{{ url_for('static', filename='uploads/' + president.photo) }}" alt="{{ president.full_name }}" class="bureau-photo">
+                    {% else %}
+                    <div class="no-photo">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    {% endif %}
+                    <div class="bureau-info">
+                        <h3 class="bureau-name">{{ president.full_name if president else 'Feugaing Pagnol' }}</h3>
+                        <div class="bureau-role">
+                            <i class="fas fa-star"></i> Président(e)
+                        </div>
+                        <p class="bureau-desc">Responsable de la gestion globale et des orientations stratégiques</p>
+                        <span class="role-badge role-president">Président</span>
+                        <div class="social-links">
+                            <a href="#"><i class="fas fa-envelope"></i></a>
+                            <a href="#"><i class="fas fa-phone"></i></a>
+                        </div>
+                    </div>
+
+                     
+                </div>
+            </div>
+            
+
+            <!-- Président -->
+            <div class="col-lg-4 col-md-6">
+                <div class="bureau-card">
+                    {% if president and president.photo %}
+                    <img src="{{ url_for('static', filename='uploads/' + president.photo) }}" alt="{{ president.full_name }}" class="bureau-photo">
+                    {% else %}
+                    <div class="no-photo">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    {% endif %}
+                    
+             <div class="bureau-info">
+                        <h3 class="bureau-name">{{ president.full_name if president else 'Tseugeum Martial' }}</h3>
+                        <div class="bureau-role">
+                            <i class="fas fa-star"></i> Vice Président(e)
+                        </div>
+                        <p class="bureau-desc">Responsable de la gestion globale et des orientations stratégiques</p>
+                        <span class="role-badge role-president">Vice Président</span>
+                        <div class="social-links">
+                            <a href="#"><i class="fas fa-envelope"></i></a>
+                            <a href="#"><i class="fas fa-phone"></i></a>
+                        </div>
+                    </div>
+
+                     
+                </div>
+            </div>
+
+
+
+
+
+            <!-- Secrétaire -->
+            <div class="col-lg-4 col-md-6">
+                <div class="bureau-card">
+                    {% if secretaire and secretaire.photo %}
+                    <img src="{{ url_for('static', filename='images/' + secretaire.photo) }}" alt="{{ secretaire.full_name }}" class="bureau-photo">
+                    {% else %}
+                    <div class="no-photo">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    {% endif %}
+                    <div class="bureau-info">
+                        <h3 class="bureau-name">{{ secretaire.full_name if secretaire else 'Sinthia' }}</h3>
+                        <div class="bureau-role">
+                            <i class="fas fa-file-alt"></i> Sécrétaire
+                        </div>
+                        <p class="bureau-desc">Gestion des PV, annonces et communications officielles</p>
+                        <span class="role-badge role-secretaire">Secrétaire</span>
+                        <div class="social-links">
+                            <a href="#"><i class="fas fa-envelope"></i></a>
+                            <a href="#"><i class="fas fa-phone"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Trésorier -->
+            <div class="col-lg-4 col-md-6">
+                <div class="bureau-card">
+                    {% if tresorier and tresorier.photo %}
+                    <img src="{{ url_for('static', filename='uploads/' + tresorier.photo) }}" alt="{{ tresorier.full_name }}" class="bureau-photo">
+                    {% else %}
+                    <div class="no-photo">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    {% endif %}
+                    <div class="bureau-info">
+                        <h3 class="bureau-name">{{ tresorier.full_name if tresorier else 'À définir' }}</h3>
+                        <div class="bureau-role">
+                            <i class="fas fa-chart-line"></i> Trésorier
+                        </div>
+                        <p class="bureau-desc">Gestion financière, cotisations et suivi des transactions</p>
+                        <span class="role-badge role-tresorier">Trésorier</span>
+                        <div class="social-links">
+                            <a href="#"><i class="fas fa-envelope"></i></a>
+                            <a href="#"><i class="fas fa-phone"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Censeur -->
+            <div class="col-lg-4 col-md-6">
+                <div class="bureau-card">
+                    {% if censeur and censeur.photo %}
+                    <img src="{{ url_for('static', filename='uploads/' + censeur.photo) }}" alt="{{ censeur.full_name }}" class="bureau-photo">
+                    {% else %}
+                    <div class="no-photo">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    {% endif %}
+                    <div class="bureau-info">
+                        <h3 class="bureau-name">{{ censeur.full_name if censeur else 'Djougue Melissa' }}</h3>
+                        <div class="bureau-role">
+                            <i class="fas fa-gavel"></i> Censeur
+                        </div>
+                        <p class="bureau-desc">Contrôle interne, sanctions et respect du règlement</p>
+                        <span class="role-badge role-censeur">Censeur</span>
+                        <div class="social-links">
+                            <a href="#"><i class="fas fa-envelope"></i></a>
+                            <a href="#"><i class="fas fa-phone"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+
+            
+           
+            
+         <!-- Communication - Un seul affiché -->
+<div class="col-lg-4 col-md-6">
+    <div class="bureau-card">
+        {% if communicateur and communicateur.photo %}
+        <img src="{{ url_for('static', filename='uploads/' + communicateur.photo) }}" alt="{{ communicateur.full_name }}" class="bureau-photo">
+        {% else %}
+        <div class="no-photo">
+            <i class="fas fa-user-circle"></i>
+        </div>
+        {% endif %}
+        <div class="bureau-info">
+            <h3 class="bureau-name">{{ communicateur.full_name if communicateur else 'Simo Vicky' }}</h3>
+            <div class="bureau-role">
+                <i class="fas fa-bullhorn"></i> Chargé(e) de Communication
+            </div>
+            <p class="bureau-desc">Communication, annonces et relations publiques</p>
+            <span class="role-badge role-communication">Communication</span>
+            <div class="social-links">
+                <a href="#"><i class="fas fa-envelope"></i></a>
+                <a href="#"><i class="fas fa-phone"></i></a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section Fonctionnalités -->
+<section class="features-section">
+    <div class="container">
+        <div class="section-title">
+            <h2><i class="fas fa-cogs"></i> Nos Fonctionnalités</h2>
+            <p>Une plateforme complète pour gérer votre tontine</p>
+        </div>
+        
+        <div class="row">
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3 class="feature-title">Gestion des membres</h3>
+                    <p class="feature-desc">Inscription, suivi des cotisations et historique complet de chaque membre</p>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3 class="feature-title">Cycles de tontine</h3>
+                    <p class="feature-desc">Groupes de 100 ou 200 membres, bénéfice tournant automatique</p>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-hand-holding-usd"></i>
+                    </div>
+                    <h3 class="feature-title">Emprunts</h3>
+                    <p class="feature-desc">Demandes d'emprunt avec calcul automatique des intérêts</p>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <h3 class="feature-title">PV et réunions</h3>
+                    <p class="feature-desc">Gestion des comptes-rendus et procès-verbaux</p>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <h3 class="feature-title">Rapports</h3>
+                    <p class="feature-desc">Génération de rapports PDF et Excel personnalisés</p>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-mobile-alt"></i>
+                    </div>
+                    <h3 class="feature-title">Paiements mobiles</h3>
+                    <p class="feature-desc">Orange Money et MTN Mobile Money intégrés</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section Statistiques -->
+<section class="stats-section">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3 col-6 mb-4 mb-md-0">
+                <div class="stat-item">
+                    <div class="stat-number">{{ stats.total_members|default(0) }}</div>
+                    <div class="stat-label">Membres actifs</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6 mb-4 mb-md-0">
+                <div class="stat-item">
+                    <div class="stat-number">{{ stats.total_collected|default(0)|round(0)|int }}</div>
+                    <div class="stat-label"> FCFA collectés</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6 mb-4 mb-md-0">
+                <div class="stat-item">
+                    <div class="stat-number">{{ stats.active_loans|default(0) }}</div>
+                    <div class="stat-label">Emprunts en cours</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6 mb-4 mb-md-0">
+                <div class="stat-item">
+                    <div class="stat-number">{{ stats.completed_cycles|default(0) }}</div>
+                    <div class="stat-label">Cycles terminés</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section Contact Rapide -->
+<section class="py-5 bg-light">
+    <div class="container text-center">
+        <h3 class="mb-3">Vous avez des questions ?</h3>
+        <p class="mb-4">Contactez le bureau exécutif du Lycée de Bahouan</p>
+        <div class="d-flex justify-content-center gap-3 flex-wrap">
+            <a href="tel:+237XXXXXXXX" class="btn btn-outline-primary mx-2">
+                <i class="fas fa-phone"></i> Appeler
+            </a>
+            <a href="mailto:tontine@lyceebahouan.com" class="btn btn-outline-primary mx-2">
+                <i class="fas fa-envelope"></i> Email
+            </a>
+            <a href="#" class="btn btn-outline-primary mx-2">
+                <i class="fab fa-whatsapp"></i> WhatsApp
+            </a>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Animation des statistiques au scroll
+    function animateNumbers() {
+        $('.stat-number').each(function() {
+            var $this = $(this);
+            var target = parseInt($this.text());
+            if (!isNaN(target) && !$this.hasClass('animated')) {
+                $this.addClass('animated');
+                var current = 0;
+                var increment = target / 50;
+                var timer = setInterval(function() {
+                    current += increment;
+                    if (current >= target) {
+                        $this.text(target);
+                        clearInterval(timer);
+                    } else {
+                        $this.text(Math.floor(current));
+                    }
+                }, 30);
+            }
+        });
+    }
+    
+    // Déclencher quand la section est visible
+    var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                animateNumbers();
+                observer.disconnect();
+            }
+        });
+    });
+    
+    observer.observe(document.querySelector('.stats-section'));
+});
+</script>
+{% endblock %}

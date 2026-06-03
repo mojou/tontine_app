@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}Prêts - Tontine Manager{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@x.x.x/dist/select2-bootstrap4.min.css" rel="stylesheet" />
+
+<div class="fade-in">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1><i class="fas fa-hand-holding-usd"></i> Gestion des prêts</h1>
+        <div>
+            <a href="{{ url_for('add_member') }}" class="btn btn-info" style="margin-right: 10px;">
+                <i class="fas fa-user-plus"></i> Ajouter un membre
+            </a>
+            <button type="button" class="btn btn-success" data-toggle="modal" data-target="#loanRequestModal" id="openLoanModalBtn">
+                <i class="fas fa-plus"></i> Demander un prêt
+            </button>
+        </div>
+    </div>
+    
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('loans') }}" class="form-inline justify-content-between">
+                <div class="form-group mb-2">
+                    <label for="status_filter" class="mr-2">Statut :</label>
+                    <select name="status" id="status_filter" class="form-control mr-3" onchange="this.form.submit()">
+                        <option value="">Tous les statuts</option>
+                        <option value="PENDING" {% if request.args.get('status') == 'PENDING' %}selected{% endif %}>En attente</option>
+                        <option value="ACTIF" {% if request.args.get('status') == 'ACTIF' %}selected{% endif %}>Actif</option>
+                        <option value="COMPLETED" {% if request.args.get('status') == 'COMPLETED' %}selected{% endif %}>Remboursé</option>
+                        <option value="REJECTED" {% if request.args.get('status') == 'REJECTED' %}selected{% endif %}>Rejeté</option>
+                    </select>
+                    
+                    <label for="overdue_filter" class="mr-2 ml-3">Retard :</label>
+                    <select name="overdue" id="overdue_filter" class="form-control" onchange="this.form.submit()">
+                        <option value="">Tous</option>
+                        <option value="yes" {% if request.args.get('overdue') == 'yes' %}selected{% endif %}>En retard uniquement</option>
+                        <option value="no" {% if request.args.get('overdue') == 'no' %}selected{% endif %}>À jour uniquement</option>
+                    </select>
+                </div>
+                
+                <div class="form-group mb-2">
+                    <div class="input-group">
+                        <input type="text" name="search" class="form-control" placeholder="Rechercher un membre..." value="{{ request.args.get('search', '') }}">
+                        <div class="input-group-append">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Filtrer
+                            </button>
+                            {% if request.args.get('search') or request.args.get('status') or request.args.get('overdue') %}
+                            <a href="{{ url_for('loans') }}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Réinitialiser
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    {% if deduction_message %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-triangle"></i> {{ deduction_message }}
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    {% endif %}
+    
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-list"></i> Liste des prêts</span>
+            <span class="badge badge-secondary ml-2">{{ pagination.total if pagination else loans|length }} prêt(s)</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>
+                                <a class="text-dark d-block" href="{{ url_for('loans', sort='member_name', order='asc' if current_sort == 'member_name' and current_order == 'desc' else 'desc', status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                    Membre
+                                    {% if current_sort == 'member_name' %}
+                                        <i class="fas fa-sort-{{ 'up' if current_order == 'asc' else 'down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a class="text-dark d-block" href="{{ url_for('loans', sort='amount', order='asc' if current_sort == 'amount' and current_order == 'desc' else 'desc', status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                    Montant Principal
+                                    {% if current_sort == 'amount' %}
+                                        <i class="fas fa-sort-{{ 'up' if current_order == 'asc' else 'down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </a>
+                            </th>
+                            <th>Intérêts</th>
+                            <th>Total à payer</th>
+                            <th>Début / Échéance</th>
+                            <th>Statut</th>
+                            <th>Pénalités Retard</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for loan in loans %}
+                        <tr>
+                            <td>
+                                {% if loan.member %}
+                                    <strong style="color: #2c3e50;">{{ loan.member.first_name }} {{ loan.member.last_name }}</strong>
+                                    {% if loan.member.has_active_loan and loan.status == 'PENDING' %}
+                                        <span class="badge badge-warning d-block mt-1" style="max-width: fit-content;" title="Ce membre a déjà un prêt actif">
+                                            <i class="fas fa-exclamation-circle"></i> Prêt en cours
+                                        </span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Membre supprimé</span>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ "%.0f"|format(loan.amount) }}</strong> <small>FCFA</small></td>
+                            <td class="text-secondary">{{ "%.0f"|format(loan.interest) }} <small>FCFA</small></td>
+                            <td class="text-primary font-weight-bold">{{ "%.0f"|format(loan.remaining_amount ) }} <small>FCFA</small></td>
+                            <td>
+                                <small class="d-block"><b>Du:</b> {{ loan.start_date.strftime('%d/%m/%Y') if loan.start_date else '-' }}</small>
+                                <small class="d-block"><b>Au:</b> {{ loan.end_date.strftime('%d/%m/%Y') if loan.end_date else '-' }}</small>
+                            </td>
+                            <td>
+                                {% if loan.status == 'PENDING' %}
+                                    <span class="badge badge-warning"><i class="fas fa-hourglass-half"></i> En attente</span>
+                                {% elif loan.status == 'ACTIF' %}
+                                    {% if loan.is_overdue %}
+                                        <span class="badge badge-danger"><i class="fas fa-exclamation-triangle"></i> En retard</span>
+                                    {% else %}
+                                        <span class="badge badge-success"><i class="fas fa-check-circle"></i> Actif</span>
+                                    {% endif %}
+                                {% elif loan.status == 'COMPLETED' %}
+                                    <span class="badge badge-info"><i class="fas fa-handshake"></i> Remboursé</span>
+                                {% elif loan.status == 'REJECTED' %}
+                                    <span class="badge badge-secondary">Rejeté</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if loan.is_overdue and loan.status == 'ACTIF' %}
+                                    <span class="text-danger font-weight-bold">
+                                        <i class="fas fa-clock"></i> +{{ loan.overdue_days }} jours
+                                    </span>
+                                    <small class="text-muted d-block" style="font-size: 75%;">
+                                        Pénalité cumulée: {{ "%.0f"|format(loan.overdue_days * 500) }} FCFA
+                                    </small>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if current_user.role in ['PRESIDENT', 'TRESORIER', 'SECRETAIRE'] %}
+                                    {% if loan.status == 'PENDING' %}
+                                        <form action="{{ url_for('approve_loan', loan_id=loan.id) }}" method="POST" style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-success btn-sm mb-1" onclick="return confirm('Voulez-vous valider et activer ce prêt ?')">
+                                                <i class="fas fa-check"></i> Approuver
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('reject_loan', loan_id=loan.id) }}" method="POST" style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-danger btn-sm mb-1" onclick="return confirm('Rejeter définitivement cette demande de prêt ?')">
+                                                <i class="fas fa-times"></i> Rejeter
+                                            </button>
+                                        </form>
+                                    {% elif loan.status == 'ACTIF' %}
+                                        <button type="button" class="btn btn-primary btn-sm mb-1" data-toggle="modal" data-target="#repayModal{{ loan.id }}">
+                                            <i class="fas fa-money-bill-wave"></i> Rembourser
+                                        </button>
+                                        {% if loan.is_overdue %}
+                                            <button type="button" class="btn btn-warning btn-sm mb-1" onclick="deductFromTontine('{{ loan.id }}', '{{ loan.member.id }}')">
+                                                <i class="fas fa-coins"></i> Déduire 500 FCFA
+                                            </button>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted" style="font-size: 85%;">Aucune action</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted" style="font-size: 85%;"><i class="fas fa-lock"></i> Restreint</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class="fas fa-folder-open fa-2x d-block mb-2"></i> Aucun enregistrement de prêt trouvé.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if pagination and pagination.pages > 1 %}
+            <div class="card-footer bg-white">
+                <nav aria-label="Navigation des pages">
+                    <ul class="pagination justify-content-center mb-2">
+                        <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('loans', page=1, sort=current_sort, order=current_order, status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                <i class="fas fa-angle-double-left"></i>
+                            </a>
+                        </li>
+                        <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('loans', page=pagination.page-1, sort=current_sort, order=current_order, status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                <i class="fas fa-angle-left"></i>
+                            </a>
+                        </li>
+                        
+                        {% set start_page = [pagination.page - 2, 1]|max %}
+                        {% set end_page = [start_page + 4, pagination.pages]|min %}
+                        {% if end_page - start_page < 4 %}
+                            {% set start_page = [end_page - 4, 1]|max %}
+                        {% endif %}
+                        
+                        {% for page_num in range(start_page, end_page + 1) %}
+                            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                {% if page_num == pagination.page %}
+                                    <span class="page-link">{{ page_num }}</span>
+                                {% else %}
+                                    <a class="page-link" href="{{ url_for('loans', page=page_num, sort=current_sort, order=current_order, status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                        {{ page_num }}
+                                    </a>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                        
+                        <li class="page-item {% if pagination.page == pagination.pages %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('loans', page=pagination.page+1, sort=current_sort, order=current_order, status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                <i class="fas fa-angle-right"></i>
+                            </a>
+                        </li>
+                        <li class="page-item {% if pagination.page == pagination.pages %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('loans', page=pagination.pages, sort=current_sort, order=current_order, status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
+                                <i class="fas fa-angle-double-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+                <div class="text-center text-muted" style="font-size: 85%;">
+                    Affichage de {{ ((pagination.page - 1) * pagination.per_page) + 1 }} 
+                    à {{ [pagination.page * pagination.per_page, pagination.total]|min }} 
+                    sur {{ pagination.total }} prêt(s)
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% for loan in loans %}
+    {% if loan.status == 'ACTIF' %}
+    <div class="modal fade" id="repayModal{{ loan.id }}" tabindex="-1" role="dialog" aria-labelledby="repayModalLabel{{ loan.id }}" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="repayModalLabel{{ loan.id }}">
+                        <i class="fas fa-hand-holding-usd"></i> Enregistrer un remboursement — Prêt #{{ loan.id }}
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <form method="POST" action="{{ url_for('repay_loan', loan_id=loan.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body text-left">
+                        <div class="alert alert-info">
+                            <strong>Emprunteur :</strong> {{ loan.member.first_name }} {{ loan.member.last_name }} <br>
+                            <strong>Montant total requis :</strong> {{ "%.0f"|format(loan.remaining_amount ) }} FCFA
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label d-block font-weight-bold text-danger">Reste à rembourser :</label>
+                            {% set reste_a_payer = loan.remaining_to_pay if loan.remaining_to_pay is defined else loan.total_to_pay %}
+                            <h3 class="text-danger font-weight-bold">{{ "%.0f"|format(reste_a_payer) }} FCFA</h3>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="amount_repay_{{ loan.id }}" class="font-weight-bold">Montant du versement (FCFA) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control form-control-lg text-success font-weight-bold" 
+                                   id="amount_repay_{{ loan.id }}" name="amount" min="1" 
+                                   max="{{ reste_a_payer }}" required placeholder="Ex: 50000">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check-circle"></i> Valider le remboursement
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endfor %}
+
+<div class="modal fade" id="loanRequestModal" role="dialog" aria-labelledby="loanRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="loanRequestModalLabel">
+                    <i class="fas fa-hand-holding-usd"></i> Formuler une demande de prêt
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form method="POST" action="{{ url_for('loan_request') }}" id="loanForm" onsubmit="return validateLoanBeforeSubmit()">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="modal-body text-left">
+                    {% if members and members|length > 0 %}
+                        <div class="form-group">
+                            <label for="member_id" class="font-weight-bold">Bénéficiaire du prêt <span class="text-danger">*</span></label>
+                            <select class="form-control select2-searchable" id="member_id" name="member_id" required onchange="checkMemberActiveLoan(this.value)">
+                                <option value="">-- Sélectionnez le membre demandeur --</option>
+                                {% for member in members %}
+                                <option value="{{ member.id }}" 
+                                        data-has-active-loan="{{ 'True' if member.has_active_loan else 'False' }}" 
+                                        data-active-loan-count="{{ member.active_loans_count or 0 }}" 
+                                        data-tontine-balance="{{ member.tontine_balance or 0 }}">
+                                    {{ member.first_name }} {{ member.last_name }} 
+                                    (Solde Épargne: {{ "%.0f"|format(member.tontine_balance or 0) }} FCFA)
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div id="activeLoanWarning" class="alert alert-danger" style="display: none;">
+                            <i class="fas fa-ban"></i> <strong>Règlement intérieur :</strong>
+                            <div id="activeLoanDetails" class="mt-1">Ce membre dispose déjà d'un encours de prêt actif. Le cumul est interdit.</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="amount" class="font-weight-bold">Montant demandé (FCFA) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="amount" name="amount" step="1" min="1000" required placeholder="Ex: 100000">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="interest_rate" class="font-weight-bold">Taux d'intérêt fixe (%)</label>
+                            <input type="number" class="form-control" id="interest_rate" name="interest_rate" step="0.1" value="5.0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="duration_months" class="font-weight-bold">Période de remboursement (en mois) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="duration_months" name="duration_months" min="1" max="24" required placeholder="Ex: 3">
+                        </div>
+                        
+                        <div class="alert alert-info shadow-sm" id="modalPreview">
+                            <i class="fas fa-calculator"></i> Veuillez renseigner le montant pour générer la simulation de traite.
+                        </div>
+                        
+                        <div id="errorMessage" class="alert alert-danger" style="display: none;">
+                            <i class="fas fa-exclamation-triangle"></i> <span id="errorText"></span>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning text-center">
+                            <i class="fas fa-exclamation-triangle fa-2x d-block mb-2"></i>
+                            <strong>Aucun membre actif enregistré !</strong><br>
+                            Veuillez d'abord initialiser un profil membre.
+                            <a href="{{ url_for('add_member') }}" class="btn btn-primary btn-sm d-block mt-3">
+                                <i class="fas fa-user-plus"></i> Configurer un membre
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+                    {% if members and members|length > 0 %}
+                    <button type="submit" class="btn btn-success" id="submitLoanBtn">
+                        <i class="fas fa-paper-plane"></i> Enregistrer le Prêt
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    let isBlockedByPolicy = false;
+    const defaultPreviewText = `<i class="fas fa-calculator"></i> Veuillez renseigner le montant pour générer la simulation de traite.`;
+    
+    $(document).ready(function() {
+        $('#loanRequestModal').on('shown.bs.modal', function () {
+            $('.select2-searchable').select2({
+                theme: 'bootstrap4',
+                dropdownParent: $('#loanRequestModal'),
+                width: '100%',
+                placeholder: "-- Sélectionnez le membre demandeur --",
+                allowClear: true
+            }).on('change', function() {
+                checkMemberActiveLoan(this.value);
+            });
+        });
+    });
+
+    function checkMemberActiveLoan(memberId) {
+        if (!memberId) {
+            document.getElementById('activeLoanWarning').style.display = 'none';
+            document.getElementById('submitLoanBtn').disabled = false;
+            isBlockedByPolicy = false;
+            return;
+        }
+        
+        const select = document.getElementById('member_id');
+        const selectedOption = select.options[select.selectedIndex];
+        
+        const hasActive = selectedOption.getAttribute('data-has-active-loan') === 'True';
+        const activeCount = parseInt(selectedOption.getAttribute('data-active-loan-count'), 10) || 0;
+        
+        if (hasActive) {
+            document.getElementById('activeLoanWarning').style.display = 'block';
+            document.getElementById('activeLoanDetails').innerHTML = `
+                Ce membre détient actuellement <b>${activeCount} engagement(s) actif(s)</b> en cours. 
+                Veuillez solder l'historique d'emprunt avant de pouvoir valider une nouvelle ligne de crédit.
+            `;
+            document.getElementById('submitLoanBtn').disabled = true;
+            isBlockedByPolicy = true;
+        } else {
+            document.getElementById('activeLoanWarning').style.display = 'none';
+            document.getElementById('submitLoanBtn').disabled = false;
+            isBlockedByPolicy = false;
+        }
+    }
+    
+    function validateLoanBeforeSubmit() {
+        if (isBlockedByPolicy) {
+            showError('Action bloquée : Le membre sélectionné possède déjà une ligne de crédit ouverte.');
+            return false;
+        }
+        
+        const memberSelect = document.getElementById('member_id');
+        const amount = document.getElementById('amount');
+        const duration = document.getElementById('duration_months');
+        
+        if (!memberSelect.value) {
+            showError('Sélectionnez un membre éligible.');
+            return false;
+        }
+        if (!amount.value || parseFloat(amount.value) < 1000) {
+            showError('Le montant minimal autorisé pour un emprunt est fixé à 1 000 FCFA.');
+            return false;
+        }
+        if (!duration.value || parseInt(duration.value, 10) < 1 || parseInt(duration.value, 10) > 24) {
+            showError('La fenêtre de remboursement doit être comprise entre 1 et 24 mois.');
+            return false;
+        }
+        return true;
+    }
+    
+    function showError(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        errorText.innerHTML = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => { errorDiv.style.display = 'none'; }, 5000);
+    }
+    
+    function updatePreview() {
+        const amount = parseFloat(document.getElementById('amount').value) || 0;
+        const interestRate = parseFloat(document.getElementById('interest_rate').value) || 0;
+        const months = parseInt(document.getElementById('duration_months').value, 10) || 0;
+        const preview = document.getElementById('modalPreview');
+        
+        if (preview && amount > 0 && months > 0) {
+            const interest = amount * (interestRate / 100);
+            const total = amount + interest;
+            const monthly = total / months;
+            preview.innerHTML = `
+                <i class="fas fa-calculator text-success"></i> <strong>Simulation de l'échéancier :</strong>
+                <hr style="margin: 8px 0; border-top: 1px solid rgba(0,0,0,0.1);">
+                <div class="d-flex justify-content-between"><span>Capital net :</span> <b>${Math.round(amount).toLocaleString()} FCFA</b></div>
+                <div class="d-flex justify-content-between"><span>Intérêts cumulés (${interestRate}%) :</span> <b>${Math.round(interest).toLocaleString()} FCFA</b></div>
+                <div class="d-flex justify-content-between text-primary"><span>Montant dû total :</span> <b>${Math.round(total).toLocaleString()} FCFA</b></div>
+                <div class="d-flex justify-content-between text-success font-weight-bold" style="font-size: 105%;"><span>Mensualité (${months} mois) :</span> <span>${Math.round(monthly).toLocaleString()} FCFA / mois</span></div>
+            `;
+        } else if (preview) {
+            preview.innerHTML = defaultPreviewText;
+        }
+    }
+    
+    function deductFromTontine(loanId, memberId) {
+        if (confirm('⚠️ Souhaitez-vous appliquer une retenue conservatoire automatique de 500 FCFA sur le fonds d\'Épargne/Tontine de ce membre ?')) {
+            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+
+            fetch(`/deduct_from_tontine/${loanId}`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ member_id: memberId, amount: 500 })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Erreur technique : ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Une exception réseau est survenue.');
+            });
+        }
+    }
+    
+    document.getElementById('amount')?.addEventListener('input', updatePreview);
+    document.getElementById('interest_rate')?.addEventListener('input', updatePreview);
+    document.getElementById('duration_months')?.addEventListener('input', updatePreview);
+    
+    $('#loanRequestModal').on('hidden.bs.modal', function() {
+        document.getElementById('loanForm')?.reset();
+        $('.select2-searchable').val('').trigger('change');
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('activeLoanWarning').style.display = 'none';
+        const preview = document.getElementById('modalPreview');
+        if (preview) {
+            preview.innerHTML = defaultPreviewText;
+        }
+        document.getElementById('submitLoanBtn').disabled = false;
+        isBlockedByPolicy = false;
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Demander un prêt - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1><i class="fas fa-hand-holding-usd"></i> Demander un prêt</h1>
+        <a href="{{ url_for('loans') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            Formulaire de demande de prêt
+        </div>
+        <div class="card-body">
+            {% if members %}
+            <form method="POST">
+                <div class="form-group">
+                    <label for="member_id">Membre *</label>
+                    <select class="form-control" id="member_id" name="member_id" required>
+                        <option value="">Sélectionnez un membre</option>
+                        {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.first_name }} {{ member.last_name }} ({{ member.email }})</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Choisissez le membre qui demande le prêt</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="amount">Montant (FCFA) *</label>
+                    <input type="number" class="form-control" id="amount" name="amount" step="1000" min="1000" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="duration_months">Durée (mois) *</label>
+                    <input type="number" class="form-control" id="duration_months" name="duration_months" min="1" max="24" value="3" required>
+                    <small class="form-text text-muted">Taux appliqués : 1-3 mois (3%) | 4-6 mois (5%) | +6 mois (8%)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="purpose">Motif de l'emprunt *</label>
+                    <input type="text" class="form-control" id="purpose" name="purpose" placeholder="Ex: Commerce, Urgence médicale, Scolarité..." required>
+                </div>
+                
+                <div class="alert alert-info" id="preview">
+                    <i class="fas fa-info-circle"></i> Remplissez le formulaire pour voir l'aperçu
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Soumettre la demande
+                </button>
+                <a href="{{ url_for('loans') }}" class="btn btn-secondary">Annuler</a>
+            </form>
+            
+            <script>
+                // Aperçu en temps réel basé sur les règles du serveur Python
+                const amountInput = document.getElementById('amount');
+                const durationInput = document.getElementById('duration_months');
+                const preview = document.getElementById('preview');
+                
+                function updatePreview() {
+                    const amount = parseFloat(amountInput.value) || 0;
+                    const months = parseInt(durationInput.value) || 0;
+                    
+                    // Simulation du calcul des taux d'intérêt du code Python
+                    let interestRate = 0;
+                    if (months > 0) {
+                        if (months <= 3) {
+                            interestRate = 3.0;
+                        } else if (months <= 6) {
+                            interestRate = 5.0;
+                        } else {
+                            interestRate = 8.0;
+                        }
+                    }
+                    
+                    const interest = amount * (interestRate / 100);
+                    const total = amount + interest;
+                    const monthly = months > 0 ? total / months : 0;
+                    
+                    if (amount > 0 && months > 0) {
+                        preview.innerHTML = `
+                            <i class="fas fa-calculator"></i> <strong>Aperçu dynamique du prêt:</strong><br>
+                            • Montant demandé: ${amount.toLocaleString()} FCFA<br>
+                            • Taux appliqué d'après la durée: <strong>${interestRate}%</strong><br>
+                            • Intérêts: ${interest.toLocaleString()} FCFA<br>
+                            • Total à rembourser: <strong>${total.toLocaleString()} FCFA</strong><br>
+                            • Mensualité estimée: ${monthly.toLocaleString()} FCFA/mois
+                        `;
+                    } else {
+                        preview.innerHTML = `<i class="fas fa-info-circle"></i> Remplissez le formulaire pour voir l'aperçu`;
+                    }
+                }
+                
+                amountInput.addEventListener('input', updatePreview);
+                durationInput.addEventListener('input', updatePreview);
+            </script>
+            {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>Aucun membre trouvé!</strong><br>
+                Vous devez d'abord ajouter un membre actif avant de pouvoir faire une demande de prêt.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

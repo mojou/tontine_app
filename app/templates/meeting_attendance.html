@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des présences - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Gestion des présences : {{ meeting.title }}</h2>
+        <a href="{{ url_for('meeting_detail', meeting_id=meeting.id) }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+    
+    <hr>
+    
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>Membre</th>
+                        <th>Statut de présence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for member in members %}
+                    <tr>
+                        <td class="align-middle">
+                            <strong>{{ member.last_name }} {{ member.first_name }}</strong>
+                        </td>
+                        <td>
+                            <select name="attendance_{{ member.id }}" class="form-control form-control-sm">
+                                <option value="PRESENT" {% if attendances.get(member.id) == 'PRESENT' %}selected{% endif %}>✅ Présent</option>
+                                <option value="ABSENT" {% if attendances.get(member.id) == 'ABSENT' or not attendances.get(member.id) %}selected{% endif %}>❌ Absent</option>
+                                <option value="RETARD" {% if attendances.get(member.id) == 'RETARD' %}selected{% endif %}>⏰ En retard</option>
+                                <option value="EXCUSE" {% if attendances.get(member.id) == 'EXCUSE' %}selected{% endif %}>📝 Excusé</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-save"></i> Enregistrer les présences
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

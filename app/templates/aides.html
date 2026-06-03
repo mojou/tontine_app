@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Assistance Sociale - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="h3 font-weight-bold mb-0">Gestion de l'Aide Sociale</h2>
+        <p class="text-muted mb-0">Suivi des assistances octroyées (Maladies, Décès, Mariages, Naissances).</p>
+    </div>
+    {% if current_user.is_admin() or current_user.role in ['PRESIDENT', 'TRESORIER'] %}
+    <button class="btn btn-success shadow-sm" data-toggle="modal" data-target="#requestAideModal">
+        <i class="fas fa-hand-holding-heart mr-2"></i>Demander une Aide
+    </button>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm border-0 mb-5">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="bg-dark text-white">
+                    <tr>
+                        <th>ID</th>
+                        <th>Bénéficiaire</th>
+                        <th>Type d'Événement</th>
+                        <th>Description / Contexte</th>
+                        <th>Date de demande</th>
+                        <th>Montant (FCFA)</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if aides %}
+                        {% for aide in aides %}
+                        <tr>
+                            <td><small class="font-weight-bold text-muted">#{{ aide.id }}</small></td>
+                            <td><strong>{{ aide.member.full_name }}</strong></td>
+                            <td>
+                                {% if aide.aide_type == 'MALADIE' %}
+                                    <span class="badge badge-danger"><i class="fas fa-heartbeat mr-1"></i>Maladie</span>
+                                {% elif aide.aide_type == 'DECES' %}
+                                    <span class="badge badge-secondary"><i class="fas fa-ribbon mr-1"></i>Décès</span>
+                                {% elif aide.aide_type == 'MARIAGE' %}
+                                    <span class="badge badge-success"><i class="fas fa-ring mr-1"></i>Mariage</span>
+                                {% elif aide.aide_type == 'NAISSANCE' %}
+                                    <span class="badge badge-info"><i class="fas fa-baby mr-1"></i>Naissance</span>
+                                {% else %}
+                                    <span class="badge badge-dark">{{ aide.aide_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ aide.description or 'Non renseigné' }}</small></td>
+                            <td>{{ aide.request_date.strftime('%d/%m/%Y') }}</td>
+                            <td class="font-weight-bold text-success">{{ "{:,.0f}".format(aide.amount).replace(',', ' ') }} FCFA</td>
+                            <td>
+                                {% if aide.is_paid %}
+                                    <span class="badge badge-success px-3 py-1">Payée</span>
+                                {% elif aide.status == 'APPROVED' %}
+                                    <span class="badge badge-info px-3 py-1">Approuvée</span>
+                                {% elif aide.status == 'PENDING' %}
+                                    <span class="badge badge-warning px-3 py-1">En attente</span>
+                                {% elif aide.status == 'REJECTED' %}
+                                    <span class="badge badge-danger px-3 py-1">Rejetée</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    {% if aide.status == 'PENDING' and current_user.role in ['PRESIDENT', 'TRESORIER'] %}
+                                    <form action="{{ url_for('approve_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
+                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
+                                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Approuver cette aide ?')" title="Approuver">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    <form action="{{ url_for('reject_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
+                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Rejeter cette aide ?')" title="Rejeter">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    {% if aide.status == 'APPROVED' and not aide.is_paid and current_user.role in ['PRESIDENT', 'TRESORIER'] %}
+                                    <form action="{{ url_for('pay_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
+                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
+                                        <input type="hidden" name="payment_mode" value="ESPECE">
+                                        <button type="submit" class="btn btn-sm btn-info" onclick="return confirm('Payer cette aide ?')" title="Payer">
+                                            <i class="fas fa-money-bill"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    {% if aide.status == 'PENDING' and current_user.role == 'PRESIDENT' %}
+                                    <form action="{{ url_for('delete_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
+                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer cette demande ?')" title="Supprimer">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class="fas fa-hand-holding-heart fa-2x mb-2 d-block"></i>
+                                Aucune aide sociale enregistrée pour le moment.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    {% if pagination and pagination.pages > 1 %}
+    <div class="card-footer bg-white">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div class="small text-muted">
+                Page {{ pagination.page }} sur {{ pagination.pages }} ({{ pagination.total }} aides)
+            </div>
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('aides', page=pagination.prev_num, status=status_filter) }}">Précédent</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for p in range(pagination.pages) %}
+                        <li class="page-item {% if p + 1 == pagination.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('aides', page=p+1, status=status_filter) }}">{{ p + 1 }}</a>
+                        </li>
+                    {% endfor %}
+                    
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('aides', page=pagination.next_num, status=status_filter) }}">Suivant</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if current_user.is_admin() or current_user.role in ['PRESIDENT', 'TRESORIER'] %}
+<div class="modal fade" id="requestAideModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form action="{{ url_for('request_aide') }}" method="POST">
+            {{ form.hidden_tag() }}
+            
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title font-weight-bold"><i class="fas fa-hand-holding-heart mr-2"></i>Demander une aide sociale</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    
+                    <div class="form-group">
+                        {{ form.member_id.label(class="font-weight-bold") }}
+                        {{ form.member_id(class="form-control", required=True) }}
+                        {% if form.member_id.errors %}
+                            <div class="text-danger small">{% for error in form.member_id.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                {{ form.aide_type.label(class="font-weight-bold") }}
+                                {{ form.aide_type(class="form-control", required=True) }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                {{ form.amount.label(class="font-weight-bold") }}
+                                {{ form.amount(class="form-control", placeholder="Ex: 50000", required=True) }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.description.label(class="font-weight-bold") }}
+                        {{ form.description(class="form-control", rows="3", placeholder="Précisez le contexte...", required=True) }}
+                    </div>
+                    
+                    <div class="alert alert-info small mt-2">
+                        <i class="fas fa-info-circle"></i>
+                        Chaque membre peut bénéficier d'un maximum de 3 aides.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                    {{ form.submit(class="btn btn-success font-weight-bold") }}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+$(document).ready(function() {
+    setTimeout(function() {
+        $('.alert').fadeOut('slow');
+    }, 5000);
+});
+</script>
+{% endblock %}

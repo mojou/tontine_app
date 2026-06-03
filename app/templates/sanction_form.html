@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1><i class="fas fa-gavel"></i> {{ title }}</h1>
+        <a href="{{ url_for('sanctions') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-header bg-danger text-white">
+            <i class="fas fa-gavel"></i> Formulaire de sanction
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <div class="form-group">
+                    <label for="member_id">Membre <span class="text-danger">*</span></label>
+                    <select name="member_id" id="member_id" class="form-control" required>
+                        <option value="">-- Sélectionnez un membre --</option>
+                        {% for member in members %}
+                        <option value="{{ member.id }}">
+                            {{ member.first_name }} {{ member.last_name }} - {{ member.email }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="type_sanction">Type de sanction <span class="text-danger">*</span></label>
+                    <select name="type_sanction" id="type_sanction" class="form-control" required>
+                        <option value="">-- Choisissez le type --</option>
+                        <option value="RETARD_PAIEMENT">🚫 Retard de paiement</option>
+                        <option value="NON_PAIEMENT">❌ Non-paiement</option>
+                        <option value="ABSENCE">📅 Absence non justifiée</option>
+                        <option value="RETARD_REUNION">⏰ Retard à la réunion</option>
+                        <option value="COMPORTEMENT">😠 Mauvais comportement</option>
+                        <option value="AUTRE">📝 Autre</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="amount">Montant (FCFA) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">💰</span>
+                        </div>
+                        <input type="number" name="amount" id="amount" class="form-control" step="500" min="0" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sanction_date">Date de la sanction</label>
+                    <input type="date" name="sanction_date" id="sanction_date" class="form-control" 
+                           value="{{ now.strftime('%Y-%m-%d') }}">
+                    <small class="form-text text-muted">Laissez vide pour la date d'aujourd'hui</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Description <span class="text-danger">*</span></label>
+                    <textarea name="description" id="description" class="form-control" rows="4" required 
+                              placeholder="Décrivez la raison de la sanction..."></textarea>
+                    <small class="form-text text-muted">Minimum 5 caractères</small>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                    <a href="{{ url_for('sanctions') }}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Annuler
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Validation du formulaire
+document.querySelector('form').addEventListener('submit', function(e) {
+    var memberId = document.getElementById('member_id').value;
+    var typeSanction = document.getElementById('type_sanction').value;
+    var amount = document.getElementById('amount').value;
+    var description = document.getElementById('description').value;
+    
+    if (!memberId) {
+        e.preventDefault();
+        alert('Veuillez sélectionner un membre.');
+        return false;
+    }
+    
+    if (!typeSanction) {
+        e.preventDefault();
+        alert('Veuillez sélectionner un type de sanction.');
+        return false;
+    }
+    
+    if (!amount || parseFloat(amount) <= 0) {
+        e.preventDefault();
+        alert('Veuillez entrer un montant valide.');
+        return false;
+    }
+    
+    if (!description || description.trim().length < 5) {
+        e.preventDefault();
+        alert('La description doit contenir au moins 5 caractères.');
+        return false;
+    }
+    
+    return true;
+});
+</script>
+
+<style>
+.form-group {
+    margin-bottom: 1rem;
+}
+.input-group-text {
+    background-color: #f8f9fa;
+}
+.text-danger {
+    color: #dc3545 !important;
+}
+</style>
+{% endblock %}

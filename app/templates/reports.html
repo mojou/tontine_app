@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}Rapports - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <h1><i class="fas fa-chart-line"></i> Rapports et statistiques</h1>
+    
+    <div class="alert alert-info">
+        <i class="fas fa-calendar"></i> Rapport généré le {{ current_date if current_date else now.strftime('%d/%m/%Y') }}
+    </div>
+    
+    <div class="row" style="margin-bottom: 20px;">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Membres</h5>
+                    <h2>{{ total_members | default(0) }}</h2>
+                    <small>Membres actifs</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Transactions</h5>
+                    <h2>{{ total_transactions | default(0) }}</h2>
+                    <small>Total des transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Prêts actifs</h5>
+                    <h2>{{ active_loans | default(0) }}</h2>
+                    <small>{{ pending_loans | default(0) }} en attente</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Prêts remboursés</h5>
+                    <h2>{{ completed_loans | default(0) }}</h2>
+                    <small>Prêts soldés</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row" style="margin-bottom: 20px;">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total contributions</h6>
+                    <h3 class="text-success">{{ "{:,.0f}".format(total_contributions | default(0)) }} FCFA</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total sanctions</h6>
+                    <h3 class="text-warning">{{ "{:,.0f}".format(total_sanctions | default(0)) }} FCFA</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Prêts accordés</h6>
+                    <h3 class="text-primary">{{ "{:,.0f}".format(total_loans_given | default(0)) }} FCFA</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Remboursements</h6>
+                    <h3 class="text-info">{{ "{:,.0f}".format(total_loans_repaid | default(0)) }} FCFA</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-download"></i> Générer et télécharger un rapport ciblé
+        </div>
+        <div class="card-body">
+            <form action="/reports" method="POST" id="reportForm" target="_blank">
+                {{ form.csrf_token }}
+                
+                <div class="row">
+                    <div class="col-md-3 form-group">
+                        <label for="report_type">Type de rapport</label>
+                        <select name="report_type" id="report_type" class="form-control" required>
+                            <option value="cotisations">Cotisations & Tontines</option>
+                            <option value="loans">Gestion des Emprunts</option>
+                            <option value="sanctions">Suivi des Sanctions</option>
+                            <option value="financial">Rapport Financier Global</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 form-group">
+                        <label for="start_date">Date de début</label>
+                        <input type="date" name="start_date" id="start_date" class="form-control" required>
+                    </div>
+                    <div class="col-md-3 form-group">
+                        <label for="end_date">Date de fin</label>
+                        <input type="date" name="end_date" id="end_date" class="form-control" required>
+                    </div>
+                    <div class="col-md-3 form-group">
+                        <label for="format">Format d'export</label>
+                        <select name="format" id="format" class="form-control" required>
+                           
+                            <option value="EXCEL">Feuille Excel (.xlsx)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row" style="margin-top: 15px;">
+                    <div class="col-md-10">
+                        <button type="submit" id="submitBtn" class="btn btn-success btn-block">
+                            <i class="fas fa-file-download"></i> Telecharger le rapport
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+            <i class="fas fa-chart-pie"></i> Répartition des transactions par type
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Nombre</th>
+                            <th>Total (FCFA)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction_type in transactions_by_type %}
+                        <tr>
+                            <td>
+                                {% if transaction_type[0] == 'TONTINE' %}
+                                    Tontine
+                                {% elif transaction_type[0] == 'PRESENCE' %}
+                                    Cotisation
+                                {% elif transaction_type[0] == 'SANCTION' %}
+                                    Sanction
+                                {% elif transaction_type[0] == 'REMBOURSEMENT' %}
+                                    Remboursement
+                                {% elif transaction_type[0] == 'AIDE' %}
+                                    Aide
+                                {% else %}
+                                    {{ transaction_type[0] }}
+                                {% endif %}
+                            </td>
+                            <td class="text-center">{{ transaction_type[2] }}</td>
+                            <td class="text-right">{{ "{:,.0f}".format(transaction_type[1] | default(0)) }} FCFA</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted">Aucune donnée transactionnelle disponible.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+            <i class="fas fa-trophy"></i> Top 10 des contributeurs de la tontine
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Membre</th>
+                            <th>Total contributions (FCFA)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contributor in top_contributors %}
+                        <tr>
+                            <td class="text-center">{{ loop.index }}</td>
+                            <td>{{ contributor.first_name }} {{ contributor.last_name }}</td>
+                            <td class="text-right">{{ "{:,.0f}".format(contributor.total | default(0)) }} FCFA</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted">Aucun contributeur enregistré pour le moment.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-history"></i> Flux des 10 dernières transactions globales
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Membre</th>
+                            <th>Type</th>
+                            <th>Montant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in recent_transactions %}
+                        <tr>
+                            <td>{{ transaction.date.strftime('%d/%m/%Y') if transaction.date else 'N/A' }}</td>
+                            <td>{{ transaction.member.first_name }} {{ transaction.member.last_name }}</td>
+                            <td>{{ transaction.get_type_display() if transaction.get_type_display is defined else transaction.type }}</td>
+                            <td class="text-right">{{ "{:,.0f}".format(transaction.amount | default(0)) }} FCFA</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">Aucune transaction récente enregistrée.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Initialisation des dates par défaut (inchangé)
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    let mm = today.getMonth() + 1;
+    let dd = today.getDate();
+
+    if (mm < 10) mm = '0' + mm;
+    if (dd < 10) dd = '0' + dd;
+
+    if(!document.getElementById('end_date').value) {
+        document.getElementById('end_date').value = yyyy + '-' + mm + '-' + dd;
+    }
+    if(!document.getElementById('start_date').value) {
+        document.getElementById('start_date').value = yyyy + '-' + mm + '-01';
+    }
+
+    // 2. Sécurité d'interface pour couper l'effet de boucle visuelle du bouton
+    const form = document.getElementById('reportForm');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', function() {
+        const originalHTML = submitBtn.innerHTML;
+        
+        // On passe temporairement le bouton en mode chargement
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération en cours...';
+        
+        // On rétablit l'état du bouton après 2 secondes car le flux aura été transmis
+        setTimeout(function() {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHTML;
+        }, 2000);
+    });
+});
+</script>
+
+<style>
+.card {
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.card-header {
+    border-radius: 10px 10px 0 0 !important;
+    font-weight: bold;
+}
+.text-right {
+    text-align: right;
+}
+.text-center {
+    text-align: center;
+}
+.form-control {
+    border-radius: 6px;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Remboursement de prêt - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1><i class="fas fa-money-bill-wave"></i> Encaisser un remboursement</h1>
+        <a href="{{ url_for('loans') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Retour à la liste
+        </a>
+    </div>
+    
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white font-weight-bold">
+            <i class="fas fa-info-circle"></i> Situation financière de l'emprunt
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-bordered mb-md-0">
+                        <tr>
+                            <th>Membre Émetteur</th>
+                            <td>
+                                {% if loan.member %}
+                                    <strong>{{ loan.member.first_name }} {{ loan.member.last_name }}</strong>
+                                {% else %}
+                                    <span class="text-muted">Membre supprimé</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Principal emprunté</th>
+                            <td>{{ "%.0f"|format(loan.amount|float) }} FCFA</td>
+                        </tr>
+                        <tr>
+                            <th>Intérêts contractuels</th>
+                            <td class="text-secondary">{{ "%.0f"|format(loan.interest|float) }} FCFA</td>
+                        </tr>
+                        <tr>
+                            <th>Dette totale initiale</th>
+                            <td class="text-primary font-weight-bold">{{ "%.0f"|format(loan.total_to_pay|float) }} FCFA</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-bordered mb-0">
+                        <tr>
+                            <th>Date de décaissement</th>
+                            <td>{{ loan.start_date.strftime('%d/%m/%Y') if loan.start_date else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Échéance finale</th>
+                            <td>{{ loan.end_date.strftime('%d/%m/%Y') if loan.end_date else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Cumul déjà perçu</th>
+                            <td class="text-success">{{ "%.0f"|format(loan.amount_paid|default(0)|float) }} FCFA</td>
+                        </tr>
+                        <tr>
+                            <th>Reste à liquider</th>
+                            <td><strong class="text-danger" style="font-size: 1.1rem;">{{ "%.0f"|format(remaining|float) }} FCFA</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mt-4 shadow-sm">
+        <div class="card-header bg-success text-white font-weight-bold">
+            <i class="fas fa-cash-register"></i> Formulaire de versement de caisse
+        </div>
+        <div class="card-body">
+            <form method="POST" id="repaymentForm" onsubmit="return confirm('Confirmer l\'encaissement de ce montant ?')">
+                <div class="form-group">
+                    <label for="amount" class="font-weight-bold">Montant apporté par le membre (FCFA) <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-lg">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text bg-light"><b>FCFA</b></span>
+                        </div>
+                        <input type="number" name="amount" id="amount" class="form-control font-weight-bold text-success" 
+                               step="1" min="1" max="{{ remaining|float }}" placeholder="Ex: {{ '%.0f'|format(remaining|float) }}" required>
+                    </div>
+                    <small class="form-text text-muted mt-2">
+                        Seuils de transaction autorisés : Minimum: 1 FCFA | Maximum : <strong>{{ "%.0f"|format(remaining|float) }} FCFA</strong>
+                    </small>
+                </div>
+                
+                <div class="alert alert-info mt-3 shadow-sm" id="preview">
+                    <i class="fas fa-calculator"></i> En attente de saisie du versement... Le solde restant dû est de <strong>{{ "%.0f"|format(remaining|float) }} FCFA</strong>.
+                </div>
+                
+                <div class="form-group mb-0 mt-4">
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-save"></i> Enregistrer le versement
+                    </button>
+                    <a href="{{ url_for('loans') }}" class="btn btn-secondary btn-lg ml-2">Annuler</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const amountInput = document.getElementById('amount');
+    const preview = document.getElementById('preview');
+    const totalRestant = parseFloat('{{ remaining|float }}') || 0;
+
+    function updatePreview() {
+        const amount = parseFloat(amountInput.value) || 0;
+        
+        if (amount > 0) {
+            if (amount >= totalRestant) {
+                preview.innerHTML = '<i class="fas fa-check-circle fa-lg"></i> <strong class="text-success">Remboursement complet détecté !</strong> Ce prêt passera automatiquement au statut <span class="badge badge-info">REMBOURSÉ</span> à la validation et libérera le membre.';
+                preview.className = 'alert alert-success shadow-sm';
+            } else {
+                const newRemaining = totalRestant - amount;
+                preview.innerHTML = `
+                    <i class="fas fa-info-circle"></i> Remboursement partiel :<br>
+                    <hr style="margin: 5px 0; border-top: 1px solid rgba(0,0,0,0.1);">
+                    • Montant encaissé : <b>${amount.toLocaleString()} FCFA</b><br>
+                    • Nouveau solde restant dû : <b class="text-danger">${newRemaining.toLocaleString()} FCFA</b>
+                `;
+                preview.className = 'alert alert-warning shadow-sm';
+            }
+        } else {
+            preview.innerHTML = '<i class="fas fa-calculator"></i> Le solde actuel restant à solder pour ce prêt est de <strong>' + totalRestant.toLocaleString() + ' FCFA</strong>.';
+            preview.className = 'alert alert-info shadow-sm';
+        }
+    }
+
+    amountInput.addEventListener('input', updatePreview);
+});
+</script>
+
+<style>
+.card {
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.125);
+}
+.table-bordered th {
+    background-color: #f8f9fa;
+    width: 45%;
+    color: #495057;
+    vertical-align: middle;
+}
+.table-bordered td {
+    vertical-align: middle;
+}
+</style>
+{% endblock %}

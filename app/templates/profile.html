@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Mon profil - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <h1><i class="fas fa-user-circle"></i> Mon profil</h1>
+    <p>Gérez vos informations personnelles</p>
+    
+    <div class="grid" style="grid-template-columns: 1fr 2fr;">
+        <!-- Informations du compte -->
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-user"></i> Informations du compte
+            </div>
+            <div class="card-body">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    {% if member and member.photo %}
+                    <img src="{{ url_for('static', filename='images/' + member.photo) }}" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover;">
+                    {% else %}
+                    <div style="width: 100px; height: 100px; border-radius: 50%; background: #3498db; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                        <i class="fas fa-user" style="font-size: 40px; color: white;"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <p><strong><i class="fas fa-user"></i> Nom d'utilisateur:</strong> {{ current_user.username }}</p>
+                <p><strong><i class="fas fa-envelope"></i> Email:</strong> {{ current_user.email }}</p>
+                <p><strong><i class="fas fa-tag"></i> Rôle:</strong> {{ current_user.get_role_display() }}</p>
+                <p><strong><i class="fas fa-calendar"></i> Membre depuis:</strong> {{ current_user.created_at.strftime('%d/%m/%Y') if current_user.created_at else '-' }}</p>
+            </div>
+        </div>
+        
+        <!-- Formulaire de modification du profil -->
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-edit"></i> Modifier mon profil
+            </div>
+            <div class="card-body">
+                {% if member %}
+                <form method="POST" enctype="multipart/form-data" data-validate>
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+                        <div class="form-group">
+                            <label>Prénom</label>
+                            {{ form.first_name(class="form-control") }}
+                            {% for error in form.first_name.errors %}
+                                <small class="field-error">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Nom</label>
+                            {{ form.last_name(class="form-control") }}
+                            {% for error in form.last_name.errors %}
+                                <small class="field-error">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        {{ form.email(class="form-control") }}
+                        {% for error in form.email.errors %}
+                            <small class="field-error">{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Téléphone</label>
+                        {{ form.phone(class="form-control") }}
+                        {% for error in form.phone.errors %}
+                            <small class="field-error">{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Photo de profil</label>
+                        {{ form.photo(class="form-control") }}
+                        <small>Formats acceptés: JPG, PNG (max 2MB)</small>
+                        {% for error in form.photo.errors %}
+                            <small class="field-error">{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="form-group">
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+                {% else %}
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-info-circle" style="font-size: 48px; color: #3498db;"></i>
+                    <p style="margin-top: 20px;">Vous n'êtes pas associé à un profil membre.</p>
+                    <p>Contactez un administrateur pour lier votre compte à un membre.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

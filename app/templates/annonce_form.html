@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Publier une annonce - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0">
+                <i class="fas fa-bullhorn text-primary"></i> Publier une annonce
+            </h1>
+            <p class="text-muted">Créez et publiez une annonce ou un procès-verbal de réunion</p>
+        </div>
+        <a href="{{ url_for('annonces') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Retour aux annonces
+        </a>
+    </div>
+    
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3">
+            <h6 class="mb-0 font-weight-bold">
+                <i class="fas fa-edit text-primary mr-2"></i> Formulaire d'annonce
+            </h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="annonceForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <!-- Titre -->
+                <div class="form-group">
+                    <label class="font-weight-bold">
+                        <i class="fas fa-tag mr-1"></i> Titre <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" name="title" class="form-control" placeholder="Titre de l'annonce ou de la réunion" required>
+                </div>
+                
+                <!-- Type et Date -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-tag mr-1"></i> Type d'annonce <span class="text-danger">*</span>
+                            </label>
+                            <select name="announcement_type" class="form-control" required>
+                                <option value="INFO">Information</option>
+                                <option value="URGENT">Urgent</option>
+                                <option value="REUNION">Réunion / Procès-Verbal</option>
+                                <option value="RAPPEL">Rappel</option>
+                                <option value="EVENEMENT">Événement</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-calendar-day mr-1"></i> Date de l'événement
+                            </label>
+                            <input type="date" name="event_date" class="form-control">
+                            <small class="form-text text-muted">Laissez vide si ce n'est pas un événement daté</small>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Contenu -->
+                <div class="form-group">
+                    <label class="font-weight-bold">
+                        <i class="fas fa-file-alt mr-1"></i> Contenu de l'annonce ou Compte-rendu <span class="text-danger">*</span>
+                    </label>
+                    <textarea name="content" class="form-control" rows="10" placeholder="Détaillez le message ou rédigez les résolutions prises lors de la réunion..." required></textarea>
+                </div>
+                
+                <!-- Boutons d'action -->
+                <div class="form-group d-flex justify-content-between mt-4">
+                    <a href="{{ url_for('annonces') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Annuler
+                    </a>
+                    <button type="submit" class="btn btn-primary px-4" id="submitBtn">
+                        <i class="fas fa-paper-plane"></i> Publier
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('#annonceForm').on('submit', function() {
+        $('#submitBtn').html('<span class="spinner-border spinner-border-sm mr-2"></span> Publication en cours...');
+        $('#submitBtn').prop('disabled', true);
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Membres - Tontine Manager{% endblock %}
+{% block page_title %}<i class="fas fa-users text-gradient"></i> Registre des Membres{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <p class="text-muted mb-0">Effectif global de l'association et gestion administrative.</p>
+        </div>
+        {% if current_user.is_admin() %}
+        <button class="btn btn-primary shadow-sm" data-toggle="modal" data-target="#addMemberModal">
+            <i class="fas fa-user-plus mr-2"></i>Inscrire un Membre
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Filtres -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('members') }}" class="row g-2">
+                <div class="col-md-2 col-sm-6">
+                    <label class="small text-muted">Recherche</label>
+                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Nom, téléphone..." value="{{ search }}">
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <label class="small text-muted">Statut</label>
+                    <select name="status" class="form-control form-control-sm">
+                        <option value="">Tous</option>
+                        <option value="ACTIF" {% if status_filter == 'ACTIF' %}selected{% endif %}>Actif</option>
+                        <option value="SUSPENDU" {% if status_filter == 'SUSPENDU' %}selected{% endif %}>Suspendu</option>
+                        <option value="EXCLU" {% if status_filter == 'EXCLU' %}selected{% endif %}>Exclu</option>
+                        <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>En attente</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <label class="small text-muted">Statut tontine</label>
+                    <select name="tontine_status" class="form-control form-control-sm">
+                        <option value="">Tous</option>
+                        <option value="VERT" {% if tontine_status_filter == 'VERT' %}selected{% endif %}>🟢 Vert (règle)</option>
+                        <option value="ORANGE" {% if tontine_status_filter == 'ORANGE' %}selected{% endif %}>🟠 Orange (avertissement)</option>
+                        <option value="ROUGE" {% if tontine_status_filter == 'ROUGE' %}selected{% endif %}>🔴 Rouge (suspendu)</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <label class="small text-muted">Afficher</label>
+                    <select name="show_inactive" class="form-control form-control-sm">
+                        <option value="false" {% if show_inactive == 'false' or not show_inactive %}selected{% endif %}>Membres actifs</option>
+                        <option value="true" {% if show_inactive == 'true' %}selected{% endif %}>Tous (incl. inactifs)</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <label class="small text-muted">Type de groupe</label>
+                    <select name="group_type" class="form-control form-control-sm">
+                        <option value="">Tous</option>
+                        <option value="8" {% if group_type_filter == '8' %}selected{% endif %}>Groupe 8 membres</option>
+                        <option value="18" {% if group_type_filter == '18' %}selected{% endif %}>Groupe 18 membres</option>
+                        <option value="100" {% if group_type_filter == '100' %}selected{% endif %}>Groupe 100 membres</option>
+                        <option value="200" {% if group_type_filter == '200' %}selected{% endif %}>Groupe 200 membres</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <label class="small text-muted">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-filter mr-1"></i>Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <h6 class="mb-0 font-weight-bold">
+                    <i class="fas fa-id-card text-primary mr-2"></i> Liste nominative des adhérents
+                </h6>
+                <span class="badge badge-secondary">Total: {{ pagination.total if pagination else 0 }} membres</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nom & Prénoms</th>
+                            <th>Téléphone</th>
+                            <th>Ville</th>
+                            <th>Inscription</th>
+                            <th>Épargne</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if members %}
+                            {% for m in members %}
+                            <tr {% if not m.is_active %}class="table-secondary" style="opacity: 0.7;"{% endif %}>
+                                <td><span class="badge badge-secondary">#{{ m.id }}</span></td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if m.photo and m.photo != 'None' %}
+                                            <img src="{{ url_for('static', filename='images/' + m.photo) }}" 
+                                                 class="rounded-circle mr-2" 
+                                                 style="width: 35px; height: 35px; object-fit: cover;"
+                                                 onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?background=1e3c72&color=fff&name={{ m.first_name[0] }}+{{ m.last_name[0] }}&size=35&font-size=0.5';">
+                                        {% else %}
+                                            <img src="https://ui-avatars.com/api/?background=1e3c72&color=fff&name={{ m.first_name[0] }}+{{ m.last_name[0] }}&size=35&font-size=0.5" 
+                                                 class="rounded-circle mr-2" 
+                                                 style="width: 35px; height: 35px;">
+                                        {% endif %}
+                                        <div>
+                                            <a href="{{ url_for('member_detail', member_id=m.id) }}" class="font-weight-bold text-dark">
+                                                {{ m.full_name }}
+                                                {% if not m.is_active %}<span class="badge badge-secondary ml-1">Désactivé</span>{% endif %}
+                                            </a>
+                                            <small class="text-muted d-block">{{ m.profession or 'Sans profession' }}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><a href="tel:{{ m.phone }}" class="text-secondary"><i class="fas fa-phone-alt mr-1 small"></i> {{ m.phone }}</a></td>
+                                <td><small>{{ m.city or 'N/A' }}</small></td>
+                                <td><small>{{ m.registration_date.strftime('%d/%m/%y') }}</small></td>
+                                <td class="font-weight-bold text-success">{{ "{:,.0f}".format(m.total_savings).replace(',', ' ') }} F</td>
+                                <td>
+                                    <div class="d-flex flex-column">
+                                        <span class="badge badge-{{ m.get_status_color() }} mb-1">
+                                            {{ m.status }}
+                                        </span>
+                                        {% if m.tontine_status == 'ROUGE' %}
+                                        <span class="badge badge-danger">🔴 En rouge</span>
+                                        {% elif m.tontine_status == 'ORANGE' %}
+                                        <span class="badge badge-warning">🟠 Avertissement</span>
+                                        {% else %}
+                                        <span class="badge badge-success">🟢 En règle</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('member_detail', member_id=m.id) }}" class="btn btn-outline-info" title="Voir détails">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        
+                                        {% if not m.is_active %}
+                                            <!-- Bouton pour réactiver -->
+                                            {% if current_user.role == 'PRESIDENT' %}
+                                            <form action="{{ url_for('reactivate_member', member_id=m.id) }}" method="POST" style="display:inline;">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Réactiver ce membre ?')" title="Réactiver">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        {% else %}
+                                            <!-- Activation pour les membres en attente -->
+                                            {% if m.status == 'PENDING' and current_user.role in ['TRESORIER', 'PRESIDENT'] %}
+                                            <form action="{{ url_for('activate_member', member_id=m.id) }}" method="POST" style="display:inline;">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Activer ce membre ?')" title="Activer">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                            
+                                            <!-- Désactivation pour les membres actifs -->
+                                            {% if current_user.role == 'PRESIDENT' and m.id != current_user.id %}
+                                            <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteMemberModal{{ m.id }}" title="Désactiver">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">
+                                    <i class="fas fa-users fa-3x mb-3 d-block"></i>
+                                    <p>Aucun membre trouvé avec les filtres sélectionnés.</p>
+                                    {% if current_user.is_admin() %}
+                                    <button class="btn btn-sm btn-primary mt-2" data-toggle="modal" data-target="#addMemberModal">
+                                        <i class="fas fa-plus"></i> Ajouter un membre
+                                    </button>
+                                    {% endif %}
+                                  </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if pagination and pagination.pages > 1 %}
+        <div class="card-footer bg-white">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div class="small text-muted mb-2 mb-md-0">
+                    <i class="fas fa-info-circle"></i> 
+                    Page {{ pagination.page }} sur {{ pagination.pages }} 
+                    ({{ pagination.total }} membres)
+                </div>
+                
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('members', page=pagination.prev_num, search=search, status=status_filter, tontine_status=tontine_status_filter, group_type=group_type_filter, show_inactive=show_inactive) }}">
+                                <i class="fas fa-chevron-left"></i> Précédent
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-chevron-left"></i> Précédent</span>
+                        </li>
+                        {% endif %}
+                        
+                        {% set start_page = [1, pagination.page - 2]|max %}
+                        {% set end_page = [pagination.pages, pagination.page + 2]|min %}
+                        
+                        {% if start_page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('members', page=1, search=search, status=status_filter, tontine_status=tontine_status_filter, group_type=group_type_filter, show_inactive=show_inactive) }}">1</a>
+                        </li>
+                        {% if start_page > 2 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                        {% endif %}
+                        
+                        {% for p in range(start_page, end_page + 1) %}
+                            {% if p == pagination.page %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ p }}</span>
+                            </li>
+                            {% else %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('members', page=p, search=search, status=status_filter, tontine_status=tontine_status_filter, group_type=group_type_filter, show_inactive=show_inactive) }}">
+                                    {{ p }}
+                                </a>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if end_page < pagination.pages %}
+                        {% if end_page < pagination.pages - 1 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('members', page=pagination.pages, search=search, status=status_filter, tontine_status=tontine_status_filter, group_type=group_type_filter, show_inactive=show_inactive) }}">
+                                {{ pagination.pages }}
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('members', page=pagination.next_num, search=search, status=status_filter, tontine_status=tontine_status_filter, group_type=group_type_filter, show_inactive=show_inactive) }}">
+                                Suivant <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">Suivant <i class="fas fa-chevron-right"></i></span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <div class="d-flex align-items-center mt-2 mt-md-0">
+                    <label class="small text-muted mr-2 mb-0">Afficher :</label>
+                    <select class="form-control form-control-sm" style="width: 70px;" onchange="changePerPage(this.value)">
+                        <option value="10" {% if pagination.per_page == 10 %}selected{% endif %}>10</option>
+                        <option value="25" {% if pagination.per_page == 25 %}selected{% endif %}>25</option>
+                        <option value="50" {% if pagination.per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if pagination.per_page == 100 %}selected{% endif %}>100</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if pagination and pagination.total > 0 and pagination.pages <= 1 %}
+        <div class="card-footer bg-white text-center small text-muted border-top-0">
+            <i class="fas fa-info-circle"></i> 
+            {{ pagination.total }} membre(s) au total
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal Ajout Membre -->
+{% if current_user.is_admin() %}
+<div class="modal fade" id="addMemberModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <form action="{{ url_for('add_member') }}" method="POST" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-user-plus mr-2"></i>Nouvelle Fiche d'adhésion</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.first_name.label }}</label>
+                            {{ form.first_name(class="form-control", placeholder="Ex: Jean") }}
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.last_name.label }}</label>
+                            {{ form.last_name(class="form-control", placeholder="Ex: Dupuis") }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.email.label }}</label>
+                            {{ form.email(class="form-control", placeholder="exemple@email.com", type="email") }}
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.phone.label }}</label>
+                            {{ form.phone(class="form-control", placeholder="612345678") }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.city.label }}</label>
+                            {{ form.city(class="form-control", placeholder="Ex: Yaoundé") }}
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.profession.label }}</label>
+                            {{ form.profession(class="form-control", placeholder="Ex: Comptable") }}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold">{{ form.address.label }}</label>
+                        {{ form.address(class="form-control", placeholder="Quartier, Rue, Porte...") }}
+                    </div>
+                    
+                    <hr>
+                    <h6 class="font-weight-bold">Configuration tontine</h6>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.group_type.label }}</label>
+                            {{ form.group_type(class="form-control") }}
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.position_in_group.label }}</label>
+                            {{ form.position_in_group(class="form-control", placeholder="Position") }}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold">{{ form.chosen_tontine_amount.label }}</label>
+                        {{ form.chosen_tontine_amount(class="form-control") }}
+                    </div>
+                    
+                    <hr>
+                    <h6 class="font-weight-bold">Compte utilisateur</h6>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.username.label }}</label>
+                            {{ form.username(class="form-control", placeholder="Nom d'utilisateur") }}
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.role.label }}</label>
+                            {{ form.role(class="form-control") }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.password.label }}</label>
+                            {{ form.password(class="form-control", type="password") }}
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="font-weight-bold">{{ form.confirm_password.label }}</label>
+                            {{ form.confirm_password(class="form-control", type="password") }}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="font-weight-bold">{{ form.photo.label }}</label>
+                        {{ form.photo(class="form-control-file") }}
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle"></i>
+                        <small>Le membre sera en attente de validation par le trésorier.</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
+                    <button type="submit" class="btn btn-primary font-weight-bold">Créer la fiche membre</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modals Désactivation -->
+{% for m in members %}
+<div class="modal fade" id="deleteMemberModal{{ m.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirmer la désactivation</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir désactiver ce membre ?</p>
+                <p class="font-weight-bold">{{ m.full_name }}</p>
+                <p class="text-muted small">Le membre ne pourra plus se connecter ni participer aux activités de la tontine.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                <form action="{{ url_for('delete_member', member_id=m.id) }}" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Désactiver
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Masquage automatique des alertes après 5 secondes
+    setTimeout(function() {
+        $('.alert').fadeOut('slow');
+    }, 5000);
+});
+
+// Fonction pour changer le nombre de lignes par page
+function changePerPage(value) {
+    var baseUrl = "{{ url_for('members', page=1, search=search, status=status_filter, tontine_status=tontine_status_filter, group_type=group_type_filter, show_inactive=show_inactive) }}";
+    var url = new URL(baseUrl, window.location.origin);
+    url.searchParams.set('per_page', value);
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}

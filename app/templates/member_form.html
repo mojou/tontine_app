@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-10 mx-auto">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">{{ title }}</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Vérifier si le formulaire existe -->
+                    {% if form %}
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.hidden_tag() if form.hidden_tag else '' }}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>{{ form.first_name.label.text if form.first_name else 'Prénom' }} *</label>
+                                    {{ form.first_name(class="form-control") if form.first_name else '' }}
+                                    {% if form.first_name and form.first_name.errors %}
+                                        {% for error in form.first_name.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>{{ form.last_name.label.text if form.last_name else 'Nom' }} *</label>
+                                    {{ form.last_name(class="form-control") if form.last_name else '' }}
+                                    {% if form.last_name and form.last_name.errors %}
+                                        {% for error in form.last_name.errors %}
+                                            <small class="text-danger">{{ error }}</small>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>{{ form.email.label.text if form.email else 'Email' }} *</label>
+                                    {{ form.email(class="form-control", type="email") if form.email else '' }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>{{ form.phone.label.text if form.phone else 'Téléphone' }} *</label>
+                                    {{ form.phone(class="form-control") if form.phone else '' }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>{{ form.city.label.text if form.city else 'Ville' }}</label>
+                                    {{ form.city(class="form-control") if form.city else '' }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>{{ form.profession.label.text if form.profession else 'Profession' }}</label>
+                                    {{ form.profession(class="form-control") if form.profession else '' }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>{{ form.address.label.text if form.address else 'Adresse' }}</label>
+                            {{ form.address(class="form-control") if form.address else '' }}
+                        </div>
+                        
+                        <!-- Configuration Tontine - Vérifier si les champs existent -->
+                        <hr>
+                        <h5>Configuration Tontine</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Type de groupe *</label>
+                                    <select name="group_type" class="form-control" required>
+                                        <option value="100">Groupe de 100 membres</option>
+                                        <option value="200">Groupe de 200 membres</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Position dans le groupe *</label>
+                                    <input type="number" name="position_in_group" class="form-control" required min="1" max="200">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Montant tontine *</label>
+                            <select name="chosen_tontine_amount" class="form-control" required>
+                                <option value="5100">5 100 FCFA</option>
+                                <option value="10200">10 200 FCFA</option>
+                                <option value="20200">20 200 FCFA</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Compte Utilisateur -->
+                        <hr>
+                        <h5>Compte Utilisateur</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Nom d'utilisateur *</label>
+                                    <input type="text" name="username" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Rôle *</label>
+                                    <select name="role" class="form-control" required>
+                                        <option value="MEMBRE">Membre</option>
+                                        <option value="PRESIDENT">Président</option>
+                                        <option value="SECRETAIRE">Secrétaire</option>
+                                        <option value="TRESORIER">Trésorier</option>
+                                        <option value="CENSEUR">Censeur</option>
+                                        <option value="COMMUNICATION">Communication</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Mot de passe *</label>
+                                    <input type="password" name="password" class="form-control" required minlength="6">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Confirmer le mot de passe *</label>
+                                    <input type="password" name="confirm_password" class="form-control" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Photo</label>
+                            <input type="file" name="photo" class="form-control-file" accept="image/*">
+                        </div>
+                        
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle"></i> Le membre sera en attente de validation par le trésorier.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">Enregistrer</button>
+                        <a href="{{ url_for('members') }}" class="btn btn-secondary">Annuler</a>
+                    </form>
+                    {% else %}
+                    <div class="alert alert-danger">
+                        Erreur: Formulaire non disponible
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

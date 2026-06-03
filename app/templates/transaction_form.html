@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0">
+                <i class="fas fa-exchange-alt text-primary mr-2"></i> {{ title }}
+            </h1>
+            <p class="text-muted mb-0">Enregistrez une nouvelle transaction financière</p>
+        </div>
+        <a href="{{ url_for('transactions') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left mr-1"></i> Retour
+        </a>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3">
+                    <i class="fas fa-info-circle text-primary mr-2"></i>
+                    <span class="font-weight-bold">Formulaire de transaction</span>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="transactionForm">
+                        {{ form.hidden_tag() }}
+                        
+                        <!-- Sélection du membre -->
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-user mr-1 text-muted"></i> {{ form.member_id.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.member_id(class="form-control" + (" is-invalid" if form.member_id.errors else "")) }}
+                            {% if form.member_id.errors %}
+                                {% for error in form.member_id.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted">Sélectionnez le membre concerné par cette transaction</small>
+                        </div>
+                        
+                        <!-- Type de transaction -->
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-tag mr-1 text-muted"></i> {{ form.type.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.type(class="form-control" + (" is-invalid" if form.type.errors else ""), id="transactionType") }}
+                            {% if form.type.errors %}
+                                {% for error in form.type.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted" id="typeHelp">
+                                <span id="typeHelpText">Choisissez le type d'opération financière</span>
+                            </small>
+                        </div>
+                        
+                        <!-- Montant -->
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-money-bill-wave mr-1 text-muted"></i> {{ form.amount.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">FCFA</span>
+                                </div>
+                                {{ form.amount(class="form-control" + (" is-invalid" if form.amount.errors else ""), placeholder="0", step="1") }}
+                            </div>
+                            {% if form.amount.errors %}
+                                {% for error in form.amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted" id="amountHelp">Montant en Francs CFA (XAF)</small>
+                        </div>
+                        
+                        <!-- Mode de paiement -->
+                        {% if form.payment_mode %}
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-credit-card mr-1 text-muted"></i> {{ form.payment_mode.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.payment_mode(class="form-control" + (" is-invalid" if form.payment_mode.errors else "")) }}
+                            {% if form.payment_mode.errors %}
+                                {% for error in form.payment_mode.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                <span id="paymentHelp">Mode de paiement utilisé pour cette transaction</span>
+                            </small>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Description -->
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-file-alt mr-1 text-muted"></i> {{ form.description.label }}
+                            </label>
+                            {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows=3, placeholder="Ex: Cotisation tontine cycle Mars 2026...") }}
+                            {% if form.description.errors %}
+                                {% for error in form.description.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted">Description détaillée de la transaction (optionnelle)</small>
+                        </div>
+                        
+                        <!-- Date de transaction (si disponible dans le formulaire) -->
+                        {% if form.date %}
+                        <div class="form-group">
+                            <label class="font-weight-bold">
+                                <i class="fas fa-calendar-alt mr-1 text-muted"></i> {{ form.date.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.date(class="form-control" + (" is-invalid" if form.date.errors else ""), type="date") }}
+                            {% if form.date.errors %}
+                                {% for error in form.date.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Week number pour cotisation présence -->
+                        {% if form.week_number %}
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">{{ form.week_number.label }}</label>
+                                    {{ form.week_number(class="form-control") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">{{ form.year.label }}</label>
+                                    {{ form.year(class="form-control") }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Fortnight number pour cotisation tontine -->
+                        {% if form.fortnight_number %}
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">{{ form.fortnight_number.label }}</label>
+                                    {{ form.fortnight_number(class="form-control") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">{{ form.month.label }}</label>
+                                    {{ form.month(class="form-control") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">{{ form.year.label }}</label>
+                                    {{ form.year(class="form-control") }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Boutons d'action -->
+                        <div class="form-group d-flex justify-content-between">
+                            <a href="{{ url_for('transactions') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times mr-1"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="fas fa-save mr-1"></i> Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Informations supplémentaires -->
+            <div class="card mt-4 bg-light border-0">
+                <div class="card-body">
+                    <h6 class="font-weight-bold mb-2">
+                        <i class="fas fa-info-circle text-primary mr-1"></i> Informations importantes
+                    </h6>
+                    <ul class="small text-muted mb-0 pl-3">
+                        <li>Les transactions de type <strong>TONTINE</strong> et <strong>PRESENCE</strong> sont des entrées d'argent</li>
+                        <li>Les transactions de type <strong>SORTIE_LOAN</strong>, <strong>AIDE</strong> et <strong>BENEFICE_TONTINE</strong> sont des sorties d'argent</li>
+                        <li>Le fonds de caisse obligatoire est de <strong>5 000 FCFA</strong> par membre</li>
+                        <li>La cotisation présence est fixe: <strong>1 050 FCFA</strong> par semaine</li>
+                        <li>Les montants de tontine possibles: <strong>5 100 FCFA</strong>, <strong>10 200 FCFA</strong> ou <strong>20 200 FCFA</strong></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Mettre à jour l'aide en fonction du type de transaction sélectionné
+    function updateTypeHelp() {
+        var selectedType = $('#transactionType').val();
+        var helpText = '';
+        var amountHelp = '';
+        
+        switch(selectedType) {
+            case 'TONTINE':
+                helpText = 'Cotisation tontine - 2 fois par mois. Montants possibles: 5 100, 10 200 ou 20 200 FCFA';
+                amountHelp = 'Montant de la cotisation tontine (5 100, 10 200 ou 20 200 FCFA)';
+                break;
+            case 'PRESENCE':
+                helpText = 'Cotisation présence - 1 fois par semaine. Montant fixe: 1 050 FCFA';
+                amountHelp = 'Montant fixe de 1 050 FCFA par semaine';
+                break;
+            case 'SANCTION':
+                helpText = 'Paiement d\'une sanction ou pénalité';
+                amountHelp = 'Montant de la sanction (généralement 500 FCFA par jour de retard)';
+                break;
+            case 'REMBOURSEMENT':
+                helpText = 'Remboursement d\'un emprunt en cours';
+                amountHelp = 'Montant remboursé sur l\'emprunt';
+                break;
+            case 'AIDE':
+                helpText = 'Aide sociale (décès, mariage, naissance) - SORTIE D\'ARGENT';
+                amountHelp = 'Montant de l\'aide accordée';
+                break;
+            case 'FONDS_CAISSE':
+                helpText = 'Fonds de caisse obligatoire - 5 000 FCFA par membre';
+                amountHelp = 'Montant fixe de 5 000 FCFA';
+                break;
+            case 'SORTIE_LOAN':
+                helpText = 'Décaissement d\'un emprunt approuvé - SORTIE D\'ARGENT';
+                amountHelp = 'Montant décaissé pour l\'emprunt';
+                break;
+            case 'BENEFICE_TONTINE':
+                helpText = 'Bénéfice tontine versé au membre - SORTIE D\'ARGENT';
+                amountHelp = 'Montant net après déduction des sanctions';
+                break;
+            default:
+                helpText = 'Choisissez le type d\'opération financière';
+                amountHelp = 'Montant en Francs CFA (XAF)';
+        }
+        
+        $('#typeHelpText').text(helpText);
+        $('#amountHelp').text(amountHelp);
+        
+        // Ajouter un style spécial pour les sorties
+        if (selectedType === 'SORTIE_LOAN' || selectedType === 'AIDE' || selectedType === 'BENEFICE_TONTINE') {
+            $('#typeHelpText').parent().addClass('text-danger');
+        } else {
+            $('#typeHelpText').parent().removeClass('text-danger');
+        }
+        
+        // Pré-remplir le montant pour certains types
+        if (selectedType === 'PRESENCE') {
+            $('#amount').val(1050);
+            $('#amount').prop('readonly', true);
+        } else if (selectedType === 'FONDS_CAISSE') {
+            $('#amount').val(5000);
+            $('#amount').prop('readonly', true);
+        } else {
+            $('#amount').prop('readonly', false);
+            if ($('#amount').val() == 1050 || $('#amount').val() == 5000) {
+                $('#amount').val('');
+            }
+        }
+    }
+    
+    // Écouter le changement du type de transaction
+    $('#transactionType').on('change', updateTypeHelp);
+    
+    // Initialiser l'aide
+    updateTypeHelp();
+    
+    // Validation du montant
+    $('#amount').on('input', function() {
+        var value = parseInt($(this).val());
+        var type = $('#transactionType').val();
+        
+        if (type === 'PRESENCE' && value !== 1050) {
+            $(this).addClass('is-invalid');
+            $('#amountHelp').addClass('text-danger').text('⚠️ Le montant pour une cotisation présence doit être de 1 050 FCFA');
+        } else if (type === 'FONDS_CAISSE' && value !== 5000) {
+            $(this).addClass('is-invalid');
+            $('#amountHelp').addClass('text-danger').text('⚠️ Le fonds de caisse est de 5 000 FCFA');
+        } else if (type === 'TONTINE' && value && ![5100, 10200, 20200].includes(value)) {
+            $(this).addClass('is-invalid');
+            $('#amountHelp').addClass('text-danger').text('⚠️ Montant invalide. Valeurs acceptées: 5 100, 10 200 ou 20 200 FCFA');
+        } else {
+            $(this).removeClass('is-invalid');
+            $('#amountHelp').removeClass('text-danger');
+        }
+    });
+    
+    // Confirmation avant soumission
+    $('#transactionForm').on('submit', function(e) {
+        var type = $('#transactionType').val();
+        var amount = parseInt($('#amount').val());
+        
+        if (type === 'SORTIE_LOAN' || type === 'AIDE' || type === 'BENEFICE_TONTINE') {
+            if (!confirm('⚠️ Attention: Cette transaction est une SORTIE d\'argent.\n\nÊtes-vous sûr de vouloir continuer ?')) {
+                e.preventDefault();
+                return false;
+            }
+        }
+        
+        if (type === 'TONTINE' && ![5100, 10200, 20200].includes(amount)) {
+            alert('Le montant de tontine doit être de 5 100, 10 200 ou 20 200 FCFA');
+            e.preventDefault();
+            return false;
+        }
+        
+        return true;
+    });
+});
+</script>
+{% endblock %}

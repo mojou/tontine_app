@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de Bord - Tontine Manager{% endblock %}
+
+{% block page_title %}Tableau de bord{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="welcome-card">
+            <h2 class="h4 font-weight-bold mb-2">
+                Bonjour, {{ current_user.username }} 
+                <span class="wave">👋</span>
+            </h2>
+            <p class="text-muted mb-0">
+                <i class="fas fa-calendar-alt mr-1"></i> {{ now.strftime('%A %d %B %Y') | capitalize }}
+                | Rôle : <strong>{{ current_user.get_role_display() }}</strong>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Cartes Statistiques -->
+<div class="row mb-4">
+    {% if current_user.is_admin() %}
+    <!-- Vue Admin / Bureau -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-users" style="color: #3498db;"></i>
+            <div class="stat-value">{{ stats.total_members|default(0) }}</div>
+            <div class="stat-label">Membres actifs</div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-chart-line" style="color: #2ecc71;"></i>
+            <div class="stat-value">{{ "{:,.0f}".format(stats.total_cotisations|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-label">FCFA collectés</div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-hand-holding-usd" style="color: #e74c3c;"></i>
+            <div class="stat-value">{{ stats.total_active_loans|default(0) }}</div>
+            <div class="stat-label">Emprunts en cours</div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-money-bill-wave" style="color: #f1c40f;"></i>
+            <div class="stat-value">{{ "{:,.0f}".format(stats.fonds_caisse|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-label">Fonds de caisse</div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- Vue Membre Simple -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-piggy-bank" style="color: #3498db;"></i>
+            <div class="stat-value">{{ "{:,.0f}".format(stats.my_cotisations|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-label">Mes cotisations</div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-hand-holding-usd" style="color: #e74c3c;"></i>
+            <div class="stat-value">{{ "{:,.0f}".format(stats.my_loans|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-label">Mes emprunts</div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-gavel" style="color: #f39c12;"></i>
+            <div class="stat-value">{{ "{:,.0f}".format(stats.my_sanctions|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-label">Sanctions impayées</div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="stat-card">
+            <i class="fas fa-chart-line" style="color: #2ecc71;"></i>
+            <div class="stat-value">{{ stats.my_position|default('Non défini') }}</div>
+            <div class="stat-label">Position tontine</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Section Tontine - Prochain bénéficiaire -->
+{% if current_user.is_admin() and stats.next_beneficiary %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card bg-gradient-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-1">
+                            <i class="fas fa-trophy mr-2"></i> Prochain bénéficiaire de la tontine
+                        </h5>
+                        <p class="mb-0 opacity-75">
+                            {{ stats.next_beneficiary }} recevra le montant total du cycle en cours
+                        </p>
+                    </div>
+                    <a href="{{ url_for('tontine_cycles') }}" class="btn btn-light">
+                        <i class="fas fa-arrow-right"></i> Voir le cycle
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Dernières Transactions -->
+<div class="row">
+    <div class="col-lg-7 mb-4">
+        <div class="card shadow border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-history mr-2"></i> Dernières transactions
+                </h6>
+                <a href="{{ url_for('transactions') }}" class="btn btn-sm btn-outline-primary">
+                    Voir tout <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Membre</th>
+                                <th>Type</th>
+                                <th>Montant</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in recent_transactions %}
+                            <tr>
+                                <td class="small">{{ tx.date.strftime('%d/%m/%Y') }}</td>
+                                <td>
+                                    <strong>{{ tx.member_name }}</strong>
+                                    {% if tx.member_name != current_user.username and current_user.is_admin() %}
+                                    <a href="{{ url_for('member_detail', member_id=tx.member_id) }}" class="text-muted ml-1">
+                                        <i class="fas fa-eye fa-xs"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge badge-light">
+                                        {{ tx.get_type_display() }}
+                                    </span>
+                                </td>
+                                <td class="font-weight-bold {% if tx.type in ['SORTIE_LOAN', 'AIDE', 'BENEFICE_TONTINE'] %}text-danger{% else %}text-success{% endif %}">
+                                    {% if tx.type in ['SORTIE_LOAN', 'AIDE', 'BENEFICE_TONTINE'] %}-{% else %}+{% endif %}
+                                    {{ "{:,.0f}".format(tx.amount).replace(',', ' ') }}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">
+                                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                    Aucune transaction récente
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Informations supplémentaires -->
+    <div class="col-lg-5 mb-4">
+        <!-- Prochaines réunions -->
+        <div class="card shadow border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-calendar-alt mr-2"></i> Prochaines réunions
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if stats.upcoming_meetings %}
+                    {% for meeting in stats.upcoming_meetings %}
+                    <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
+                        <div class="bg-light rounded p-2 text-center mr-3" style="min-width: 60px;">
+                            <div class="small text-muted">{{ meeting.event_date.strftime('%b') }}</div>
+                            <div class="h5 mb-0">{{ meeting.event_date.strftime('%d') }}</div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-0">{{ meeting.title }}</h6>
+                            <small class="text-muted">
+                                <i class="fas fa-clock mr-1"></i> {{ meeting.event_date.strftime('%H:%M') if meeting.event_date else 'Date à définir' }}
+                            </small>
+                        </div>
+                        <a href="{{ url_for('meeting_detail', meeting_id=meeting.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-3 text-muted">
+                        <i class="fas fa-calendar-times fa-2x mb-2 d-block"></i>
+                        Aucune réunion planifiée
+                    </div>
+                {% endif %}
+                {% if current_user.is_admin() %}
+                <div class="mt-3 text-center">
+                    <a href="{{ url_for('add_meeting') }}" class="btn btn-sm btn-success">
+                        <i class="fas fa-plus mr-1"></i> Planifier une réunion
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Alerte sanctions -->
+        {% if stats.pending_sanctions|default(0) > 0 %}
+        <div class="card border-left-danger shadow h-100 py-2 border-0" style="border-left: 4px solid #e74c3c !important;">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                            <i class="fas fa-exclamation-triangle mr-1"></i> Sanctions en attente
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ stats.pending_sanctions }} sanction(s) - {{ "{:,.0f}".format(stats.total_sanctions_amount|default(0)).replace(',', ' ') }} FCFA
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <a href="{{ url_for('sanctions') }}" class="btn btn-sm btn-danger">
+                            Voir <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Info membre tontine -->
+        {% if not current_user.is_admin() and stats.my_status %}
+        <div class="card shadow border-0 mt-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-info-circle mr-2"></i> Ma situation tontine
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Statut tontine :</span>
+                    <span class="badge badge-{{ 'success' if stats.my_status == 'VERT' else 'warning' if stats.my_status == 'ORANGE' else 'danger' }}">
+                        {{ stats.my_status }}
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Crédit (cotisations) :</span>
+                    <span class="font-weight-bold text-success">{{ "{:,.0f}".format(stats.my_credit|default(0)).replace(',', ' ') }} FCFA</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Débit (dettes) :</span>
+                    <span class="font-weight-bold text-danger">{{ "{:,.0f}".format(stats.my_debit|default(0)).replace(',', ' ') }} FCFA</span>
+                </div>
+                <hr class="my-3">
+                <div class="text-center">
+                    <a href="{{ url_for('member_detail', member_id=current_user.member_id) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-user"></i> Voir mon profil complet
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Actions rapides - CORRIGÉ : aucun formulaire problématique ici -->
+        <div class="card shadow border-0 mt-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-bolt mr-2"></i> Actions rapides
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('add_transaction') }}" class="btn btn-outline-primary btn-block text-left btn-sm">
+                            <i class="fas fa-plus-circle mr-1"></i> Nouvelle transaction
+                        </a>
+                    </div>
+                    {% if current_user.is_admin() %}
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('add_member') }}" class="btn btn-outline-success btn-block text-left btn-sm">
+                            <i class="fas fa-user-plus mr-1"></i> Ajouter un membre
+                        </a>
+                    </div>
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('add_tontine_cycle') }}" class="btn btn-outline-info btn-block text-left btn-sm">
+                            <i class="fas fa-random mr-1"></i> Nouveau cycle tontine
+                        </a>
+                    </div>
+                    {% endif %}
+                    <div class="col-6 mb-2">
+                        <!-- CORRECTION : lien simple, pas de formulaire -->
+                        <a href="{{ url_for('loans') }}" class="btn btn-outline-warning btn-block text-left btn-sm">
+                            <i class="fas fa-hand-holding-usd mr-1"></i> Voir mes prêts
+                        </a>
+                    </div>
+                    {% if current_user.is_admin() %}
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('sanctions') }}" class="btn btn-outline-danger btn-block text-left btn-sm">
+                            <i class="fas fa-gavel mr-1"></i> Appliquer sanction
+                        </a>
+                    </div>
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary btn-block text-left btn-sm">
+                            <i class="fas fa-chart-bar mr-1"></i> Générer rapport
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Section des sanctions en attente pour le bureau -->
+<!-- Section des sanctions en attente pour le bureau -->
+{% if current_user.is_admin() and stats.pending_sanctions|default(0) > 0 and recent_sanctions %}
+<!-- Section des sanctions -->
+<div class="table-responsive">
+    <table class="table table-hover mb-0">
+        <thead>
+            <tr>
+                <th>Membre</th>
+                <th>Type</th>
+                <th>Montant</th>
+                <th>Date</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sanction in recent_sanctions %}
+            <tr>
+                <td>{{ sanction.member_name }}</td>
+                <td>{{ sanction.type_display }}</td>
+                <td class="text-danger font-weight-bold">
+                    {{ "{:,.0f}".format(sanction.amount).replace(',', ' ') }} FCFA
+                </td>
+                <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('pay_sanction', sanction_id=sanction.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="payment_mode" value="ESPECE">
+                        <input type="hidden" name="amount" value="{{ sanction.amount }}">
+                        
+                        <!-- Le bouton avec la classe et l'attribut data -->
+                        <button type="submit" class="btn btn-sm btn-success pay-sanction-btn" data-amount="{{ sanction.amount }}">
+                            <i class="fas fa-check"></i> Encaisser
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+<style>
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.stat-card i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.stat-card .stat-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.stat-card .stat-label {
+    color: #7f8c8d;
+    font-size: 0.85rem;
+}
+
+.bg-gradient-success {
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+}
+
+.wave {
+    display: inline-block;
+    animation: wave 0.5s ease-in-out;
+}
+
+@keyframes wave {
+    0% { transform: rotate(0deg); }
+    50% { transform: rotate(20deg); }
+    100% { transform: rotate(0deg); }
+}
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const buttons = document.querySelectorAll('.pay-sanction-btn');
+    
+    buttons.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            const amount = btn.getAttribute('data-amount');
+            // Formatage simple du nombre avec espaces
+            const formattedAmount = amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+            
+            if (!confirm('Encaisser cette sanction de ' + formattedAmount + ' FCFA ?')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

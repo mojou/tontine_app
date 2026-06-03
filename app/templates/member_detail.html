@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+
+{% block title %}{{ member.full_name }} - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('members') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Retour
+        </a>
+        {% if current_user.role in ['SECRETAIRE', 'PRESIDENT'] %}
+        <a href="{{ url_for('edit_member', member_id=member.id) }}" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Modifier
+        </a>
+        <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#changeTontineStatusModal">
+            <i class="fas fa-exchange-alt"></i> Changer statut tontine
+        </button>
+        {% endif %}
+    </div>
+    
+    <div class="member-card">
+        <div class="member-photo-container">
+            {% if member.photo and member.photo != 'None' and member.photo != '' %}
+                <img src="{{ url_for('static', filename='images/' + member.photo) }}" 
+                     class="rounded-circle img-fluid" 
+                     style="width: 150px; height: 150px; object-fit: cover;"
+                     onerror="this.src='https://ui-avatars.com/api/?background=1e3c72&color=fff&name={{ member.first_name[0] }}+{{ member.last_name[0] }}&size=150&font-size=0.6';">
+            {% else %}
+                <img src="https://ui-avatars.com/api/?background=1e3c72&color=fff&name={{ member.first_name[0] }}+{{ member.last_name[0] }}&size=150&font-size=0.6" 
+                     class="rounded-circle img-fluid" 
+                     style="width: 150px; height: 150px; object-fit: cover;">
+            {% endif %}
+        </div>
+        
+        <div class="member-info">
+            <div class="member-name">{{ member.full_name }}</div>
+            <div class="member-detail"><i class="fas fa-envelope"></i> {{ member.email }}</div>
+            <div class="member-detail"><i class="fas fa-phone"></i> {{ member.phone }}</div>
+            <div class="member-detail"><i class="fas fa-briefcase"></i> {{ member.profession or 'Non renseigné' }}</div>
+            <div class="member-detail"><i class="fas fa-map-marker-alt"></i> {{ member.city or 'Non renseigné' }} {{ member.address or '' }}</div>
+            
+            <div class="member-detail mt-2">
+                <strong>Statut du compte :</strong>
+                <span class="badge badge-{{ member.get_status_color() }}" style="font-size: 0.9rem;">
+                    {{ member.status }}
+                </span>
+            </div>
+            <div class="member-detail">
+                <strong>Statut tontine :</strong>
+                {% if member.tontine_status == 'VERT' %}
+                    <span class="badge badge-success" style="font-size: 0.9rem;">
+                        🟢 En règle
+                    </span>
+                {% elif member.tontine_status == 'ORANGE' %}
+                    <span class="badge badge-warning" style="font-size: 0.9rem;">
+                        🟠 Avertissement
+                    </span>
+                {% else %}
+                    <span class="badge badge-danger" style="font-size: 0.9rem;">
+                        🔴 Suspendu
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="member-actions">
+            <!-- CORRECTION JINJA DIRECTE SUR LES COMPTEURS -->
+            <div class="stat-value">{{ "{:,.0f}".format(total_contributions | default(0)).replace(',', ' ') }} FCFA</div>
+            <div class="stat-label">Cotisations totales</div>
+            <hr class="my-2">
+            
+            <div class="stat-value text-warning">
+                {{ "{:,.0f}".format(member.total_active_debt | default(0)).replace(',', ' ') }} FCFA
+            </div>
+            <div class="stat-label">Dette (Prêts en cours)</div>
+            <hr class="my-2">
+            
+            <div class="stat-value text-danger">{{ "{:,.0f}".format(member.total_sanctions_pending | default(0)).replace(',', ' ') }} FCFA</div>
+            <div class="stat-label">Sanctions impayées</div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="changeTontineStatusModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Changer le statut tontine</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <form action="{{ url_for('update_status', member_id=member.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body text-left">
+                        <p>Membre : <strong>{{ member.full_name }}</strong></p>
+                        <p>Statut actuel : 
+                            {% if member.tontine_status == 'VERT' %}
+                                <span class="badge badge-success">🟢 En règle</span>
+                            {% elif member.tontine_status == 'ORANGE' %}
+                                <span class="badge badge-warning">🟠 Avertissement</span>
+                            {% else %}
+                                <span class="badge badge-danger">🔴 Suspendu</span>
+                            {% endif %}
+                        </p>
+                        <div class="form-group">
+                            <label>Nouveau statut :</label>
+                            <select name="tontine_status" class="form-control" required>
+                                <option value="">-- Sélectionnez --</option>
+                                <option value="VERT" {% if member.tontine_status == 'VERT' %}selected{% endif %}>🟢 En règle</option>
+                                <option value="ORANGE" {% if member.tontine_status == 'ORANGE' %}selected{% endif %}>🟠 Avertissement</option>
+                                <option value="ROUGE" {% if member.tontine_status == 'ROUGE' %}selected{% endif %}>🔴 Suspendu</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info small mt-2">
+                            <i class="fas fa-info-circle"></i> 
+                            Ce statut est également mis à jour automatiquement en fonction des échecs de cotisation.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-warning">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid-tables">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-exchange-alt"></i> Historique des transactions
+                {% if current_user.role in ['SECRETAIRE', 'PRESIDENT', 'TRESORIER'] %}
+                <a href="{{ url_for('add_transaction') }}?member={{ member.id }}" style="float: right; color: white;">
+                    <i class="fas fa-plus"></i> Ajouter
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="table-container">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th class="text-right">Montant</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trans in transactions[:10] %}
+                            <tr>
+                                <td>{{ trans.date.strftime('%d/%m/%Y') }}</td>
+                                <td>{{ trans.get_type_display() }}</td>
+                                <td class="text-right {% if trans.type in ['SORTIE_LOAN', 'AIDE', 'BENEFICE_TONTINE'] %}text-danger{% else %}text-success{% endif %}">
+                                    {% if trans.type in ['SORTIE_LOAN', 'AIDE', 'BENEFICE_TONTINE'] %}-{% else %}+{% endif %}
+                                    {{ "{:,.0f}".format(trans.amount | default(0)).replace(',', ' ') }} FCFA
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center">Aucune transaction</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-hand-holding-usd"></i> Prêts
+                {% if current_user.role == 'MEMBRE' %}
+                <a href="{{ url_for('loan_request') }}" style="float: right; color: white;">
+                    <i class="fas fa-plus"></i> Demander
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="table-container">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Montant</th>
+                                <th>Intérêts</th>
+                                <th>Statut</th>
+                                <th>Échéance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for loan in loans %}
+                            <tr>
+                                <td>{{ "{:,.0f}".format(loan.amount | default(0)).replace(',', ' ') }} FCFA</td>
+                                <td>{{ "{:,.0f}".format(loan.interest | default(0)).replace(',', ' ') }} FCFA</td>
+                                <td>
+                                    {% if loan.status == 'COMPLETED' %}
+                                        <span class="badge badge-success">Remboursé</span>
+                                    {% elif loan.status == 'ACTIF' %}
+                                        <span class="badge badge-warning">Actif</span>
+                                    {% elif loan.status == 'PENDING' %}
+                                        <span class="badge badge-info">En attente</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">Rejeté</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ loan.end_date.strftime('%d/%m/%Y') }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">Aucun prêt</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if sanctions %}
+    <div class="card mt-3">
+        <div class="card-header bg-danger text-white">
+            <i class="fas fa-gavel"></i> Sanctions en attente
+        </div>
+        <div class="card-body">
+            <div class="table-container">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th class="text-right">Montant</th>
+                            <th>Description</th>
+                            <th>Statut</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sanction in sanctions %}
+                        <tr>
+                            <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ sanction.type_display }}</td>
+                            <td class="text-right">{{ "{:,.0f}".format(sanction.amount | default(0)).replace(',', ' ') }} FCFA</td>
+                            <td>{{ sanction.description[:50] }}{% if sanction.description|length > 50 %}...{% endif %}</td>
+                            <td>
+                                {% if sanction.status == 'PENDING' %}
+                                    <span class="badge badge-warning">En attente</span>
+                                {% else %}
+                                    <span class="badge badge-success">Payé</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if sanction.status == 'PENDING' and current_user.role in ['TRESORIER', 'PRESIDENT'] %}
+                                <form action="{{ url_for('pay_sanction', sanction_id=sanction.id) }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Encaisser cette sanction ?')">
+                                        <i class="fas fa-check"></i> Encaisser
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if aides %}
+    <div class="card mt-3">
+        <div class="card-header bg-info text-white">
+            <i class="fas fa-heart"></i> Aides sociales reçues
+        </div>
+        <div class="card-body">
+            <div class="table-container">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th class="text-right">Montant</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for aide in aides %}
+                        <tr>
+                            <td>{{ aide.request_date.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ aide.type_display }}</td>
+                            <td class="text-right">{{ "{:,.0f}".format(aide.amount | default(0)).replace(',', ' ') }} FCFA</td>
+                            <td>
+                                {% if aide.status == 'APPROVED' and not aide.is_paid %}
+                                    <span class="badge badge-warning">Approuvée</span>
+                                {% elif aide.is_paid %}
+                                    <span class="badge badge-success">Payée</span>
+                                {% elif aide.status == 'PENDING' %}
+                                    <span class="badge badge-info">En attente</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Rejetée</span>
+                                {% endif %}
+                             </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.member-card {
+    display: flex;
+    gap: 20px;
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+.member-photo-container {
+    flex: 0 0 150px;
+}
+.member-info {
+    flex: 2;
+    min-width: 250px;
+}
+.member-name {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+.member-detail {
+    margin: 5px 0;
+    color: #7f8c8d;
+}
+.member-actions {
+    text-align: center;
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    min-width: 180px;
+    flex: 1;
+}
+.stat-value {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+.stat-label {
+    font-size: 0.75rem;
+    color: #7f8c8d;
+}
+.grid-tables {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+.card {
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    background: white;
+}
+.card-header {
+    background: #2c3e50;
+    color: white;
+    padding: 12px 15px;
+    border-radius: 10px 10px 0 0;
+}
+.card-body {
+    padding: 15px;
+}
+.table-container {
+    overflow-x: auto;
+}
+.table th, .table td {
+    padding: 10px;
+    vertical-align: middle;
+}
+.text-right {
+    text-align: right;
+}
+.text-center {
+    text-align: center;
+}
+.text-left {
+    text-align: left;
+}
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 1rem; }
+.my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
+.badge {
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    display: inline-block;
+}
+.badge-success { background-color: #27ae60; color: white; }
+.badge-warning { background-color: #f39c12; color: white; }
+.badge-danger { background-color: #e74c3c; color: white; }
+.badge-info { background-color: #3498db; color: white; }
+
+@media (max-width: 992px) {
+    .grid-tables {
+        grid-template-columns: 1fr;
+    }
+}
+@media (max-width: 768px) {
+    .member-card {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .member-photo-container {
+        flex: 0 0 auto;
+    }
+    .member-actions {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Sanctions & Discipline - Tontine Manager{% endblock %}
+
+{% block page_title %}
+    <i class="fas fa-gavel"></i> Registre Disciplinaire
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <p class="text-muted mb-0">Suivi des pénalités financières et amendes de comportement.</p>
+        </div>
+        {% if current_user.is_admin() or current_user.role in ['CENSEUR', 'PRESIDENT', 'SECRETAIRE'] %}
+        <button class="btn btn-danger shadow-sm" data-toggle="modal" data-target="#addSanctionModal">
+            <i class="fas fa-gavel mr-2"></i> Infliger une Sanction
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white">
+            <i class="fas fa-list"></i> Liste des sanctions
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-dark text-white">
+                        <tr>
+                            <th>ID</th>
+                            <th>Membre Affecté</th>
+                            <th>Infraction</th>
+                            <th>Description</th>
+                            <th>Date</th>
+                            <th>Amende (FCFA)</th>
+                            <th>Statut</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sanction in sanctions %}
+                        <tr>
+                            <td><small class="font-weight-bold text-muted">#{{ sanction.id }}</small></td>
+                            <td><strong>{{ sanction.member_name }}</strong></td>
+                            <td><span class="badge badge-warning text-dark">{{ sanction.type_display }}</span></td>
+                            <td><small class="text-muted">{{ sanction.description|truncate(50) }}</small></td>
+                            <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
+                            <td class="font-weight-bold text-danger">{{ "{:,.0f}".format(sanction.amount).replace(',', ' ') }} FCFA</td>
+                            <td>
+                                {% if sanction.status == 'PAID' %}
+                                    <span class="badge badge-success px-3 py-1">
+                                        <i class="fas fa-check mr-1"></i> Acquittée
+                                    </span>
+                                {% else %}
+                                    <form action="{{ url_for('pay_sanction', sanction_id=sanction.id) }}" method="POST" style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-check-circle mr-1"></i> Payer
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-sm btn-warning" data-toggle="modal" data-target="#editSanctionModal{{ sanction.id }}" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    
+                                    {% if sanction.status != 'PAID' %}
+                                    <form method="POST" action="{{ url_for('delete_sanction', sanction_id=sanction.id) }}" class="delete-sanction-form" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Supprimer">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-secondary" disabled title="Impossible de supprimer une sanction payée">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class="fas fa-gavel fa-2x mb-2 d-block"></i> Aucun manquement disciplinaire enregistré.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% for sanction in sanctions %}
+<div class="modal fade" id="editSanctionModal{{ sanction.id }}" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form action="{{ url_for('edit_sanction', sanction_id=sanction.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title font-weight-bold"><i class="fas fa-edit mr-2"></i>Modifier la sanction #{{ sanction.id }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="font-weight-bold">Membre concerné</label>
+                        <select name="member_id" class="form-control" required>
+                            {% for m in members %}
+                                <option value="{{ m.id }}" {% if m.id == sanction.member_id %}selected{% endif %}>{{ m.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="font-weight-bold">Nature du Manquement</label>
+                                <select name="type_sanction" class="form-control">
+                                    <option value="RETARD_PAIEMENT" {% if sanction.type_sanction == 'RETARD_PAIEMENT' %}selected{% endif %}>Retard de paiement</option>
+                                    <option value="NON_PAIEMENT" {% if sanction.type_sanction == 'NON_PAIEMENT' %}selected{% endif %}>Non-paiement</option>
+                                    <option value="ABSENCE" {% if sanction.type_sanction == 'ABSENCE' %}selected{% endif %}>Absence non justifiée</option>
+                                    <option value="RETARD_REUNION" {% if sanction.type_sanction == 'RETARD_REUNION' %}selected{% endif %}>Retard à la réunion</option>
+                                    <option value="AUTRE" {% if sanction.type_sanction == 'AUTRE' %}selected{% endif %}>Autre</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="font-weight-bold">Amende (FCFA)</label>
+                                <input type="number" name="amount" class="form-control" value="{{ sanction.amount }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold">Date de Constat</label>
+                        <input type="date" name="sanction_date" class="form-control" value="{{ sanction.sanction_date.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold">Description</label>
+                        <textarea name="description" class="form-control" rows="3" required>{{ sanction.description }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning font-weight-bold"><i class="fas fa-save"></i> Enregistrer</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endfor %}
+
+<style>
+.btn-group { gap: 5px; }
+.modal { transform: translateZ(0); }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var deleteForms = document.querySelectorAll('.delete-sanction-form');
+    deleteForms.forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            if (!confirm("Supprimer cette sanction ? Cette action est irréversible.")) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

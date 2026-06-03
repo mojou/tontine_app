@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Créer un cycle - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0"><i class="fas fa-random text-primary"></i> Créer un cycle</h1>
+            <p class="text-muted">Configurez les paramètres du nouveau cycle</p>
+        </div>
+        <a href="{{ url_for('tontine_cycles') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Retour</a>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3">
+                    <h6 class="mb-0 font-weight-bold"><i class="fas fa-cog text-primary mr-2"></i> Configuration détaillée</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="cycleForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        
+                        <div class="form-group">
+                            <label class="font-weight-bold" for="cycle_type">
+                                <i class="fas fa-tags mr-1"></i> Type de cycle <span class="text-danger">*</span>
+                            </label>
+                            <select name="cycle_type" id="cycle_type" class="form-control" required>
+                                <option value="standard">Standard (Quinzaine)</option>
+                                <option value="mensuel">Mensuel</option>
+                                <option value="exceptionnel">Exceptionnel</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="font-weight-bold" for="amount_per_member">
+                                <i class="fas fa-money-bill-wave mr-1"></i> Montant par membre <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" name="amount_per_member" id="amount_per_member" class="form-control" placeholder="Ex: 10000" required min="0">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="font-weight-bold" for="start_date">
+                                <i class="fas fa-calendar-alt mr-1"></i> Date de début <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" name="start_date" id="start_date" class="form-control" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="font-weight-bold" for="members">
+                                <i class="fas fa-user-check mr-1"></i> Membres participants <span class="text-danger">*</span>
+                            </label>
+                            <div class="border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+                                <select name="members" id="members" class="form-control" multiple="multiple" size="10" required>
+                                    {% for member in members_list %}
+                                        <option value="{{ member.id }}">{{ member.last_name | upper }} {{ member.first_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <small class="form-text text-muted">Maintenez <kbd>Ctrl</kbd> ou <kbd>Cmd</kbd> pour sélectionner plusieurs membres.</small>
+                            <div id="selectionCounter" class="badge badge-secondary mt-2">0 membre(s) sélectionné(s)</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" name="random_order" id="random_order" class="custom-control-input">
+                                <label class="custom-control-label font-weight-bold" for="random_order">Tirage au sort de l'ordre</label>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <div class="form-group d-flex justify-content-between">
+                            <a href="{{ url_for('tontine_cycles') }}" class="btn btn-outline-secondary"><i class="fas fa-times"></i> Annuler</a>
+                            <button type="submit" class="btn btn-primary px-4" id="submitBtn">
+                                <i class="fas fa-play"></i> Démarrer le cycle
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('#members').on('change', function() {
+        var count = $(this).find('option:selected').length;
+        $('#selectionCounter').text(count + ' membre(s) sélectionné(s)');
+    });
+
+    $('#cycleForm').on('submit', function(e) {
+        if ($('#members option:selected').length === 0) {
+            e.preventDefault();
+            alert('Veuillez sélectionner au moins un membre.');
+            return false;
+        }
+        $('#submitBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-2"></span> Traitement...');
+    });
+});
+</script>
+{% endblock %}

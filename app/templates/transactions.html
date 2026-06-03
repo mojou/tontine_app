@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Registre de Caisse - Tontine Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="h3 font-weight-bold mb-0">
+            <i class="fas fa-book text-primary mr-2"></i>Registre Comptable de Caisse
+        </h2>
+        <p class="text-muted mb-0">Visualisez et gérez tous les flux financiers entrants et sortants de la tontine.</p>
+    </div>
+    {% if current_user.is_admin() %}
+    <button class="btn btn-success shadow-sm" data-toggle="modal" data-target="#addTransactionModal">
+        <i class="fas fa-plus mr-2"></i>Nouvelle Écriture
+    </button>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('transactions') }}" class="row">
+            <div class="col-md-3">
+                <label class="small text-muted">Type de transaction</label>
+                <select name="type" class="form-control form-control-sm">
+                    <option value="">Tous les types</option>
+                    <option value="TONTINE" {% if type_filter == 'TONTINE' %}selected{% endif %}>Tontine / Épargne</option>
+                    <option value="PRESENCE" {% if type_filter == 'PRESENCE' %}selected{% endif %}>Cotisation Présence</option>
+                    <option value="SANCTION" {% if type_filter == 'SANCTION' %}selected{% endif %}>Sanction / Pénalité</option>
+                    <option value="REMBOURSEMENT" {% if type_filter == 'REMBOURSEMENT' %}selected{% endif %}>Remboursement d'emprunt</option>
+                    <option value="AIDE" {% if type_filter == 'AIDE' %}selected{% endif %}>Aide Sociale</option>
+                    <option value="FONDS_CAISSE" {% if type_filter == 'FONDS_CAISSE' %}selected{% endif %}>Fonds de Caisse</option>
+                    <option value="SORTIE_LOAN" {% if type_filter == 'SORTIE_LOAN' %}selected{% endif %}>Décaissement Emprunt</option>
+                    <option value="BENEFICE_TONTINE" {% if type_filter == 'BENEFICE_TONTINE' %}selected{% endif %}>Bénéfice Tontine</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="small text-muted">Date début</label>
+                <input type="date" name="date_debut" class="form-control form-control-sm" value="{{ date_debut or '' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="small text-muted">Date fin</label>
+                <input type="date" name="date_fin" class="form-control form-control-sm" value="{{ date_fin or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="small text-muted">Membre</label>
+                <select name="member_id" class="form-control form-control-sm">
+                    <option value="">Tous les membres</option>
+                    {% for m in members %}
+                        <option value="{{ m.id }}" {% if selected_member|string == m.id|string %}selected{% endif %}>{{ m.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="small text-muted">&nbsp;</label>
+                <button type="submit" class="btn btn-primary btn-sm btn-block">
+                    <i class="fas fa-filter mr-1"></i>Filtrer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-success text-white shadow-sm">
+            <div class="card-body">
+                <small class="text-white-50">Tontine / Épargne</small>
+                <h5 class="mb-0">{{ "{:,.0f}".format(summary['TONTINE']|default(0)|int).replace(',', ' ') }} FCFA</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white shadow-sm">
+            <div class="card-body">
+                <small class="text-white-50">Cotisations Présence</small>
+                <h5 class="mb-0">{{ "{:,.0f}".format(summary['PRESENCE']|default(0)|int).replace(',', ' ') }} FCFA</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark shadow-sm">
+            <div class="card-body">
+                <small class="font-weight-bold">Sanctions Recouvrées</small>
+                <h5 class="mb-0">{{ "{:,.0f}".format(summary['SANCTION']|default(0)|int).replace(',', ' ') }} FCFA</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white shadow-sm">
+            <div class="card-body">
+                <small class="text-white-50">Sorties (Prêts + Aides)</small>
+                {% set total_sorties = (summary['SORTIE_LOAN']|default(0)|int) + (summary['AIDE']|default(0)|int) + (summary['BENEFICE_TONTINE']|default(0)|int) %}
+                <h5 class="mb-0">{{ "{:,.0f}".format(total_sorties).replace(',', ' ') }} FCFA</h5>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 font-weight-bold">
+                <i class="fas fa-list-ul text-primary mr-2"></i>Historique des transactions
+            </h6>
+            <span class="badge badge-secondary">{% if pagination %}{{ pagination.total }}{% else %}{{ transactions|length }}{% endif %} transaction(s)</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="thead-dark">
+                    <tr>
+                        <th class="border-0">ID</th>
+                        <th class="border-0">Date</th>
+                        <th class="border-0">Membre</th>
+                        <th class="border-0">Type d'opération</th>
+                        <th class="border-0">Mode</th>
+                        <th class="border-0">Description</th>
+                        <th class="border-0 text-right">Montant (FCFA)</th>
+                        {% if current_user.is_admin() %}
+                        <th class="border-0 text-center">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if transactions %}
+                        {% for tx in transactions %}
+                        <tr>
+                            <td><small class="text-muted font-weight-bold">#{{ tx.id }}</small></td>
+                            <td>{{ tx.date.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <strong>{{ tx.member_name }}</strong>
+                                {% if tx.member_id != current_user.id and current_user.is_admin() %}
+                                <a href="{{ url_for('member_detail', member_id=tx.member_id) }}" class="text-muted ml-1" title="Voir le profil">
+                                    <i class="fas fa-eye fa-xs"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-light border px-2 py-1 small">
+                                    {{ tx.get_type_display() if tx.get_type_display else tx.type }}
+                                </span>
+                            </td>
+                            <td>
+                                {% set payment_mode = tx.payment_mode if tx.payment_mode else 'ESPECE' %}
+                                {% if payment_mode == 'ORANGE_MONEY' %}
+                                    <span class="badge badge-warning text-dark">Orange Money</span>
+                                {% elif payment_mode == 'MTN_MOBILE' %}
+                                    <span class="badge badge-info">MTN Mobile</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Espèce</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="small text-muted">{{ tx.description or '-' }}</span></td>
+                            <td class="text-right font-weight-bold {% if tx.type in ['SORTIE_LOAN', 'AIDE', 'BENEFICE_TONTINE'] %}text-danger{% else %}text-success{% endif %}">
+                                {% if tx.type in ['SORTIE_LOAN', 'AIDE', 'BENEFICE_TONTINE'] %}-{% else %}+{% endif %}
+                                {{ "{:,.0f}".format(tx.amount).replace(',', ' ') }} F
+                            </td>
+                            {% if current_user.is_admin() %}
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-info" data-toggle="modal" data-target="#editTransactionModal{{ tx.id }}" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteTransactionModal{{ tx.id }}" title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="{% if current_user.is_admin() %}8{% else %}7{% endif %}" class="text-center py-4 text-muted">
+                                <i class="fas fa-wallet fa-2x mb-2 d-block"></i>
+                                Aucune transaction financière répertoriée dans le système.
+                                {% if current_user.is_admin() %}
+                                <br>
+                                <button class="btn btn-sm btn-success mt-3" data-toggle="modal" data-target="#addTransactionModal">
+                                    <i class="fas fa-plus mr-1"></i>Ajouter une transaction
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    {% if pagination and pagination.pages > 1 %}
+    <div class="card-footer bg-white">
+        <nav aria-label="Navigation des pages">
+            <ul class="pagination justify-content-center mb-0">
+                {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('transactions', page=pagination.prev_num, type=type_filter, date_debut=date_debut, date_fin=date_fin, member_id=selected_member) }}">
+                        <i class="fas fa-chevron-left"></i> Précédent
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link"><i class="fas fa-chevron-left"></i> Précédent</span></li>
+                {% endif %}
+                
+                {% for page_num in range(1, pagination.pages + 1) %}
+                    {% if page_num == pagination.page %}
+                    <div class="page-item active"><span class="page-link">{{ page_num }}</span></div>
+                    {% elif page_num <= pagination.page + 2 and page_num >= pagination.page - 2 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('transactions', page=page_num, type=type_filter, date_debut=date_debut, date_fin=date_fin, member_id=selected_member) }}">{{ page_num }}</a>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('transactions', page=pagination.next_num, type=type_filter, date_debut=date_debut, date_fin=date_fin, member_id=selected_member) }}">
+                        Suivant <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">Suivant <i class="fas fa-chevron-right"></i></span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+{% if current_user.is_admin() and transactions %}
+    {% for tx in transactions %}
+    <div class="modal fade" id="editTransactionModal{{ tx.id }}" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <form action="{{ url_for('edit_transaction', transaction_id=tx.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header bg-info text-white">
+                        <h6 class="modal-title font-weight-bold">Modifier la transaction #{{ tx.id }}</h6>
+                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body text-left">
+                        <div class="form-group">
+                            <label>Montant (FCFA)</label>
+                            <input type="number" step="1" name="amount" class="form-control" value="{{ tx.amount|int }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <input type="text" name="description" class="form-control" value="{{ tx.description or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" name="date" class="form-control" value="{{ tx.date.strftime('%Y-%m-%d') }}" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-info">Mettre à jour</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal fade" id="deleteTransactionModal{{ tx.id }}" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h6 class="modal-title font-weight-bold">Confirmer la suppression</h6>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">&times;</button>
+                </div>
+                <div class="modal-body text-left">
+                    <p>Êtes-vous sûr de vouloir supprimer cette transaction ?</p>
+                    <p class="text-muted small">
+                        <strong>ID:</strong> #{{ tx.id }}<br>
+                        <strong>Membre:</strong> {{ tx.member_name }}<br>
+                        <strong>Montant:</strong> {{ "{:,.0f}".format(tx.amount).replace(',', ' ') }} FCFA
+                    </p>
+                    <p class="text-danger mb-0">⚠️ Cette action est irréversible !</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                    <form action="{{ url_for('delete_transaction', transaction_id=tx.id) }}" method="POST" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                        <button type="submit" class="btn btn-danger">Confirmer la suppression</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% endif %}
+
+{% if current_user.is_admin() %}
+<div class="modal fade" id="addTransactionModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <form action="{{ url_for('add_transaction') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title font-weight-bold">
+                        <i class="fas fa-calculator mr-2"></i>Enregistrer un Mouvement
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="font-weight-bold">Sélectionner le Membre</label>
+                        <select name="member_id" class="form-control" required>
+                            <option value="" disabled selected>-- Choisissez le membre --</option>
+                            {% for m in members %}
+                                <option value="{{ m.id }}">{{ m.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="font-weight-bold">Type d'Opération</label>
+                                <select name="type" class="form-control" required>
+                                    <option value="TONTINE">💰 Tontine / Épargne (Entrée)</option>
+                                    <option value="PRESENCE">📋 Cotisation Présence (Entrée)</option>
+                                    <option value="FONDS_CAISSE">🏦 Fonds de Caisse (Entrée)</option>
+                                    <option value="SANCTION">⚠️ Règlement Sanction (Entrée)</option>
+                                    <option value="REMBOURSEMENT">↩️ Remboursement Emprunt (Entrée)</option>
+                                    <option value="AIDE">🤝 Aide Sociale (Sortie)</option>
+                                    <option value="SORTIE_LOAN">📤 Décaissement Emprunt (Sortie)</option>
+                                    <option value="BENEFICE_TONTINE">🎯 Bénéfice Tontine (Sortie)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="font-weight-bold">Montant (FCFA)</label>
+                                <input type="number" step="1" name="amount" class="form-control" placeholder="Ex: 50000" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="font-weight-bold">Mode de paiement</label>
+                                <select name="payment_mode" class="form-control" required>
+                                    <option value="ESPECE">💰 Espèce</option>
+                                    <option value="ORANGE_MONEY">📱 Orange Money</option>
+                                    <option value="MTN_MOBILE">📱 MTN Mobile</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="font-weight-bold">Date de l'opération</label>
+                                <input type="date" name="date" id="modal_add_date" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="font-weight-bold">Libellé / Description</label>
+                        <input type="text" name="description" class="form-control" placeholder="Ex: Cotisation tontine cycle Mars 2026">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times mr-1"></i>Annuler
+                    </button>
+                    <button type="submit" class="btn btn-success font-weight-bold">
+                        <i class="fas fa-save mr-1"></i>Confirmer l'opération
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Remplissage automatique de la date du jour si non fournie par le serveur
+    var today = new Date().toISOString().split('T')[0];
+    var serverDate = "{{ now.strftime('%Y-%m-%d') if now else '' }}";
+    $('#modal_add_date').val(serverDate ? serverDate : today);
+
+    // Auto-hide alerts after 5 seconds
+    setTimeout(function() {
+        $('.alert').fadeOut('slow');
+    }, 5000);
+});
+</script>
+{% endblock %}

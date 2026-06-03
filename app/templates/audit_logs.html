@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Journaux d'Audit de Sécurité - Tontine Manager{% endblock %}
+{% block page_title %}<i class="fas fa-history text-gradient"></i> Piste d'Audit & Sécurité{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <p class="text-muted">Journal immuable traçant l'ensemble des écritures comptables, des ouvertures de session et des modifications d'informations.</p>
+
+    <div class="card">
+        <div class="card-header bg-white text-dark">
+            <i class="fas fa-shield-alt text-danger mr-2"></i> Traces d'activité de l'infrastructure
+        </div>
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table table-hover table-striped mb-0 small">
+                    <thead class="bg-dark text-white">
+                        <tr>
+                            <th>Horodatage</th>
+                            <th>Opérateur</th>
+                            <th>Niveau de rôle</th>
+                            <th>Action exécutée</th>
+                            <th>Adresse IP</th>
+                            <th>État système</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if logs %}
+                            {% for log in logs %}
+                            <tr>
+                                <td class="text-secondary font-weight-bold">{{ log.formatted_date }}</td>
+                                <td><strong>{{ log.user_name }}</strong></td>
+                                <td><span class="badge badge-light border">{{ log.user_role or 'N/A' }}</span></td>
+                                <td><code class="text-dark font-weight-bold">{{ log.action }}</code></td>
+                                <td><span class="text-muted"><i class="fas fa-network-wired small mr-1"></i> {{ log.ip_address or '127.0.0.1' }}</span></td>
+                                <td>
+                                    {% if log.status == 'SUCCESS' or log.status == 'SUCCÈS' %}
+                                        <span class="text-success font-weight-bold"><i class="fas fa-check-circle mr-1"></i> Autorisé</span>
+                                    {% else %}
+                                        <span class="text-danger font-weight-bold"><i class="fas fa-ban mr-1"></i> Échec / Rejet</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    <i class="fas fa-history fa-2x mb-2 d-block"></i> Aucun log d'activité n'a encore été indexé dans le journal système.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
