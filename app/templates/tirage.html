@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Tirage - Cycle #{{ cycle.cycle_number }}{% endblock %}
+{% block page_title %}<i class="fas fa-dice"></i> Tirage au sort · {{ cycle.display_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .draw-stage { background: linear-gradient(135deg, var(--hl-green), var(--hl-green-700)); color: #fff; border-radius: 16px; padding: 32px 20px; text-align: center; }
+    .draw-wheel { font-size: 2.2rem; font-weight: 700; min-height: 3.2rem; letter-spacing: .5px; }
+    .draw-wheel.spinning { opacity: .75; filter: blur(.5px); }
+    .draw-counter { opacity: .85; }
+    .order-list { list-style: none; padding: 0; margin: 0; }
+    .order-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #eee; }
+    .order-list li.pending { opacity: 0; transform: translateY(8px); }
+    .order-list li.shown { opacity: 1; transform: none; transition: all .4s ease; }
+    .pos { width: 36px; height: 36px; border-radius: 50%; background: var(--hl-green); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+    .pos.done { background: #28a745; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% from "photo_macro.html" import display_photo %}
+<div class="fade-in">
+    <a href="{{ url_for('tirages') }}" class="btn btn-link px-0 mb-2"><i class="fas fa-arrow-left"></i> Tous les tirages</a>
+
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="draw-stage mb-4">
+                {% if reveal_draw %}
+                <div class="small text-uppercase mb-2">Tirage du {{ reveal_draw.drawn_at.strftime('%d/%m/%Y à %H:%M') }}</div>
+                <div class="draw-wheel" id="wheel">…</div>
+                <div class="draw-counter mt-2" id="counter"></div>
+                <button class="btn btn-light btn-sm mt-3" id="skipBtn"><i class="fas fa-forward"></i> Tout afficher</button>
+                {% else %}
+                <div class="draw-wheel mb-2"><i class="fas fa-dice"></i></div>
+                <p class="mb-0">{{ remaining|length }} main(s) restent à passer sur {{ cycle.total_members }}.</p>
+                {% endif %}
+            </div>
+
+            {% if reveal_draw %}
+            <div class="card">
+                <div class="card-header">Ordre de passage tiré</div>
+                <ul class="order-list" id="revealList">
+                    {% for r in reveal_draw.results %}
+                    <li class="pending" data-name="{{ r.member.full_name }}">
+                        <span class="pos">{{ r.position }}</span>
+                        {{ display_photo(r.member, 36) }}
+                        <strong>{{ r.member.full_name }}</strong>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if can_draw and cycle.status == 'EN_COURS' and remaining|length >= 2 and not cycle.is_auction %}
+            <div class="card">
+                <div class="card-body">
+                    <h5><i class="fas fa-random"></i> Nouveau tirage</h5>
+                    <p class="small text-muted">
+                        Les {{ remaining|length }} mains qui n'ont pas encore reçu la cagnotte seront classées au hasard
+                        (positions {{ cycle.beneficiaries_count + 1 }} à {{ cycle.beneficiaries_count + remaining|length }}).
+                        Les membres déjà servis ne bougent pas. Le tirage est enregistré et visible par tous les membres.
+                    </p>
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <input type="text" name="notes" class="form-control" maxlength="255" placeholder="Note (ex : tirage en séance du 12/10, 15 présents)">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg btn-block"
+                                onclick="return confirm('Lancer le tirage ? L\'ordre de passage actuel des membres restants sera remplacé.');">
+                            <i class="fas fa-dice"></i> Lancer le tirage
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header">Ordre de passage actuel</div>
+                <ul class="order-list">
+                    {% for b in beneficiaries %}
+                    <li><span class="pos done">{{ b.position }}</span> {{ b.member_name }} <span class="badge badge-success ml-auto">Servi</span></li>
+                    {% endfor %}
+                    {% for m in remaining %}
+                    <li><span class="pos">{{ m.position or '?' }}</span> {{ m.label }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            {% if draws %}
+            <div class="card">
+                <div class="card-header">Historique de ce cycle</div>
+                <ul class="list-group list-group-flush">
+                    {% for d in draws %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="small">{{ d.drawn_at.strftime('%d/%m/%Y %H:%M') }} · {{ d.drawer.username if d.drawer else '—' }}</span>
+                        <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id, reveal=d.id) }}" class="btn btn-sm btn-outline-primary">Rejouer</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if reveal_draw %}
+<script>
+$(function() {
+    var items = $('#revealList li');
+    var names = items.map(function() { return $(this).data('name'); }).get();
+    var wheel = $('#wheel'), counter = $('#counter');
+    var index = 0, skipped = false;
+
+    function showItem(i) {
+        $(items[i]).removeClass('pending').addClass('shown');
+        wheel.removeClass('spinning').text(names[i]);
+        counter.text('Position ' + $(items[i]).find('.pos').text() + ' · ' + (i + 1) + '/' + names.length);
+    }
+
+    function spinThenReveal() {
+        if (skipped || index >= names.length) return;
+        var ticks = 0;
+        wheel.addClass('spinning');
+        var timer = setInterval(function() {
+            wheel.text(names[Math.floor(Math.random() * names.length)]);
+            if (++ticks > 14 || skipped) {
+                clearInterval(timer);
+                if (skipped) return;
+                showItem(index++);
+                setTimeout(spinThenReveal, 900);
+            }
+        }, 70);
+    }
+
+    $('#skipBtn').on('click', function() {
+        skipped = true;
+        items.removeClass('pending').addClass('shown');
+        wheel.removeClass('spinning').text('Tirage complet');
+        counter.text(names.length + ' membre(s) classé(s)');
+        $(this).hide();
+    });
+
+    spinThenReveal();
+});
+</script>
+{% endif %}
+{% endblock %}

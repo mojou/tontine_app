@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Galerie de l'accueil{% if current_tontine %} - {{ current_tontine.name }}{% endif %}{% endblock %}
+{% block page_title %}<i class="fas fa-images"></i> Galerie de la page d'accueil{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gallery-thumb { width: 100%; height: 180px; object-fit: cover; border-radius: 12px 12px 0 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="card">
+        <div class="card-header bg-primary"><i class="fas fa-upload"></i> Ajouter des photos</div>
+        <div class="card-body">
+            <p class="small text-muted mb-3">
+                Ces photos sont <strong>publiques</strong> : elles s'affichent sur la page d'accueil, visible sans connexion.
+                N'ajoutez que des photos dont les personnes visibles ont donné leur accord.
+                La photo marquée « bannière » sert de fond en haut de la page.
+            </p>
+            <form method="POST" action="{{ url_for('gallery_upload') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-row">
+                    <div class="form-group col-md-5">
+                        <input type="file" name="photos" class="form-control-file" accept=".png,.jpg,.jpeg,.gif,.webp" multiple required>
+                        <small class="text-muted">PNG, JPG, GIF ou WEBP · 5 Mo max au total</small>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <input type="text" name="caption" class="form-control" maxlength="200" placeholder="Légende (ex : Réunion de juin 2026)">
+                    </div>
+                    <div class="form-group col-md-3">
+                        <div class="custom-control custom-checkbox mt-2">
+                            <input type="checkbox" class="custom-control-input" name="is_hero" id="is_hero">
+                            <label class="custom-control-label" for="is_hero">Utiliser comme bannière</label>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Envoyer</button>
+                <a href="{{ url_for('index') }}" class="btn btn-link" target="_blank">Voir la page d'accueil <i class="fas fa-external-link-alt"></i></a>
+            </form>
+        </div>
+    </div>
+
+    {% if photos %}
+    <div class="row">
+        {% for p in photos %}
+        <div class="col-sm-6 col-lg-4">
+            <div class="card">
+                <img src="{{ url_for('static', filename='images/' + p.filename) }}" alt="{{ p.caption or '' }}" class="gallery-thumb">
+                <div class="card-body">
+                    {% if p.is_hero %}<span class="badge badge-warning mb-2"><i class="fas fa-star"></i> Bannière</span>{% endif %}
+                    <form method="POST" action="{{ url_for('gallery_update', photo_id=p.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="caption" class="form-control form-control-sm mb-2" maxlength="200" value="{{ p.caption or '' }}" placeholder="Légende">
+                        <div class="d-flex align-items-center mb-2">
+                            <label class="small mb-0 mr-2">Ordre</label>
+                            <input type="number" name="display_order" class="form-control form-control-sm" style="width:80px" value="{{ p.display_order }}">
+                            <div class="custom-control custom-checkbox ml-3">
+                                <input type="checkbox" class="custom-control-input" name="is_hero" id="hero{{ p.id }}" {% if p.is_hero %}checked{% endif %}>
+                                <label class="custom-control-label small" for="hero{{ p.id }}">Bannière</label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Enregistrer</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('gallery_delete', photo_id=p.id) }}" class="mt-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Supprimer cette photo ?');"><i class="fas fa-trash"></i> Supprimer</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card"><div class="card-body text-center text-muted py-5">
+        <i class="fas fa-images fa-3x mb-3"></i><p class="mb-0">Aucune photo. La page d'accueil utilise une bannière par défaut.</p>
+    </div></div>
+    {% endif %}
+</div>
+{% endblock %}

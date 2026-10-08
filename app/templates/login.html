@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Connexion{% if selected_tontine %} - {{ selected_tontine.name }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card mx-auto" style="max-width: 420px; margin-top: 40px;">
+    <div class="card-body p-4">
+        <h2 class="text-center mb-1">Connexion</h2>
+        {% if selected_tontine %}
+        <p class="text-center text-muted mb-4">{{ selected_tontine.name }}</p>
+        {% else %}
+        <p class="text-center text-muted mb-4">Choisissez votre tontine</p>
+        {% endif %}
+
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            {% if selected_tontine and tontines|length == 1 %}
+            <input type="hidden" name="tontine" value="{{ selected_tontine.slug }}">
+            {% else %}
+            <div class="form-group">
+                <label for="tontine">Tontine</label>
+                <select name="tontine" id="tontine" class="form-control" required>
+                    <option value="" {% if not selected %}selected{% endif %} disabled>-- Sélectionnez --</option>
+                    {% for t in tontines %}
+                    <option value="{{ t.slug }}" {% if t.slug == selected %}selected{% endif %}>{{ t.name }}</option>
+                    {% endfor %}
+                    <option value="{{ platform_value }}" {% if selected == platform_value %}selected{% endif %}>Administration de la plateforme</option>
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="username">Nom d'utilisateur</label>
+                {{ form.username(class="form-control", id="username", autocomplete="username") }}
+            </div>
+
+            <div class="form-group">
+                <div class="d-flex justify-content-between align-items-baseline">
+                    <label for="password">Mot de passe</label>
+                    <a href="{{ url_for('forgot_password', t=selected) if selected and selected != platform_value else url_for('forgot_password') }}" class="small">Mot de passe oublié ?</a>
+                </div>
+                {{ form.password(class="form-control", id="password", autocomplete="current-password") }}
+            </div>
+
+            <div class="form-group">
+                <label>{{ form.remember() }} Se souvenir de moi</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
+        </form>
+
+        {% if selected_tontine %}
+        <div class="text-center mt-3 small">
+            <a href="{{ url_for('tontine_home', slug=selected_tontine.slug) }}"><i class="fas fa-arrow-left"></i> Retour à l'accueil de {{ selected_tontine.name }}</a>
+            {% if tontines|length == 1 %}
+            <br><a href="{{ url_for('login', t=platform_value) }}" class="text-muted">Administration de la plateforme</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

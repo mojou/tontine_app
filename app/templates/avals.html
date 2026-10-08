@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Avals - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-handshake"></i> Avals{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block content %}
+<div class="fade-in">
+    <p class="text-muted">
+        Un <strong>avaliste</strong> est un membre qui se porte garant d'un emprunt : si l'emprunteur ne rembourse pas,
+        le bureau peut lui demander de payer à sa place. Accordez votre aval uniquement à des personnes de confiance.
+    </p>
+
+    {% if me %}
+    <div class="row">
+        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-piggy-bank" style="color: var(--hl-green)"></i>
+            <div class="stat-value">{{ fcfa(me.assets) }}</div><div class="stat-label">Mes avoirs dans la tontine (FCFA)</div></div></div>
+        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-shield-alt" style="color: var(--hl-gold)"></i>
+            <div class="stat-value">{{ fcfa(me.guarantee_exposure) }}</div><div class="stat-label">Montant que je garantis encore</div></div></div>
+        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-balance-scale" style="color: var(--hl-green-700)"></i>
+            <div class="stat-value {{ 'text-danger' if me.guarantee_capacity < 0 }}">{{ fcfa(me.guarantee_capacity) }}</div><div class="stat-label">Capacité d'aval restante (indicative)</div></div></div>
+    </div>
+    {% endif %}
+
+    {# ---------- Demandes reçues ---------- #}
+    <div class="card">
+        <div class="card-header"><i class="fas fa-inbox"></i> Demandes d'aval qui me concernent</div>
+        {% if my_requests %}
+        <div class="table-container">
+            <table class="table mb-0">
+                <thead><tr><th>Emprunteur</th><th>Emprunt</th><th>Part garantie</th><th>Statut</th><th></th></tr></thead>
+                <tbody>
+                {% for g in my_requests %}
+                <tr>
+                    <td>{{ g.loan.member_name }}</td>
+                    <td>{{ fcfa(g.loan.amount) }} FCFA <small class="text-muted">(à rembourser {{ fcfa(g.loan.total_amount) }}, échéance {{ g.loan.end_date.strftime('%d/%m/%Y') if g.loan.end_date else '—' }})</small>
+                        {% if g.loan.description %}<br><small class="text-muted">Objet : {{ g.loan.description }}</small>{% endif %}</td>
+                    <td>{{ fcfa(g.amount) }} FCFA{% if g.called_amount and g.called_amount > 0 %}<br><small class="text-danger">déjà payé : {{ fcfa(g.called_amount) }}</small>{% endif %}</td>
+                    <td><span class="badge badge-{{ g.status_color }}">{{ g.status_display }}</span></td>
+                    <td>
+                        {% if g.status == 'EN_ATTENTE' and g.loan.status == 'PENDING' %}
+                        <form method="POST" action="{{ url_for('respond_aval', guarantee_id=g.id) }}" class="form-inline justify-content-end">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="text" name="note" class="form-control form-control-sm mr-2 mb-1" maxlength="255" placeholder="Message (facultatif)">
+                            <button type="submit" name="action" value="accept" class="btn btn-sm btn-success mr-1 mb-1"
+                                    onclick="return confirm('Vous vous engagez à payer jusqu\'à {{ fcfa(g.amount) }} FCFA si {{ g.loan.member_name }} ne rembourse pas. Confirmer ?');">
+                                <i class="fas fa-check"></i> J'accepte</button>
+                            <button type="submit" name="action" value="refuse" class="btn btn-sm btn-outline-danger mb-1"><i class="fas fa-times"></i> Je refuse</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted">Personne ne vous a demandé d'aval.</div>
+        {% endif %}
+    </div>
+
+    {# ---------- Mes emprunts ---------- #}
+    {% if my_loans %}
+    <div class="card">
+        <div class="card-header"><i class="fas fa-hand-holding-usd"></i> Les avalistes de mes emprunts</div>
+        <div class="card-body">
+            {% for loan in my_loans %}
+            <div class="mb-3 pb-3 {{ 'border-bottom' if not loop.last }}">
+                <div class="d-flex justify-content-between flex-wrap">
+                    <strong>Emprunt #{{ loan.id }} · {{ fcfa(loan.amount) }} FCFA</strong>
+                    <span class="badge badge-{{ loan.get_status_color() }}">{{ loan.get_status_display() }}</span>
+                </div>
+                <ul class="list-unstyled small my-2">
+                    {% for g in loan.guarantors %}
+                    <li><i class="fas fa-user-shield text-muted"></i> {{ g.member.full_name }} · {{ fcfa(g.amount) }} FCFA ·
+                        <span class="badge badge-{{ g.status_color }}">{{ g.status_display }}</span>
+                        {% if g.response_note %}<em class="text-muted">« {{ g.response_note }} »</em>{% endif %}</li>
+                    {% else %}
+                    <li class="text-muted">Aucun avaliste.</li>
+                    {% endfor %}
+                </ul>
+                {% if loan.status == 'PENDING' %}
+                <form method="POST" action="{{ url_for('add_loan_guarantor', loan_id=loan.id) }}" class="form-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="back" value="avals">
+                    <select name="guarantor_id" class="form-control form-control-sm mr-2" required>
+                        <option value="">-- Demander un autre avaliste --</option>
+                        {% for c in candidates if c.id not in loan.guarantors|map(attribute='member_id')|list %}
+                        <option value="{{ c.id }}">{{ c.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-gold"><i class="fas fa-paper-plane"></i> Envoyer la demande</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ---------- Vue du bureau ---------- #}
+    {% if is_bureau %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+            <span><i class="fas fa-users-cog"></i> Tous les avals de la tontine</span>
+            <form method="GET" class="form-inline">
+                <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
+                    <option value="">Tous les statuts</option>
+                    {% for code, info in statuses.items() %}<option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ info[0] }}</option>{% endfor %}
+                </select>
+            </form>
+        </div>
+        {% if all_guarantees %}
+        <div class="table-container">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Emprunteur</th><th>Avaliste</th><th>Emprunt</th><th>Reste dû</th><th>Garanti / payé</th><th>Statut</th>{% if can_manage %}<th>Actions</th>{% endif %}</tr></thead>
+                <tbody>
+                {% for g in all_guarantees %}
+                {% set loan = g.loan %}
+                <tr>
+                    <td>{{ loan.member_name }}</td>
+                    <td>{{ g.member.full_name }}</td>
+                    <td>#{{ loan.id }} <span class="badge badge-{{ loan.get_status_color() }}">{{ loan.get_status_display() }}</span>
+                        {% if loan.is_overdue or loan.status == 'OVERDUE' %}<br><small class="text-danger">échéance dépassée</small>{% endif %}</td>
+                    <td>{{ fcfa(loan.remaining_amount) }}</td>
+                    <td>{{ fcfa(g.amount) }} / <span class="{{ 'text-danger' if g.called_amount and g.called_amount > 0 }}">{{ fcfa(g.called_amount or 0) }}</span></td>
+                    <td><span class="badge badge-{{ g.status_color }}">{{ g.status_display }}</span></td>
+                    {% if can_manage %}
+                    <td>
+                        {% if g.status in ['ACCEPTE', 'APPELE'] and loan.status in ['ACTIF', 'OVERDUE'] and g.remaining_guarantee > 0 %}
+                        {% set maxi = [g.remaining_guarantee, loan.remaining_amount]|min %}
+                        <form method="POST" action="{{ url_for('call_aval', guarantee_id=g.id) }}" class="form-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="expected_called" value="{{ (g.called_amount or 0)|float }}">
+                            <input type="number" name="amount" class="form-control form-control-sm mr-1" style="width:110px" min="1" max="{{ maxi|int }}" value="{{ maxi|int }}" required>
+                            <select name="payment_mode" class="form-control form-control-sm mr-1">
+                                <option value="ESPECE">Espèces</option><option value="ORANGE_MONEY">Orange Money</option><option value="MTN_MOBILE">MTN MoMo</option>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-warning"
+                                    onclick="return confirm('Encaisser ce montant auprès de l\'avaliste {{ g.member.full_name }} ?');"><i class="fas fa-gavel"></i> Appeler</button>
+                        </form>
+                        {% elif g.status == 'APPELE' %}
+                        <form method="POST" action="{{ url_for('settle_aval', guarantee_id=g.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-check"></i> Emprunteur a remboursé l'avaliste</button>
+                        </form>
+                        {% endif %}
+                        {% if g.status == 'APPELE' and g.remaining_guarantee > 0 and loan.status in ['ACTIF', 'OVERDUE'] %}
+                        <form method="POST" action="{{ url_for('settle_aval', guarantee_id=g.id) }}" class="mt-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-link p-0 small">Marquer la dette envers l'avaliste comme réglée</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted">Aucun aval{% if status_filter %} avec ce statut{% endif %}.</div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

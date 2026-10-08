@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cycle.display_name }} - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-sync-alt"></i> {{ cycle.display_name }}{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .kpi .label { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--hl-muted); }
+    .kpi .value { font-size: 1.4rem; font-weight: 800; color: var(--hl-green); }
+    .turn { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee; }
+    .turn:last-child { border-bottom: none; }
+    .pos { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; background: var(--hl-green-100); color: var(--hl-green); flex-shrink: 0; }
+    .pos.done { background: var(--hl-green); color: #fff; }
+    .pos.next { background: var(--hl-gold); color: var(--hl-ink); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="mb-3">
+        <a href="{{ url_for('tontine_cycles') }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Tous les cycles</a>
+        {% if not cycle.is_auction %}
+        <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}" class="btn btn-outline-primary btn-sm ml-2"><i class="fas fa-dice"></i> Tirage au sort</a>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="row kpi text-center text-md-left">
+                <div class="col-6 col-md mb-3"><div class="label">Statut</div>
+                    <span class="badge {{ 'badge-success' if cycle.status == 'EN_COURS' else 'badge-secondary' }}">{{ 'En cours' if cycle.status == 'EN_COURS' else 'Terminé' }}</span>
+                    <span class="badge {{ 'badge-warning' if cycle.is_auction else 'badge-primary' }}">{{ 'Enchères' if cycle.is_auction else 'Tirage' }}</span></div>
+                <div class="col-6 col-md mb-3"><div class="label">Cotisation / main</div><div class="value">{{ fcfa(cycle.amount_per_member) }}</div></div>
+                <div class="col-6 col-md mb-3"><div class="label">Mains · membres</div><div class="value">{{ cycle.total_members }} · {{ cycle.members_count }}</div></div>
+                <div class="col-6 col-md mb-3"><div class="label">Cagnotte / tour</div><div class="value">{{ fcfa(cycle.total_amount) }}</div></div>
+                <div class="col-6 col-md mb-3"><div class="label">Tours versés</div><div class="value">{{ cycle.beneficiaries_count }}/{{ cycle.total_members }}</div></div>
+            </div>
+            <div class="progress" style="height: 8px;"><div class="progress-bar" style="width: {{ cycle.progress_percentage|round|int }}%"></div></div>
+            <div class="small text-muted mt-2">
+                Début {{ cycle.start_date.strftime('%d/%m/%Y') }} · un tour tous les {{ cycle.frequency_days or 14 }} jours
+                {% if cycle.status == 'EN_COURS' and cycle.next_round_date %} · prochain tour prévu le <strong>{{ cycle.next_round_date.strftime('%d/%m/%Y') }}</strong>{% endif %}
+                · cotisations rattachées à ce cycle : {{ fcfa(collected) }} FCFA
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-7">
+            {# ---------------- Versement du tour ---------------- #}
+            {% if cycle.status == 'EN_COURS' and can_manage %}
+            <div class="card" style="border-left: 5px solid var(--hl-gold)">
+                <div class="card-body">
+                    {% if cycle.is_auction %}
+                    <h5><i class="fas fa-gavel" style="color: var(--hl-gold)"></i> Enchère du tour {{ cycle.beneficiaries_count + 1 }}</h5>
+                    <p class="small text-muted">Les mains qui n'ont pas encore reçu la cagnotte enchérissent en séance. Le plus offrant reçoit la cagnotte moins sa mise ; la mise va en caisse et sera partagée en fin d'exercice.</p>
+                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="expected_turn" value="{{ cycle.beneficiaries_count + 1 }}">
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label>Gagnant</label>
+                                <select name="participant_id" class="form-control" required>
+                                    <option value="">-- Choisir --</option>
+                                    {% for p in cycle.remaining_participants %}<option value="{{ p.id }}">{{ p.label }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label>Mise retenue (FCFA)</label>
+                                <input type="number" name="bid_amount" class="form-control" min="0" max="{{ (cycle.total_amount|int) - 1 }}" step="1" value="0" required>
+                            </div>
+                        </div>
+                        {% include "_payout_fields.html" %}
+                        <button type="submit" class="btn btn-gold" onclick="return confirm('Verser la cagnotte au gagnant de l\'enchère ?');"><i class="fas fa-hand-holding-usd"></i> Verser la cagnotte</button>
+                    </form>
+                    {% elif next_participant %}
+                    <h5><i class="fas fa-hand-holding-usd" style="color: var(--hl-gold)"></i> Tour {{ next_participant.position }} : {{ next_participant.label }}</h5>
+                    <p class="mb-2">Cagnotte : <strong>{{ fcfa(cycle.total_amount) }} FCFA</strong>
+                        {% if pending_sanctions > 0 %}<br><span class="text-danger small">Amendes impayées : {{ fcfa(pending_sanctions) }} FCFA (retenues si la case est cochée)</span>{% endif %}</p>
+                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="expected_turn" value="{{ cycle.beneficiaries_count + 1 }}">
+                        {% include "_payout_fields.html" %}
+                        <button type="submit" class="btn btn-gold" onclick="return confirm('Confirmer le versement de la cagnotte à {{ next_participant.label }} ?');"><i class="fas fa-check"></i> Verser la cagnotte</button>
+                    </form>
+                    {% elif cycle.needs_draw %}
+                    <h5><i class="fas fa-dice"></i> Ordre de passage à tirer</h5>
+                    <p class="text-muted">Faites le tirage au sort avant de verser la première cagnotte.</p>
+                    <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}" class="btn btn-primary"><i class="fas fa-dice"></i> Aller au tirage</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# ---------------- Tours ---------------- #}
+            <div class="card">
+                <div class="card-header"><i class="fas fa-list-ol"></i> Tours</div>
+                <div class="card-body py-2">
+                    {% for b in beneficiaries %}
+                    <div class="turn">
+                        <span class="pos done">{{ b.position }}</span>
+                        <div class="flex-grow-1">
+                            <strong>{{ b.member_name }}</strong> <small class="text-muted">· {{ b.benefit_date.strftime('%d/%m/%Y') }}</small>
+                            <div class="small text-muted">
+                                Brut {{ fcfa(b.gross_amount) }}{% if b.bid_amount %} − mise {{ fcfa(b.bid_amount) }}{% endif %}{% if b.sanctions_deducted and b.sanctions_deducted > 0 %} − amendes {{ fcfa(b.sanctions_deducted) }}{% endif %}
+                                = <strong style="color: var(--hl-green)">{{ fcfa(b.net_amount) }} FCFA</strong>
+                                {% if b.transaction_id %} · réf. {{ b.transaction_id }}{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% for p in cycle.remaining_participants %}
+                    <div class="turn">
+                        <span class="pos {{ 'next' if next_participant and p.id == next_participant.id }}">{{ p.position or '?' }}</span>
+                        <div class="flex-grow-1">{{ p.label }}
+                            {% if cycle.frequency_days and p.position %}<small class="text-muted"> · prévu vers le {{ (cycle.start_date + timedelta(days=cycle.frequency_days * (p.position - 1))).strftime('%d/%m/%Y') }}</small>{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header"><i class="fas fa-users"></i> Participants ({{ cycle.members_count }})</div>
+                <ul class="list-group list-group-flush">
+                    {% for h in holders %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>{{ h.member.full_name }}</span>
+                        <span>
+                            <span class="badge badge-light">{{ h.parts|length }} main(s)</span>
+                            <span class="small text-muted">{{ fcfa(cycle.amount_per_member * h.parts|length) }} FCFA / tour</span>
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% if current_user.role == 'PRESIDENT' and cycle.beneficiaries_count == 0 %}
+            <form method="POST" action="{{ url_for('delete_tontine_cycle', cycle_id=cycle.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Supprimer ce cycle ?');"><i class="fas fa-trash"></i> Supprimer ce cycle</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

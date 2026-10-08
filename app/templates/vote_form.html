@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Nouveau vote{% if current_tontine %} - {{ current_tontine.name }}{% endif %}{% endblock %}
+{% block page_title %}<i class="fas fa-vote-yea"></i> Nouveau vote{% endblock %}
+
+{% block content %}
+<div class="row fade-in">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary">Ouvrir un vote aux membres</div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="title">Question / intitulé <span class="text-danger">*</span></label>
+                        <input type="text" name="title" id="title" class="form-control" maxlength="200" required
+                               placeholder="Ex : Élection du trésorier 2027" value="{{ form_data.get('title', '') }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="description">Description</label>
+                        <textarea name="description" id="description" class="form-control" rows="3"
+                                  placeholder="Contexte, règles du vote...">{{ form_data.get('description', '') }}</textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="options">Choix possibles <span class="text-danger">*</span></label>
+                        <textarea name="options" id="options" class="form-control" rows="5" required
+                                  placeholder="Un choix par ligne&#10;Pour&#10;Contre&#10;Abstention">{{ form_data.get('options', '') }}</textarea>
+                        <small class="form-text text-muted">Un choix par ligne, au moins deux. Pour une élection, mettez un candidat par ligne.</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label class="font-weight-bold" for="end_date">Clôture automatique</label>
+                            <input type="datetime-local" name="end_date" id="end_date" class="form-control" value="{{ form_data.get('end_date', '') }}">
+                            <small class="form-text text-muted">Facultatif : sinon, clôture manuelle par le bureau.</small>
+                        </div>
+                        <div class="form-group col-md-6 d-flex align-items-center">
+                            <div class="custom-control custom-checkbox mt-3">
+                                <input type="checkbox" class="custom-control-input" name="is_anonymous" id="is_anonymous"
+                                       {% if not form_data or form_data.get('is_anonymous') %}checked{% endif %}>
+                                <label class="custom-control-label" for="is_anonymous">Vote anonyme (les choix individuels ne sont pas affichés)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('votes') }}" class="btn btn-outline-secondary">Annuler</a>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Ouvrir le vote</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

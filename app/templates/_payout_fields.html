@@ -1,0 +1,17 @@
+{# Champs communs de paiement (mode, référence mobile, retenue des amendes) #}
+<div class="form-row">
+    <div class="form-group col-md-6">
+        <label class="small font-weight-bold">Mode de paiement</label>
+        <select name="payment_mode" class="form-control form-control-sm">
+            {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-group col-md-6">
+        <label class="small font-weight-bold">Référence (paiement mobile)</label>
+        <input type="text" name="payment_reference" class="form-control form-control-sm" maxlength="60" placeholder="Ex : MP241008.1234.A56789">
+    </div>
+</div>
+<div class="custom-control custom-checkbox mb-3">
+    <input type="checkbox" class="custom-control-input" id="deduct{{ cycle.id }}" name="deduct_sanctions" checked>
+    <label class="custom-control-label small" for="deduct{{ cycle.id }}">Retenir les amendes impayées du bénéficiaire sur la cagnotte</label>
+</div>

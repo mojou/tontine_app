@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{{ seance.display_name }} - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-clipboard-check"></i> {{ seance.display_name }}{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .sheet th, .sheet td { white-space: nowrap; vertical-align: middle; }
+    .sheet .amt { width: 95px; display: inline-block; }
+    .sheet td.paid { background: var(--hl-green-100); color: var(--hl-green); font-weight: 600; }
+    .sheet td.na { color: #bbb; }
+    .sheet thead th { position: sticky; top: 0; background: #f8f7f1; z-index: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+        <a href="{{ url_for('seances') }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Toutes les séances</a>
+        <div>
+            <span class="h5 mb-0 mr-3">Encaissé : <strong style="color: var(--hl-green)">{{ fcfa(grand_total) }} FCFA</strong></span>
+            {% if current_user.role in ['PRESIDENT', 'TRESORIER'] %}
+            <form method="POST" action="{{ url_for('close_seance', seance_id=seance.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm {{ 'btn-outline-success' if seance.is_closed else 'btn-outline-secondary' }}">
+                    <i class="fas {{ 'fa-lock-open' if seance.is_closed else 'fa-lock' }}"></i> {{ 'Rouvrir' if seance.is_closed else 'Clôturer la séance' }}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card">
+            {% if can_manage %}
+            <div class="card-header d-flex align-items-center flex-wrap">
+                <label class="small mb-0 mr-2" for="payment_mode">Mode de paiement</label>
+                <select name="payment_mode" id="payment_mode" class="form-control form-control-sm mr-3" style="width: auto">
+                    {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-primary mr-2" id="checkAll">Tout cocher</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="uncheckAll">Tout décocher</button>
+            </div>
+            {% endif %}
+            <div class="table-container" style="max-height: 65vh; overflow: auto;">
+                <table class="table table-sm sheet mb-0">
+                    <thead>
+                        <tr>
+                            <th>Membre</th>
+                            {% for col in columns %}<th>{{ col.label }}<br><small class="text-muted">{{ col.fund }}</small></th>{% endfor %}
+                            {% if can_manage %}<th>Réf. mobile</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td><strong>{{ row.member.full_name }}</strong></td>
+                        {% for cell in row.cells %}
+                        {% set key = row.member.id ~ '_' ~ cell.col.key %}
+                        {% if cell.paid is not none %}
+                        <td class="paid"><i class="fas fa-check-circle"></i> {{ fcfa(cell.paid) }}</td>
+                        {% elif cell.expected is none %}
+                        <td class="na" title="Ne participe pas à ce cycle">—</td>
+                        {% elif can_manage %}
+                        <td>
+                            <input type="checkbox" class="pay-box mr-1" name="pay_{{ key }}" aria-label="Payé">
+                            <input type="number" class="form-control form-control-sm amt" name="amt_{{ key }}" min="0" step="1"
+                                   value="{{ cell.expected|int if cell.expected and cell.expected > 0 else '' }}" placeholder="montant">
+                        </td>
+                        {% else %}
+                        <td class="text-muted small">attendu {{ fcfa(cell.expected) if cell.expected else 'libre' }}</td>
+                        {% endif %}
+                        {% endfor %}
+                        {% if can_manage %}<td><input type="text" class="form-control form-control-sm" name="ref_{{ row.member.id }}" maxlength="60" style="width: 130px"></td>{% endif %}
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="font-weight-bold" style="background: var(--hl-green-100)">
+                            <td>Total encaissé</td>
+                            {% for col in columns %}<td>{{ fcfa(totals[col.key]) }}</td>{% endfor %}
+                            {% if can_manage %}<td></td>{% endif %}
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% if can_manage %}
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center flex-wrap">
+                <small class="text-muted">Les cases vertes sont déjà payées. Un paiement enregistré se corrige depuis Transactions.</small>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Enregistrer les paiements cochés</button>
+            </div>
+            {% elif seance.is_closed %}
+            <div class="card-footer bg-white small text-muted"><i class="fas fa-lock"></i> Séance clôturée.</div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$('#checkAll').on('click', function() { $('.pay-box').prop('checked', true); });
+$('#uncheckAll').on('click', function() { $('.pay-box').prop('checked', false); });
+// Saisir un montant coche automatiquement la case
+$('.sheet .amt').on('input', function() { $(this).siblings('.pay-box').prop('checked', !!$(this).val()); });
+</script>
+{% endblock %}

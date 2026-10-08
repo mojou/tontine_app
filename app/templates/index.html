@@ -1,0 +1,374 @@
+{% from "_brand.html" import brand, favicon with context %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ tontine.name }}{% if tontine.location %} · {{ tontine.location }}{% endif %}</title>
+    <meta name="description" content="{{ tontine.name }}{% if tontine.location %} ({{ tontine.location }}){% endif %} : cotisations, emprunts, tirages au sort et votes, en toute transparence.">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {{ favicon() }}
+    {% set hero_url = url_for('static', filename='images/' + hero_photo.filename) if hero_photo else url_for('static', filename='images/images.png') %}
+    <style>
+        :root { --navy: var(--hl-green); --blue: var(--hl-green-700); --gold: var(--hl-gold); --ink: #1d2433; --muted: #5d6676; --bg: var(--hl-cream); }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', sans-serif; color: var(--ink); background: #fff; }
+        a { color: var(--blue); }
+        .section { padding: 90px 0; }
+        .eyebrow { color: var(--gold); font-weight: 700; text-transform: uppercase; letter-spacing: 2px; font-size: .8rem; }
+        .section-title { font-weight: 800; font-size: 2.2rem; color: var(--navy); margin: 8px 0 14px; }
+        .section-lead { color: var(--muted); max-width: 620px; margin: 0 auto 50px; }
+
+        /* Navbar */
+        .lp-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 18px 0; transition: all .3s; }
+        .lp-nav.scrolled { background: rgba(255,255,255,.97); box-shadow: 0 2px 20px rgba(0,0,0,.08); padding: 10px 0; }
+        .lp-nav .brand { font-weight: 800; font-size: 1.3rem; color: #fff; text-decoration: none; }
+        .lp-nav .brand i { color: var(--gold); }
+        .lp-nav .nav-link { color: rgba(255,255,255,.9); font-weight: 500; }
+        .lp-nav.scrolled .brand, .lp-nav.scrolled .nav-link { color: var(--navy); }
+        .lp-nav .navbar-toggler { color: #fff; border-color: rgba(255,255,255,.5); }
+        .lp-nav.scrolled .navbar-toggler { color: var(--navy); border-color: var(--navy); }
+        @media (max-width: 991px) {
+            .lp-nav .navbar-collapse { background: #fff; border-radius: 12px; padding: 12px; margin-top: 10px; }
+            .lp-nav .nav-link { color: var(--navy); }
+        }
+
+        /* Hero */
+        .hero { min-height: 100vh; display: flex; align-items: center; color: #fff; position: relative;
+                background: linear-gradient(120deg, rgba(11,61,34,.93) 0%, rgba(20,83,45,.8) 55%, rgba(31,107,59,.45) 100%), url('{{ hero_url }}') center/cover no-repeat; }
+        .hero h1 { font-weight: 800; font-size: 3.4rem; line-height: 1.1; }
+        .hero h1 span { color: var(--gold); }
+        .hero p.lead { font-size: 1.2rem; opacity: .92; max-width: 560px; }
+        .btn-gold { background: var(--gold); color: var(--ink); font-weight: 700; border-radius: 50px; padding: 12px 30px; border: none; }
+        .btn-gold:hover { background: var(--hl-gold-dark); color: var(--ink); transform: translateY(-2px); }
+        .btn-ghost { border: 2px solid rgba(255,255,255,.7); color: #fff; border-radius: 50px; padding: 10px 28px; font-weight: 600; }
+        .btn-ghost:hover { background: #fff; color: var(--navy); }
+        .hero-card { background: rgba(255,255,255,.12); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.2); border-radius: 18px; padding: 24px; }
+        .hero-card .big { font-size: 2rem; font-weight: 800; }
+        .scroll-hint { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: #fff; opacity: .7; animation: bob 2s infinite; }
+        @keyframes bob { 50% { transform: translate(-50%, 8px); } }
+        @media (max-width: 768px) { .hero h1 { font-size: 2.3rem; } .hero { padding-top: 90px; } }
+
+        /* Stats */
+        .stats { background: var(--navy); color: #fff; padding: 50px 0; }
+        .stat-number { font-size: 2.4rem; font-weight: 800; color: var(--gold); }
+        .stat-label { opacity: .85; }
+
+        /* Steps & features */
+        .step { text-align: center; padding: 10px 20px; }
+        .step-num { width: 64px; height: 64px; border-radius: 50%; background: var(--bg); color: var(--navy); font-size: 1.5rem; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; border: 2px solid #e8e2c8; }
+        .feature { background: #fff; border-radius: 16px; padding: 28px; height: 100%; box-shadow: 0 6px 24px rgba(20,83,45,.08); transition: transform .25s; }
+        .feature:hover { transform: translateY(-6px); }
+        .feature i { font-size: 1.6rem; color: #fff; background: linear-gradient(135deg, var(--navy), var(--blue)); width: 56px; height: 56px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+        .feature h5 { font-weight: 700; }
+        .feature p { color: var(--muted); margin: 0; font-size: .95rem; }
+        .bg-soft { background: var(--bg); }
+
+        /* Bureau */
+        .member-card { background: #fff; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.08); text-align: center; height: 100%; transition: transform .25s; }
+        .member-card:hover { transform: translateY(-6px); }
+        .member-photo { width: 100%; height: 260px; object-fit: cover; object-position: center top; }
+        .member-initials { height: 260px; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--navy), var(--blue)); }
+        .member-card .info { padding: 18px; }
+        .member-card h5 { font-weight: 700; margin-bottom: 4px; }
+        .role-pill { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: .78rem; font-weight: 700; background: #fff4d6; color: #8a6500; }
+
+        /* Galerie */
+        .gallery { columns: 3 260px; column-gap: 16px; }
+        .gallery-item { break-inside: avoid; margin-bottom: 16px; position: relative; border-radius: 14px; overflow: hidden; cursor: zoom-in; }
+        .gallery-item img { width: 100%; display: block; transition: transform .4s; }
+        .gallery-item:hover img { transform: scale(1.05); }
+        .gallery-item .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 14px 12px; color: #fff; font-size: .9rem; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+        #lightbox .modal-content { background: transparent; border: none; }
+        #lightbox img { max-height: 85vh; width: auto; max-width: 100%; border-radius: 10px; }
+
+        /* Meeting / CTA */
+        .meeting { background: linear-gradient(135deg, var(--navy), var(--blue)); color: #fff; border-radius: 20px; padding: 36px; }
+        .meeting .date-box { background: var(--gold); color: var(--ink); border-radius: 14px; padding: 12px 20px; text-align: center; font-weight: 800; }
+        .meeting .date-box .d { font-size: 2.2rem; line-height: 1; }
+        footer { background: var(--hl-green-900); color: rgba(255,255,255,.7); padding: 50px 0 24px; }
+        footer a { color: rgba(255,255,255,.85); }
+        .flash-wrap { position: fixed; top: 80px; right: 16px; z-index: 1100; max-width: 380px; }
+    </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="lp-nav navbar navbar-expand-lg" id="lpNav">
+    <div class="container">
+        <a class="brand" href="#top"><i class="fas fa-hand-holding-usd"></i> {{ tontine.name }}</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#lpMenu" aria-label="Menu">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="collapse navbar-collapse" id="lpMenu">
+            <ul class="navbar-nav ml-auto align-items-lg-center">
+                <li class="nav-item"><a class="nav-link" href="#fonctionnement">Fonctionnement</a></li>
+                <li class="nav-item"><a class="nav-link" href="#fonctionnalites">Services</a></li>
+                <li class="nav-item"><a class="nav-link" href="#bureau">Bureau</a></li>
+                {% if gallery %}<li class="nav-item"><a class="nav-link" href="#galerie">Galerie</a></li>{% endif %}
+                <li class="nav-item"><a class="nav-link" href="#contact">Contact</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ url_for('login', t=tontine.slug) }}"><i class="fas fa-sign-in-alt"></i> Espace membre</a></li>
+                <li class="nav-item ml-lg-2"><a class="btn btn-gold btn-sm px-4" href="{{ url_for('register', t=tontine.slug) }}"><i class="fas fa-user-plus"></i> Rejoindre</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="flash-wrap">
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show shadow" role="alert">
+        {{ message }}
+        <button type="button" class="close" data-dismiss="alert" aria-label="Fermer"><span aria-hidden="true">&times;</span></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- Hero -->
+<header class="hero" id="top">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-7 mb-5 mb-lg-0">
+                {% if tontine.location %}<div class="eyebrow mb-3">{{ tontine.location }}</div>{% endif %}
+                {% if tontine.tagline %}<h1>{{ tontine.tagline }}</h1>{% else %}<h1>Épargner ensemble,<br><span>avancer ensemble.</span></h1>{% endif %}
+                <p class="lead my-4">{{ tontine.name }} réunit ses membres autour de cotisations régulières, d'emprunts solidaires et de décisions prises en commun, avec un suivi clair et transparent.</p>
+                <a href="{{ url_for('register', t=tontine.slug) }}" class="btn btn-gold btn-lg mr-2 mb-2"><i class="fas fa-user-plus"></i> Demander à rejoindre</a>
+                <a href="{{ url_for('login', t=tontine.slug) }}" class="btn btn-ghost btn-lg mr-2 mb-2"><i class="fas fa-sign-in-alt"></i> Espace membre</a>
+            </div>
+            <div class="col-lg-5">
+                <div class="hero-card">
+                    <div class="d-flex justify-content-between mb-3">
+                        <div><div class="big" data-count="{{ stats.total_members }}">{{ stats.total_members }}</div><div class="small">membres actifs</div></div>
+                        <div class="text-right"><div class="big" data-count="{{ stats.completed_cycles }}">{{ stats.completed_cycles }}</div><div class="small">cycles terminés</div></div>
+                    </div>
+                    {% if upcoming %}
+                    <hr style="border-color: rgba(255,255,255,.2)">
+                    <div class="small text-uppercase" style="opacity:.8">Prochaine réunion</div>
+                    <div class="font-weight-bold">{{ upcoming.title }}</div>
+                    <div><i class="far fa-calendar"></i> {{ upcoming.event_date.strftime('%d/%m/%Y') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <a href="#chiffres" class="scroll-hint" aria-label="Défiler"><i class="fas fa-chevron-down fa-lg"></i></a>
+</header>
+
+<!-- Chiffres -->
+<section class="stats" id="chiffres">
+    <div class="container">
+        <div class="row text-center">
+            <div class="col-6 col-md-3 mb-4 mb-md-0"><div class="stat-number" data-count="{{ stats.total_members }}">{{ stats.total_members }}</div><div class="stat-label">Membres actifs</div></div>
+            <div class="col-6 col-md-3 mb-4 mb-md-0"><div class="stat-number" data-count="{{ stats.total_collected|round(0)|int }}" data-format="money">{{ '{:,.0f}'.format(stats.total_collected).replace(',', ' ') }}</div><div class="stat-label">FCFA cotisés</div></div>
+            <div class="col-6 col-md-3"><div class="stat-number" data-count="{{ stats.active_loans }}">{{ stats.active_loans }}</div><div class="stat-label">Emprunts en cours</div></div>
+            <div class="col-6 col-md-3"><div class="stat-number" data-count="{{ stats.completed_cycles }}">{{ stats.completed_cycles }}</div><div class="stat-label">Cycles terminés</div></div>
+        </div>
+    </div>
+</section>
+
+<!-- Fonctionnement -->
+<section class="section" id="fonctionnement">
+    <div class="container text-center">
+        <div class="eyebrow">Fonctionnement</div>
+        <h2 class="section-title">Simple, régulier, équitable</h2>
+        <p class="section-lead">Chaque membre cotise, l'ordre de passage est tiré au sort devant tous, et chacun reçoit la cagnotte à son tour.</p>
+        <div class="row">
+            <div class="col-md-3 col-6 step"><div class="step-num"><i class="fas fa-user-plus"></i></div><h6 class="font-weight-bold">1. Adhésion</h6><p class="small text-muted">Inscription validée par le bureau et versement du fonds de caisse.</p></div>
+            <div class="col-md-3 col-6 step"><div class="step-num"><i class="fas fa-coins"></i></div><h6 class="font-weight-bold">2. Cotisations</h6><p class="small text-muted">Cotisation de présence chaque semaine et tontine deux fois par mois.</p></div>
+            <div class="col-md-3 col-6 step"><div class="step-num"><i class="fas fa-dice"></i></div><h6 class="font-weight-bold">3. Tirage au sort</h6><p class="small text-muted">L'ordre des bénéficiaires est tiré au sort et publié pour tous.</p></div>
+            <div class="col-md-3 col-6 step"><div class="step-num"><i class="fas fa-gift"></i></div><h6 class="font-weight-bold">4. Bénéfice</h6><p class="small text-muted">À son tour, chaque membre reçoit la cagnotte du cycle.</p></div>
+        </div>
+    </div>
+</section>
+
+<!-- Fonctionnalités -->
+<section class="section bg-soft" id="fonctionnalites">
+    <div class="container">
+        <div class="text-center">
+            <div class="eyebrow">Votre espace membre</div>
+            <h2 class="section-title">Tout suivre, à tout moment</h2>
+            <p class="section-lead">Connecté, chaque membre consulte sa situation et participe à la vie de l'association.</p>
+        </div>
+        <div class="row">
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-wallet"></i><h5>Mes cotisations</h5><p>Historique de vos versements, de votre position dans le cycle et de votre statut.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-hand-holding-usd"></i><h5>Emprunts solidaires</h5><p>Demande en ligne, calcul des intérêts et suivi des remboursements.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-dice"></i><h5>Tirages transparents</h5><p>Chaque tirage au sort est enregistré, daté et consultable par tous les membres.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-vote-yea"></i><h5>Votes en ligne</h5><p>Élections du bureau et décisions importantes : un membre, une voix.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-heart"></i><h5>Aides sociales</h5><p>Soutien en cas de maladie, décès, mariage ou naissance.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-file-alt"></i><h5>Réunions et annonces</h5><p>Procès-verbaux, ordres du jour et annonces du bureau au même endroit.</p></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- Bureau -->
+<section class="section" id="bureau">
+    <div class="container">
+        <div class="text-center">
+            <div class="eyebrow">L'équipe</div>
+            <h2 class="section-title">Le bureau exécutif</h2>
+            <p class="section-lead">Les membres élus qui font vivre la tontine au quotidien.</p>
+        </div>
+        {% set role_desc = {
+            'PRESIDENT': 'Orientations et gestion globale de la tontine',
+            'SECRETAIRE': 'Procès-verbaux, annonces et dossiers des membres',
+            'TRESORIER': 'Finances, cotisations et suivi des transactions',
+            'CENSEUR': 'Contrôle interne et respect du règlement',
+            'COMMUNICATION': 'Information des membres et relations publiques'
+        } %}
+        <div class="row justify-content-center">
+            {% for u in bureau %}
+            {% set m = u.member %}
+            <div class="col-sm-6 col-lg-4 col-xl mb-4">
+                <div class="member-card">
+                    {% if m.photo %}
+                    <img src="{{ url_for('static', filename='images/' + m.photo) }}" alt="{{ m.full_name }}" class="member-photo" loading="lazy"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="member-initials" style="display:none">{{ m.first_name[0]|upper }}{{ m.last_name[0]|upper }}</div>
+                    {% else %}
+                    <div class="member-initials">{{ m.first_name[0]|upper }}{{ m.last_name[0]|upper }}</div>
+                    {% endif %}
+                    <div class="info">
+                        <h5>{{ m.full_name }}</h5>
+                        <span class="role-pill">{{ u.get_role_display() }}</span>
+                        <p class="small text-muted mt-2 mb-0">{{ role_desc.get(u.role, '') }}</p>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted">La composition du bureau sera bientôt publiée.</p>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<!-- Galerie -->
+{% if gallery %}
+<section class="section bg-soft" id="galerie">
+    <div class="container">
+        <div class="text-center">
+            <div class="eyebrow">Galerie</div>
+            <h2 class="section-title">La vie de l'association</h2>
+            <p class="section-lead">Réunions, rencontres et moments partagés.</p>
+        </div>
+        <div class="gallery">
+            {% for p in gallery %}
+            <div class="gallery-item" data-src="{{ url_for('static', filename='images/' + p.filename) }}" data-caption="{{ p.caption or '' }}">
+                <img src="{{ url_for('static', filename='images/' + p.filename) }}" alt="{{ p.caption or tontine.name }}" loading="lazy">
+                {% if p.caption %}<div class="cap">{{ p.caption }}</div>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+<div class="modal fade" id="lightbox" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content text-center">
+            <img src="" alt="" id="lightboxImg" class="mx-auto">
+            <p class="text-white mt-2" id="lightboxCap"></p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Prochaine réunion + contact -->
+<section class="section" id="contact">
+    <div class="container">
+        {% if upcoming %}
+        <div class="meeting mb-5">
+            <div class="row align-items-center">
+                <div class="col-md-auto mb-3 mb-md-0">
+                    <div class="date-box">
+                        <div class="d">{{ upcoming.event_date.strftime('%d') }}</div>
+                        <div>{{ upcoming.event_date.strftime('%m/%Y') }}</div>
+                    </div>
+                </div>
+                <div class="col-md">
+                    <div class="eyebrow">Prochaine réunion</div>
+                    <h3 class="font-weight-bold mb-1">{{ upcoming.title }}</h3>
+                    <p class="mb-0" style="opacity:.85">Retrouvez l'ordre du jour complet dans votre espace membre.</p>
+                </div>
+                <div class="col-md-auto mt-3 mt-md-0">
+                    <a href="{{ url_for('login', t=tontine.slug) }}" class="btn btn-gold">Voir les détails</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="text-center">
+            <div class="eyebrow">Contact</div>
+            <h2 class="section-title">Vous souhaitez nous rejoindre ?</h2>
+            <p class="section-lead">Envoyez votre demande d'inscription : le bureau la valide puis vous attribue votre place. Pour toute question, contactez-nous.</p>
+            <a href="{{ url_for('register', t=tontine.slug) }}" class="btn btn-gold btn-lg mb-3"><i class="fas fa-user-plus"></i> Demander à rejoindre</a><br>
+            {% if tontine.contact_phone %}<a href="tel:{{ tontine.contact_phone|replace(' ', '') }}" class="btn btn-outline-primary m-1"><i class="fas fa-phone"></i> {{ tontine.contact_phone }}</a>{% endif %}
+            {% if tontine.contact_email %}<a href="mailto:{{ tontine.contact_email }}" class="btn btn-outline-primary m-1"><i class="fas fa-envelope"></i> Email</a>{% endif %}
+            {% if tontine.whatsapp_link %}<a href="{{ tontine.whatsapp_link }}" class="btn btn-outline-primary m-1" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a>{% endif %}
+            {% if not (tontine.contact_phone or tontine.contact_email or tontine.whatsapp_link) %}<a href="{{ url_for('login', t=tontine.slug) }}" class="btn btn-outline-primary m-1"><i class="fas fa-sign-in-alt"></i> Espace membre</a>{% endif %}
+        </div>
+    </div>
+</section>
+
+<footer>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <div class="h5 text-white font-weight-bold"><i class="fas fa-hand-holding-usd" style="color: var(--gold)"></i> {{ tontine.name }}</div>
+                <p class="small mb-0">{{ tontine.tagline or "Solidarité, épargne et transparence." }}</p>
+            </div>
+            <div class="col-md-6 text-md-right small">
+                <a href="#fonctionnement" class="mr-3">Fonctionnement</a>
+                <a href="#bureau" class="mr-3">Bureau</a>
+                <a href="{{ url_for('login', t=tontine.slug) }}">Espace membre</a>
+            </div>
+        </div>
+        <hr style="border-color: rgba(255,255,255,.1)">
+        <div class="d-flex justify-content-between align-items-center flex-wrap small">
+            <span>&copy; {{ current_year }} {{ tontine.name }}</span>
+            <span>Propulsé par {{ brand(22, True) }}</span>
+        </div>
+    </div>
+</footer>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+$(function() {
+    // Navbar opaque au défilement
+    var nav = $('#lpNav');
+    function onScroll() { nav.toggleClass('scrolled', $(window).scrollTop() > 40); }
+    $(window).on('scroll', onScroll); onScroll();
+    $('#lpMenu .nav-link').on('click', function() { $('#lpMenu').collapse('hide'); });
+
+    // Compteurs animés
+    function fmt(n, money) { return money ? new Intl.NumberFormat('fr-FR').format(n) : n; }
+    var counted = false;
+    var io = new IntersectionObserver(function(entries) {
+        if (counted || !entries.some(function(e) { return e.isIntersecting; })) return;
+        counted = true;
+        $('.stats [data-count]').each(function() {
+            var el = $(this), target = parseInt(el.data('count'), 10) || 0, money = el.data('format') === 'money', step = 0;
+            var t = setInterval(function() {
+                step++;
+                el.text(fmt(Math.round(target * step / 40), money));
+                if (step >= 40) clearInterval(t);
+            }, 25);
+        });
+    });
+    io.observe(document.getElementById('chiffres'));
+
+    // Lightbox galerie
+    $('.gallery-item').on('click', function() {
+        $('#lightboxImg').attr('src', $(this).data('src'));
+        $('#lightboxCap').text($(this).data('caption'));
+        $('#lightbox').modal('show');
+    });
+
+    setTimeout(function() { $('.flash-wrap .alert').alert('close'); }, 5000);
+});
+</script>
+</body>
+</html>

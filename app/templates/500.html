@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Erreur serveur{% if current_tontine %} - {{ current_tontine.name }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+    <h1 class="display-4 text-danger"><i class="fas fa-exclamation-triangle"></i> 500</h1>
+    <p class="lead">Une erreur inattendue s'est produite. Réessayez dans un instant.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary"><i class="fas fa-home"></i> Retour à l'accueil</a>
+</div>
+{% endblock %}

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres - {{ tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-sliders-h"></i> Paramètres de la tontine{% endblock %}
+
+{% block content %}
+{% macro val(field) %}{{ form_data.get(field, '') if form_data else (tontine[field] if tontine[field] is not none else '') }}{% endmacro %}
+<div class="row fade-in">
+    <div class="col-lg-9 mx-auto">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="card">
+                <div class="card-header"><i class="fas fa-id-card"></i> Identité et page d'accueil</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="name">Nom de la tontine *</label>
+                            <input type="text" class="form-control" id="name" name="name" maxlength="120" required value="{{ val('name') }}">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="location">Lieu</label>
+                            <input type="text" class="form-control" id="location" name="location" maxlength="120" value="{{ val('location') }}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="tagline">Phrase de présentation</label>
+                        <input type="text" class="form-control" id="tagline" name="tagline" maxlength="200" value="{{ val('tagline') }}"
+                               placeholder="Ex : Épargner ensemble, avancer ensemble.">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="contact_phone">Téléphone de contact</label>
+                            <input type="text" class="form-control" id="contact_phone" name="contact_phone" maxlength="30" value="{{ val('contact_phone') }}">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="contact_email">Email de contact</label>
+                            <input type="email" class="form-control" id="contact_email" name="contact_email" maxlength="120" value="{{ val('contact_email') }}">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="whatsapp_link">Lien WhatsApp</label>
+                            <input type="url" class="form-control" id="whatsapp_link" name="whatsapp_link" maxlength="200" value="{{ val('whatsapp_link') }}" placeholder="https://wa.me/237...">
+                        </div>
+                    </div>
+                    <p class="small text-muted mb-0">
+                        Adresse publique : <a href="{{ url_for('tontine_home', slug=tontine.slug) }}" target="_blank">{{ url_for('tontine_home', slug=tontine.slug, _external=True) }}</a>
+                    </p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><i class="fas fa-coins"></i> Règles financières</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <div class="form-group col-md-3">
+                            <label for="presence_amount">Cotisation de présence (FCFA)</label>
+                            <input type="number" class="form-control" id="presence_amount" name="presence_amount" min="0" step="1" required value="{{ val('presence_amount')|int if not form_data else val('presence_amount') }}">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label for="fonds_caisse_amount">Fonds de caisse (FCFA)</label>
+                            <input type="number" class="form-control" id="fonds_caisse_amount" name="fonds_caisse_amount" min="0" step="1" required value="{{ val('fonds_caisse_amount')|int if not form_data else val('fonds_caisse_amount') }}">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label for="loan_interest_rate">Taux d'intérêt des emprunts (%)</label>
+                            <input type="number" class="form-control" id="loan_interest_rate" name="loan_interest_rate" min="0" max="100" step="0.1" required value="{{ val('loan_interest_rate') }}">
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label for="max_aid_per_member">Aides max. par membre</label>
+                            <input type="number" class="form-control" id="max_aid_per_member" name="max_aid_per_member" min="0" max="50" step="1" required value="{{ val('max_aid_per_member') }}">
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="font-weight-bold"><i class="fas fa-handshake" style="color: var(--hl-gold)"></i> Avalistes des emprunts</h6>
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="guarantors_min">Avalistes exigés par emprunt</label>
+                            <input type="number" class="form-control" id="guarantors_min" name="guarantors_min" min="0" max="5" step="1" required value="{{ val('guarantors_min') or 0 }}">
+                            <small class="text-muted">0 = aval facultatif</small>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="guarantee_threshold">À partir d'un montant de (FCFA)</label>
+                            <input type="number" class="form-control" id="guarantee_threshold" name="guarantee_threshold" min="0" step="1" value="{{ val('guarantee_threshold') if form_data else ((tontine.guarantee_threshold or 0)|float|int) }}">
+                            <small class="text-muted">0 = pour tous les emprunts</small>
+                        </div>
+                    </div>
+                    <p class="small text-muted mb-0">Les nouveaux réglages s'appliquent aux prochaines opérations ; les emprunts déjà accordés gardent leur taux.</p>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+        </form>
+
+        {# ---------------- Niveaux de cotisation tontine ---------------- #}
+        <div class="card mt-4" id="niveaux">
+            <div class="card-header"><i class="fas fa-layer-group" style="color: var(--hl-gold)"></i> Niveaux de cotisation tontine</div>
+            <div class="card-body">
+                <p class="small text-muted">
+                    Une même tontine peut proposer plusieurs montants (ex. 1 000, 10 000, 20 000 FCFA). Chaque niveau tourne dans son propre cycle :
+                    les membres choisissent leur(s) niveau(x) et leur nombre de mains au lancement du cycle.
+                </p>
+                {% if levels %}
+                <ul class="list-group mb-3">
+                    {% for l in levels %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center {{ 'text-muted' if not l.is_active }}">
+                        <span>
+                            <strong style="color: var(--hl-green)">{{ '{:,.0f}'.format(l.amount|float).replace(',', ' ') }} FCFA</strong>
+                            <span class="small">· {{ l.name }} · {{ l.frequency_display|lower }}</span>
+                            {% if not l.is_active %}<span class="badge badge-secondary">désactivé</span>{% endif %}
+                        </span>
+                        <form method="POST" action="{{ url_for('update_rubrique', rubrique_id=l.id) }}" class="mb-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="toggle">
+                            <input type="hidden" name="next" value="{{ url_for('tontine_settings') }}#niveaux">
+                            <button type="submit" class="btn btn-sm {{ 'btn-outline-secondary' if l.is_active else 'btn-outline-success' }}">{{ 'Désactiver' if l.is_active else 'Réactiver' }}</button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                <div class="mb-2 small font-weight-bold">Ajout rapide</div>
+                <div class="mb-3">
+                    {% set existing = levels|selectattr('is_active')|map(attribute='amount')|map('int')|list %}
+                    {% for amount in [1000, 2500, 5000, 10000, 20000, 50000, 100000] if amount not in existing %}
+                    <form method="POST" action="{{ url_for('add_rubrique') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="category" value="TONTINE">
+                        <input type="hidden" name="amount" value="{{ amount }}">
+                        <input type="hidden" name="frequency" value="BIMENSUEL">
+                        <input type="hidden" name="next" value="{{ url_for('tontine_settings') }}#niveaux">
+                        <button type="submit" class="btn btn-sm btn-outline-primary mb-1">+ {{ '{:,.0f}'.format(amount).replace(',', ' ') }}</button>
+                    </form>
+                    {% endfor %}
+                </div>
+
+                <form method="POST" action="{{ url_for('add_rubrique') }}" class="form-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="category" value="TONTINE">
+                    <input type="hidden" name="next" value="{{ url_for('tontine_settings') }}#niveaux">
+                    <label class="sr-only" for="levelAmount">Montant</label>
+                    <input type="number" id="levelAmount" name="amount" class="form-control form-control-sm mr-2 mb-2" min="1" step="1" placeholder="Montant (FCFA)" required>
+                    <label class="sr-only" for="levelFreq">Périodicité</label>
+                    <select id="levelFreq" name="frequency" class="form-control form-control-sm mr-2 mb-2">
+                        {% for code, label in frequency_choices if code not in ['UNIQUE', 'LIBRE'] %}<option value="{{ code }}" {% if code == 'BIMENSUEL' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <input type="text" name="name" class="form-control form-control-sm mr-2 mb-2" maxlength="80" placeholder="Nom (facultatif)">
+                    <button type="submit" class="btn btn-sm btn-primary mb-2"><i class="fas fa-plus"></i> Ajouter ce niveau</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

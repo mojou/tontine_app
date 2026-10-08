@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Lien de réinitialisation{% endblock %}
+{% block page_title %}<i class="fas fa-key"></i> Lien de réinitialisation{% endblock %}
+
+{% block content %}
+<div class="row fade-in">
+    <div class="col-lg-8 mx-auto">
+        <div class="card" style="border-left: 5px solid var(--hl-gold)">
+            <div class="card-body">
+                <h5 class="mb-1">{{ member.full_name if member else user.username }}</h5>
+                <p class="text-muted small">Identifiant : <strong>{{ user.username }}</strong>{% if member and member.phone %} · Téléphone : {{ member.phone }}{% endif %}</p>
+
+                <label class="small font-weight-bold" for="resetLink">Lien à transmettre (valable 24 h, utilisable une seule fois)</label>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="resetLink" value="{{ link }}" readonly>
+                    <div class="input-group-append">
+                        <button class="btn btn-outline-primary" type="button" id="copyLink"><i class="fas fa-copy"></i> Copier</button>
+                    </div>
+                </div>
+
+                <a href="{{ whatsapp }}" target="_blank" rel="noopener" class="btn btn-success mb-2"><i class="fab fa-whatsapp"></i> Envoyer par WhatsApp</a>
+                {% if member and member.phone %}
+                <a href="{{ sms }}" class="btn btn-outline-primary mb-2"><i class="fas fa-sms"></i> Envoyer par SMS</a>
+                {% endif %}
+
+                <div class="alert alert-warning small mt-3 mb-0">
+                    <i class="fas fa-shield-alt"></i> Envoyez ce lien uniquement à la personne concernée, sur son propre numéro.
+                    Toute personne qui possède ce lien peut changer le mot de passe pendant 24 h.
+                </div>
+            </div>
+        </div>
+        <a href="{{ back_url }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Retour</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$('#copyLink').on('click', function() {
+    var input = document.getElementById('resetLink');
+    input.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(input.value) : Promise.resolve(document.execCommand('copy')))
+        .then(function() { $('#copyLink').html('<i class="fas fa-check"></i> Copié'); });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Fin d'exercice {{ year }} - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-calendar-check"></i> Fin d'exercice {{ year }}{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block content %}
+<div class="fade-in">
+    <p class="text-muted">
+        En fin d'année, chaque membre récupère son <strong>épargne</strong> et reçoit une <strong>part des bénéfices</strong>
+        de la caisse, proportionnelle à son épargne.
+    </p>
+
+    {% if closure %}
+    <div class="alert alert-success">
+        <i class="fas fa-check-circle"></i> Exercice {{ year }} clôturé le {{ closure.executed_at.strftime('%d/%m/%Y') }} :
+        {{ fcfa(closure.savings_returned) }} FCFA d'épargne restitués et {{ fcfa(closure.profit_distributed) }} FCFA de bénéfices
+        partagés entre {{ closure.beneficiaries }} membre(s).{% if closure.notes %} <em>{{ closure.notes }}</em>{% endif %}
+    </div>
+    {% endif %}
+
+    <form method="GET" class="card">
+        <div class="card-header"><i class="fas fa-calculator"></i> Bénéfices à partager</div>
+        <div class="card-body">
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-2">
+                    <label for="year">Exercice</label>
+                    <select name="year" id="year" class="form-control">
+                        {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-6">
+                    <div class="small">Mises d'enchères : <strong>{{ fcfa(preview.auctions) }}</strong> · Intérêts d'emprunts remboursés : <strong>{{ fcfa(preview.interests) }}</strong></div>
+                    <div class="custom-control custom-checkbox mt-1">
+                        <input type="checkbox" class="custom-control-input" id="include_sanctions" name="include_sanctions" {% if include_sanctions %}checked{% endif %}>
+                        <label class="custom-control-label small" for="include_sanctions">Inclure les amendes encaissées ({{ fcfa(preview.sanctions) if include_sanctions else '…' }})</label>
+                    </div>
+                    <div class="small text-muted">Proposition : {{ fcfa(preview.proposed) }} FCFA · Caisse générale disponible : {{ fcfa(preview.caisse_balance) }} FCFA</div>
+                </div>
+                <div class="form-group col-md-2">
+                    <label for="pool_amount">Montant à partager</label>
+                    <input type="number" class="form-control" id="pool_amount" name="pool_amount" min="0" step="1" value="{{ (override if override is not none else preview.proposed)|int }}">
+                </div>
+                <div class="form-group col-md-2">
+                    <button type="submit" class="btn btn-outline-primary btn-block">Recalculer</button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-users"></i> Répartition ({{ preview.savers|length }} épargnant(s))</div>
+        {% if preview.savers %}
+        <div class="table-container">
+            <table class="table mb-0">
+                <thead><tr><th>Membre</th><th class="text-right">Épargne</th><th class="text-right">Part</th><th class="text-right">Bénéfices</th><th class="text-right">Total à remettre</th></tr></thead>
+                <tbody>
+                {% for s in preview.savers %}
+                <tr>
+                    <td>{{ s.member.full_name }}</td>
+                    <td class="text-right">{{ fcfa(s.savings) }}</td>
+                    <td class="text-right">{{ '%.1f'|format(s.ratio) }} %</td>
+                    <td class="text-right" style="color: var(--hl-gold-dark)">+ {{ fcfa(s.profit) }}</td>
+                    <td class="text-right font-weight-bold" style="color: var(--hl-green)">{{ fcfa(s.total) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="font-weight-bold" style="background: var(--hl-green-100)">
+                        <td>Total</td><td class="text-right">{{ fcfa(preview.total_savings) }}</td><td class="text-right">100 %</td>
+                        <td class="text-right">{{ fcfa(preview.distributed) }}</td><td class="text-right">{{ fcfa(preview.total_savings + preview.distributed) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted">Aucun membre n'a d'épargne en cours.</div>
+        {% endif %}
+    </div>
+
+    {% if can_execute and not closure and preview.savers %}
+    <form method="POST" class="card" style="border-left: 5px solid var(--hl-gold)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="execute">
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="pool_amount" value="{{ preview.pool|int }}">
+        {% if include_sanctions %}<input type="hidden" name="include_sanctions" value="on">{% endif %}
+        <div class="card-body">
+            <h5>Clôturer l'exercice {{ year }}</h5>
+            <p class="small text-muted">Crée, pour chaque membre, la restitution de son épargne et le versement de sa part des bénéfices. Une seule clôture par exercice.</p>
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <select name="payment_mode" class="form-control">
+                        {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-8">
+                    <input type="text" name="notes" class="form-control" maxlength="255" placeholder="Note (ex : partage voté en AG du 20/12)">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-gold"
+                    onclick="return confirm('Clôturer l\'exercice {{ year }} et enregistrer les {{ preview.savers|length }} remboursements ? Cette opération ne se fait qu\'une fois.');">
+                <i class="fas fa-check-double"></i> Clôturer et enregistrer les versements
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

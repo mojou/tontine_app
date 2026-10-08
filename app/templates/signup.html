@@ -1,0 +1,128 @@
+{% from "_brand.html" import brand, favicon with context %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Créer ma tontine · {{ app_name }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {{ favicon() }}
+    <style>
+        body { font-family: 'Inter', sans-serif; background: var(--hl-cream); min-height: 100vh; }
+        .shell { max-width: 1080px; margin: 40px auto; padding: 0 16px; }
+        .panel { border-radius: 22px; overflow: hidden; box-shadow: 0 20px 50px rgba(11,61,34,.15); background: #fff; }
+        .side { background: radial-gradient(circle at 90% 10%, rgba(201,162,39,.25), transparent 45%), linear-gradient(160deg, var(--hl-green-900), var(--hl-green)); color: #fff; padding: 40px 34px; height: 100%; }
+        .side h2 { font-weight: 800; margin: 30px 0 12px; }
+        .side ul { list-style: none; padding: 0; margin: 24px 0 0; }
+        .side li { margin-bottom: 14px; display: flex; gap: 12px; color: rgba(255,255,255,.9); }
+        .side li i { color: var(--hl-gold); margin-top: 4px; }
+        .form-side { padding: 36px 34px; }
+        .form-side h3 { font-weight: 800; color: var(--hl-green); }
+        .group-title { font-size: .78rem; font-weight: 700; color: var(--hl-gold-dark); text-transform: uppercase; letter-spacing: 1.5px; margin: 22px 0 12px; }
+        .slug-prefix { background: var(--hl-cream); font-size: .85rem; }
+        .hp { position: absolute; left: -5000px; }
+        .btn-submit { border-radius: 30px; padding: 12px; font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <div class="panel">
+        <div class="row no-gutters">
+            <div class="col-lg-5">
+                <div class="side">
+                    {{ brand(40, True) }}
+                    <h2>Créez l'espace de votre tontine</h2>
+                    <p style="color: rgba(255,255,255,.85)">Vous en serez le président : vous inviterez ensuite les membres et composerez le bureau.</p>
+                    <ul>
+                        <li><i class="fas fa-check-circle"></i><span>Votre page publique et votre lien d'inscription, prêts immédiatement</span></li>
+                        <li><i class="fas fa-check-circle"></i><span>Vos propres règles : cotisation, fonds de caisse, taux d'emprunt, aides</span></li>
+                        <li><i class="fas fa-check-circle"></i><span>Tirage au sort et votes visibles par tous les membres</span></li>
+                        <li><i class="fas fa-lock"></i><span>Les données de votre tontine ne sont visibles que par vos membres</span></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="form-side">
+                    <h3 class="mb-1">Créer ma tontine</h3>
+                    <p class="text-muted mb-0">Déjà inscrit ? <a href="{{ url_for('login') }}">Se connecter</a></p>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} mt-3 mb-0 py-2 small">{{ message }}</div>
+                    {% endfor %}
+                    {% endwith %}
+
+                    <form method="POST" autocomplete="on" novalidate id="signupForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="hp" aria-hidden="true"><label>Site web <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+
+                        <div class="group-title">1. Votre tontine</div>
+                        <div class="form-group">
+                            <label for="name">Nom de la tontine</label>
+                            <input type="text" class="form-control" id="name" name="name" maxlength="120" required value="{{ form_data.get('name', '') }}" placeholder="Ex : Tontine des Amis de Bahouan">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-7">
+                                <label for="slug">Adresse de votre page</label>
+                                <div class="input-group">
+                                    <div class="input-group-prepend"><span class="input-group-text slug-prefix">/t/</span></div>
+                                    <input type="text" class="form-control" id="slug" name="slug" maxlength="50" required pattern="[a-z0-9][a-z0-9\-]*" value="{{ form_data.get('slug', '') }}" placeholder="amis-bahouan">
+                                </div>
+                                <small class="text-muted">Lettres minuscules, chiffres et tirets.</small>
+                            </div>
+                            <div class="form-group col-md-5">
+                                <label for="location">Ville / lieu <span class="text-muted small">(facultatif)</span></label>
+                                <input type="text" class="form-control" id="location" name="location" maxlength="120" value="{{ form_data.get('location', '') }}">
+                            </div>
+                        </div>
+
+                        <div class="group-title">2. Vous, président(e)</div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6"><label for="first_name">Prénom</label><input type="text" class="form-control" id="first_name" name="first_name" maxlength="50" required autocomplete="given-name" value="{{ form_data.get('first_name', '') }}"></div>
+                            <div class="form-group col-md-6"><label for="last_name">Nom</label><input type="text" class="form-control" id="last_name" name="last_name" maxlength="50" required autocomplete="family-name" value="{{ form_data.get('last_name', '') }}"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6"><label for="email">Email</label><input type="email" class="form-control" id="email" name="email" maxlength="120" required autocomplete="email" value="{{ form_data.get('email', '') }}"></div>
+                            <div class="form-group col-md-6"><label for="phone">Téléphone</label><input type="tel" class="form-control" id="phone" name="phone" maxlength="20" required autocomplete="tel" value="{{ form_data.get('phone', '') }}" placeholder="6XX XX XX XX"></div>
+                        </div>
+
+                        <div class="group-title">3. Votre connexion</div>
+                        <div class="form-group">
+                            <label for="username">Identifiant</label>
+                            <input type="text" class="form-control" id="username" name="username" maxlength="80" required autocomplete="username" value="{{ form_data.get('username', '') }}" placeholder="Ex : helene">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6"><label for="password">Mot de passe <span class="text-muted small">(8 caractères min.)</span></label><input type="password" class="form-control" id="password" name="password" minlength="8" required autocomplete="new-password"></div>
+                            <div class="form-group col-md-6"><label for="password_confirm">Confirmation</label><input type="password" class="form-control" id="password_confirm" name="password_confirm" minlength="8" required autocomplete="new-password"></div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-block btn-submit mt-2"><i class="fas fa-seedling"></i> Créer ma tontine</button>
+                        <p class="text-center small text-muted mt-3 mb-0"><a href="{{ url_for('index') }}"><i class="fas fa-arrow-left"></i> Retour à l'accueil</a></p>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+// Propose l'adresse de la page à partir du nom
+var touched = {{ 'true' if form_data.get('slug') else 'false' }};
+$('#name').on('input', function() {
+    if (touched) return;
+    $('#slug').val($(this).val().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50));
+});
+$('#slug').on('input', function() { touched = true; });
+$('#signupForm').on('submit', function() {
+    if ($('#password').val() !== $('#password_confirm').val()) {
+        alert('Les deux mots de passe ne correspondent pas.');
+        return false;
+    }
+    $(this).find('button[type=submit]').prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-2"></span> Création…');
+});
+</script>
+</body>
+</html>

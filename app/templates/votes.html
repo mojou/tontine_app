@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Votes{% if current_tontine %} - {{ current_tontine.name }}{% endif %}{% endblock %}
+{% block page_title %}<i class="fas fa-vote-yea"></i> Votes{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+        <p class="text-muted mb-2">Décisions et élections soumises au vote des membres actifs.</p>
+        {% if can_manage %}
+        <a href="{{ url_for('add_vote') }}" class="btn btn-primary mb-2"><i class="fas fa-plus"></i> Nouveau vote</a>
+        {% endif %}
+    </div>
+
+    {% if polls %}
+    <div class="row">
+        {% for poll in polls %}
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="mb-1">
+                            <a href="{{ url_for('vote_detail', poll_id=poll.id) }}">{{ poll.title }}</a>
+                        </h5>
+                        {% if poll.is_open %}
+                        <span class="badge badge-success">Ouvert</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Clos</span>
+                        {% endif %}
+                    </div>
+                    {% if poll.description %}
+                    <p class="text-muted small mb-2">{{ poll.description|truncate(140) }}</p>
+                    {% endif %}
+                    <div class="small text-muted mb-3">
+                        <i class="fas fa-users"></i> {{ poll.total_votes }} vote(s)
+                        · <i class="fas fa-list"></i> {{ poll.options|length }} choix
+                        {% if poll.end_date %}· <i class="far fa-clock"></i> clôture {{ poll.end_date.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+                        {% if poll.is_anonymous %}· <i class="fas fa-user-secret"></i> anonyme{% endif %}
+                    </div>
+                    {% if poll.id in voted_ids %}
+                    <span class="text-success small"><i class="fas fa-check-circle"></i> Vous avez voté</span>
+                    {% elif poll.is_open %}
+                    <a href="{{ url_for('vote_detail', poll_id=poll.id) }}" class="btn btn-sm btn-success"><i class="fas fa-vote-yea"></i> Voter</a>
+                    {% else %}
+                    <a href="{{ url_for('vote_detail', poll_id=poll.id) }}" class="btn btn-sm btn-outline-primary">Voir les résultats</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card"><div class="card-body text-center text-muted py-5">
+        <i class="fas fa-vote-yea fa-3x mb-3"></i>
+        <p class="mb-0">Aucun vote pour le moment.</p>
+    </div></div>
+    {% endif %}
+</div>
+{% endblock %}

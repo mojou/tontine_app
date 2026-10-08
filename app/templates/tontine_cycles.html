@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Cycles de tontine - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-sync-alt"></i> Cycles de tontine{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .cycle-card { border-left: 5px solid var(--hl-green); }
+    .cycle-card.auction { border-left-color: var(--hl-gold); }
+    .cycle-card .pot { font-size: 1.6rem; font-weight: 800; color: var(--hl-green); }
+    .level-chip { display: inline-block; background: var(--hl-gold-100); color: #6b5300; border-radius: 20px; padding: 4px 12px; margin: 0 6px 6px 0; font-weight: 600; font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+        <div class="mb-2">
+            <span class="text-muted small mr-2">Niveaux de cotisation :</span>
+            {% for l in levels %}<span class="level-chip">{{ fcfa(l.amount) }} FCFA</span>{% else %}<span class="text-muted small">aucun</span>{% endfor %}
+            {% if current_user.role == 'PRESIDENT' %}<a href="{{ url_for('tontine_settings') }}#niveaux" class="small">Gérer</a>{% endif %}
+        </div>
+        {% if current_user.role in ['PRESIDENT', 'SECRETAIRE'] %}
+        <a href="{{ url_for('add_tontine_cycle') }}" class="btn btn-primary mb-2"><i class="fas fa-plus"></i> Nouveau cycle</a>
+        {% endif %}
+    </div>
+
+    <h5 class="mb-3">En cours</h5>
+    <div class="row">
+        {% for c in active_cycles %}
+        {% set nxt = c.get_next_participant() %}
+        <div class="col-lg-6">
+            <div class="card cycle-card {{ 'auction' if c.is_auction }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h5 class="mb-1"><a href="{{ url_for('tontine_cycle_detail', cycle_id=c.id) }}">{{ c.display_name }}</a></h5>
+                            <span class="badge {{ 'badge-warning' if c.is_auction else 'badge-primary' }}">{{ 'Enchères' if c.is_auction else 'Tirage au sort' }}</span>
+                            <small class="text-muted ml-1">{{ fcfa(c.amount_per_member) }} FCFA / main · tous les {{ c.frequency_days or 14 }} jours</small>
+                        </div>
+                        <div class="text-right">
+                            <div class="pot">{{ fcfa(c.total_amount) }}</div>
+                            <small class="text-muted">FCFA par tour</small>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between small mt-3 mb-1">
+                        <span>{{ c.beneficiaries_count }}/{{ c.total_members }} tours versés · {{ c.members_count }} membre(s), {{ c.total_members }} main(s)</span>
+                        {% if c.next_round_date %}<span>Prochain tour : {{ c.next_round_date.strftime('%d/%m/%Y') }}</span>{% endif %}
+                    </div>
+                    <div class="progress mb-2" style="height: 8px;"><div class="progress-bar" style="width: {{ c.progress_percentage|round|int }}%"></div></div>
+                    <div class="small">
+                        {% if c.is_auction %}<i class="fas fa-gavel text-warning"></i> Le prochain bénéficiaire sera désigné aux enchères.
+                        {% elif nxt %}<i class="fas fa-arrow-right text-success"></i> Prochain : <strong>{{ nxt.label }}</strong>
+                        {% elif c.needs_draw %}<i class="fas fa-dice text-warning"></i> Ordre de passage à tirer au sort.
+                        {% endif %}
+                    </div>
+                    {% if my_parts.get(c.id) %}
+                    <div class="small mt-2" style="color: var(--hl-green)"><i class="fas fa-user-check"></i> Vous avez {{ my_parts[c.id]|length }} main(s) :
+                        {% for p in my_parts[c.id] %}{{ 'reçue' if p.served else ('tour ' ~ p.position if p.position else 'à tirer') }}{{ ', ' if not loop.last }}{% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12"><div class="card"><div class="card-body text-muted">Aucun cycle en cours.</div></div></div>
+        {% endfor %}
+    </div>
+
+    {% if past_cycles %}
+    <h5 class="mt-3 mb-3">Terminés</h5>
+    <div class="card">
+        <div class="table-container">
+            <table class="table mb-0">
+                <thead><tr><th>Cycle</th><th>Mode</th><th>Mains</th><th>Cagnotte / tour</th><th>Période</th></tr></thead>
+                <tbody>
+                {% for c in past_cycles %}
+                <tr>
+                    <td><a href="{{ url_for('tontine_cycle_detail', cycle_id=c.id) }}">{{ c.display_name }}</a></td>
+                    <td>{{ 'Enchères' if c.is_auction else 'Tirage' }}</td>
+                    <td>{{ c.total_members }}</td>
+                    <td>{{ fcfa(c.total_amount) }} FCFA</td>
+                    <td>{{ c.start_date.strftime('%d/%m/%Y') }} → {{ c.end_date.strftime('%d/%m/%Y') if c.end_date else '' }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

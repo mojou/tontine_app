@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Nouveau cycle - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-plus-circle"></i> Nouveau cycle de tontine{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .level-option { display: block; border: 2px solid #e6e2d3; border-radius: 12px; padding: 12px 16px; cursor: pointer; margin-bottom: 10px; }
+    .level-option.active { border-color: var(--hl-green); background: var(--hl-green-100); }
+    .level-option .amt { font-size: 1.25rem; font-weight: 800; color: var(--hl-green); }
+    .hands-input { width: 80px; }
+    .summary { position: sticky; top: 90px; }
+    .summary .big { font-size: 1.8rem; font-weight: 800; color: var(--hl-green); }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" class="fade-in" id="cycleForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header"><i class="fas fa-layer-group"></i> 1. Niveau de cotisation</div>
+                <div class="card-body">
+                    {% for l in levels %}
+                    <label class="level-option" data-amount="{{ l.amount|int }}" data-days="{{ frequency_days.get(l.frequency, 14) }}">
+                        <input type="radio" name="contribution_type_id" value="{{ l.id }}" class="mr-2"
+                               {% if form_data.get('contribution_type_id')|string == l.id|string or (not form_data and loop.first) %}checked{% endif %}>
+                        <span class="amt">{{ fcfa(l.amount) }} FCFA</span> <span class="text-muted">/ main · {{ l.name }} · {{ l.frequency_display|lower }}</span>
+                    </label>
+                    {% endfor %}
+                    <label class="level-option" data-amount="custom">
+                        <input type="radio" name="contribution_type_id" value="" class="mr-2" {% if (form_data and not form_data.get('contribution_type_id')) or not levels %}checked{% endif %}>
+                        Autre montant :
+                        <input type="number" name="custom_amount" id="customAmount" class="form-control form-control-sm d-inline-block ml-2" style="width: 140px" min="1" step="1" value="{{ form_data.get('custom_amount', '') }}"> FCFA
+                    </label>
+                    <small class="text-muted">Les niveaux se définissent dans <a href="{{ url_for('tontine_settings') }}#niveaux">Paramètres</a> (ex. 1 000, 10 000, 20 000 FCFA). Plusieurs cycles peuvent tourner en même temps, un par niveau.</small>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><i class="fas fa-cog"></i> 2. Fonctionnement</div>
+                <div class="card-body">
+                    {% for code, label in modes.items() %}
+                    <div class="custom-control custom-radio mb-2">
+                        <input type="radio" id="mode{{ code }}" name="mode" value="{{ code }}" class="custom-control-input"
+                               {% if form_data.get('mode', 'TIRAGE') == code %}checked{% endif %}>
+                        <label class="custom-control-label" for="mode{{ code }}">{{ label }}</label>
+                    </div>
+                    {% endfor %}
+                    <div class="form-row mt-3">
+                        <div class="form-group col-md-4">
+                            <label for="start_date">Premier tour le</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ form_data.get('start_date', today) }}">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="frequency_days">Un tour tous les (jours)</label>
+                            <input type="number" class="form-control" id="frequency_days" name="frequency_days" min="1" max="366" value="{{ form_data.get('frequency_days', '') }}" placeholder="14">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="label">Nom (facultatif)</label>
+                            <input type="text" class="form-control" id="label" name="label" maxlength="100" value="{{ form_data.get('label', '') }}" placeholder="Ex : Tontine des femmes">
+                        </div>
+                    </div>
+                    <div class="custom-control custom-checkbox" id="drawNowBox">
+                        <input type="checkbox" class="custom-control-input" id="draw_now" name="draw_now" {% if not form_data or form_data.get('draw_now') %}checked{% endif %}>
+                        <label class="custom-control-label" for="draw_now">Tirer au sort l'ordre de passage tout de suite</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                    <span><i class="fas fa-users"></i> 3. Participants et nombre de mains</span>
+                    <span>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="allOne">1 main à tous</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="allZero">Tout à 0</button>
+                    </span>
+                </div>
+                <div class="card-body pb-0">
+                    <p class="small text-muted">Une « main » est une part : un membre qui prend 2 mains cotise 2 fois à chaque tour et reçoit 2 fois la cagnotte. Laissez 0 pour ceux qui ne participent pas. La taille du cycle est simplement le nombre total de mains.</p>
+                    <input type="search" id="filterMembers" class="form-control form-control-sm mb-2" placeholder="Rechercher un membre…">
+                </div>
+                <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                        {% for m in members_list %}
+                        <tr class="member-row" data-name="{{ m.full_name|lower }}">
+                            <td>{{ m.last_name|upper }} {{ m.first_name }}</td>
+                            <td class="text-right">
+                                <input type="number" name="hands_{{ m.id }}" class="form-control form-control-sm hands-input d-inline-block" min="0" max="{{ max_hands }}" step="1"
+                                       value="{{ form_data.get('hands_' ~ m.id, 0) }}" aria-label="Mains de {{ m.full_name }}">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card summary">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small">Récapitulatif</h6>
+                    <div class="mb-2"><span class="big" id="sumParts">0</span> main(s) · <span id="sumMembers">0</span> membre(s)</div>
+                    <div class="mb-1 small text-muted">Cagnotte par tour</div>
+                    <div class="big mb-2"><span id="sumPot">0</span> <small>FCFA</small></div>
+                    <div class="small text-muted mb-3">Durée : <span id="sumDuration">0</span> tours, soit environ <span id="sumDays">0</span> jours</div>
+                    <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-play"></i> Lancer le cycle</button>
+                    <a href="{{ url_for('tontine_cycles') }}" class="btn btn-link btn-block">Annuler</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(function() {
+    function selectedAmount() {
+        var opt = $('input[name=contribution_type_id]:checked').closest('.level-option');
+        if (opt.data('amount') === 'custom') return parseInt($('#customAmount').val(), 10) || 0;
+        return parseInt(opt.data('amount'), 10) || 0;
+    }
+    function refresh() {
+        $('.level-option').removeClass('active');
+        var opt = $('input[name=contribution_type_id]:checked').closest('.level-option').addClass('active');
+        if (opt.data('days') && !$('#frequency_days').data('touched')) $('#frequency_days').attr('placeholder', opt.data('days'));
+        var parts = 0, members = 0;
+        $('.hands-input').each(function() { var n = parseInt($(this).val(), 10) || 0; parts += n; if (n > 0) members++; });
+        var days = parseInt($('#frequency_days').val() || $('#frequency_days').attr('placeholder'), 10) || 14;
+        $('#sumParts').text(parts); $('#sumMembers').text(members);
+        $('#sumPot').text(new Intl.NumberFormat('fr-FR').format(selectedAmount() * parts));
+        $('#sumDuration').text(parts); $('#sumDays').text(Math.max(parts - 1, 0) * days);
+        $('#drawNowBox').toggle($('input[name=mode]:checked').val() === 'TIRAGE');
+    }
+    $(document).on('input change', '.hands-input, input[name=contribution_type_id], #customAmount, #frequency_days, input[name=mode]', refresh);
+    $('#frequency_days').on('input', function() { $(this).data('touched', true); });
+    $('#customAmount').on('focus', function() { $(this).closest('.level-option').find('input[type=radio]').prop('checked', true); refresh(); });
+    $('#allOne').on('click', function() { $('.member-row:visible .hands-input').val(1); refresh(); });
+    $('#allZero').on('click', function() { $('.hands-input').val(0); refresh(); });
+    $('#filterMembers').on('input', function() {
+        var q = $(this).val().toLowerCase();
+        $('.member-row').each(function() { $(this).toggle($(this).data('name').indexOf(q) !== -1); });
+    });
+    refresh();
+});
+</script>
+{% endblock %}

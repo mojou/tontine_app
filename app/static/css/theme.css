@@ -1,0 +1,56 @@
+/* ============================================================
+   Hélentine : thème vert foncé / jaune foncé / blanc
+   Chargé par toutes les pages (base.html et pages publiques).
+   ============================================================ */
+:root {
+    --hl-green-900: #0b3d22;
+    --hl-green: #14532d;
+    --hl-green-700: #1f6b3b;
+    --hl-green-100: #e6f1e9;
+    --hl-gold: #c9a227;
+    --hl-gold-dark: #9c7a0c;
+    --hl-gold-100: #faf2d3;
+    --hl-cream: #f7f5ee;
+    --hl-ink: #1b2a21;
+    --hl-muted: #5d6b62;
+}
+
+body { color: var(--hl-ink); }
+a { color: var(--hl-green-700); }
+a:hover { color: var(--hl-green); }
+::selection { background: var(--hl-gold-100); }
+
+/* Marque */
+.hl-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .2px; text-decoration: none !important; }
+.hl-brand img { display: block; }
+.hl-brand .hl-name { color: inherit; }
+.hl-brand .hl-name span { color: var(--hl-gold); }
+
+/* Boutons */
+.btn-primary, .btn-primary:disabled { background: var(--hl-green) !important; border-color: var(--hl-green) !important; color: #fff !important; }
+.btn-primary:hover, .btn-primary:focus { background: var(--hl-green-900) !important; border-color: var(--hl-green-900) !important; }
+.btn-outline-primary { color: var(--hl-green); border-color: var(--hl-green); }
+.btn-outline-primary:hover, .btn-outline-primary:focus { background: var(--hl-green); border-color: var(--hl-green); color: #fff; }
+.btn-success { background: var(--hl-green-700); border-color: var(--hl-green-700); }
+.btn-success:hover { background: var(--hl-green); border-color: var(--hl-green); }
+.btn-warning, .btn-gold { background: var(--hl-gold); border-color: var(--hl-gold); color: var(--hl-ink); font-weight: 600; }
+.btn-warning:hover, .btn-gold:hover { background: var(--hl-gold-dark); border-color: var(--hl-gold-dark); color: #fff; }
+.btn-outline-warning { color: var(--hl-gold-dark); border-color: var(--hl-gold); }
+.btn-outline-warning:hover { background: var(--hl-gold); color: var(--hl-ink); }
+
+/* Couleurs utilitaires Bootstrap */
+.text-primary { color: var(--hl-green) !important; }
+.text-warning { color: var(--hl-gold-dark) !important; }
+.bg-primary { background: var(--hl-green) !important; }
+.badge-primary { background: var(--hl-green) !important; color: #fff; }
+.badge-warning { background: var(--hl-gold) !important; color: var(--hl-ink) !important; }
+.badge-success { background: var(--hl-green-700) !important; }
+.progress-bar { background-color: var(--hl-green); }
+.progress-bar.bg-success { background-color: var(--hl-gold) !important; }
+.page-link { color: var(--hl-green); }
+.page-item.active .page-link { background: var(--hl-green); border-color: var(--hl-green); }
+.custom-control-input:checked ~ .custom-control-label::before { background: var(--hl-green); border-color: var(--hl-green); }
+.form-control:focus, .custom-select:focus { border-color: var(--hl-gold); box-shadow: 0 0 0 .2rem rgba(201, 162, 39, .25); }
+.alert-success { background: var(--hl-green-100); border-color: #c5e0cd; color: var(--hl-green); }
+.alert-warning { background: var(--hl-gold-100); border-color: #f0e0a4; color: #6b5300; }
+.text-gradient { background: linear-gradient(135deg, var(--hl-green), var(--hl-green-700)); -webkit-background-clip: text; background-clip: text; color: transparent; }

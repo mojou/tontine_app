@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}{{ poll.title }} - Votes{% endblock %}
+{% block page_title %}<i class="fas fa-vote-yea"></i> Vote{% endblock %}
+
+{% block extra_css %}
+<style>
+    .vote-option { display: block; border: 2px solid #e3e6ea; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: all .2s; }
+    .vote-option:hover { border-color: var(--hl-green-700); background: var(--hl-green-100); }
+    .vote-option input { margin-right: 10px; }
+    .vote-option.selected { border-color: var(--hl-green); background: var(--hl-green-100); }
+    .result-row { margin-bottom: 14px; }
+    .result-row .progress { height: 22px; border-radius: 11px; }
+    .winner { color: #1e7e34; font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <a href="{{ url_for('votes') }}" class="btn btn-link px-0 mb-2"><i class="fas fa-arrow-left"></i> Tous les votes</a>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h3 class="mb-0">{{ poll.title }}</h3>
+                        {% if poll.is_open %}<span class="badge badge-success">Ouvert</span>{% else %}<span class="badge badge-secondary">Clos</span>{% endif %}
+                    </div>
+                    {% if poll.description %}<p class="text-muted">{{ poll.description|nl2br }}</p>{% endif %}
+
+                    {% if can_vote %}
+                    <form method="POST" action="{{ url_for('cast_vote', poll_id=poll.id) }}" id="voteForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% for option in poll.options %}
+                        <label class="vote-option">
+                            <input type="radio" name="option_id" value="{{ option.id }}" required> {{ option.label }}
+                        </label>
+                        {% endfor %}
+                        <p class="small text-muted"><i class="fas fa-info-circle"></i> Un seul vote par membre, non modifiable.</p>
+                        <button type="submit" class="btn btn-success btn-block"><i class="fas fa-check"></i> Valider mon vote</button>
+                    </form>
+                    {% elif my_vote %}
+                    <div class="alert alert-success"><i class="fas fa-check-circle"></i> Vous avez voté pour <strong>{{ my_vote.option.label }}</strong>.</div>
+                    {% elif poll.is_open %}
+                    <div class="alert alert-warning">Seuls les membres actifs peuvent voter.</div>
+                    {% endif %}
+
+                    {% if show_results %}
+                    <hr>
+                    <h5 class="mb-3"><i class="fas fa-chart-bar"></i> {% if poll.is_open %}Résultats provisoires{% else %}Résultats{% endif %}</h5>
+                    {% set winners = poll.winners() if not poll.is_open else [] %}
+                    {% for option, count, pct in poll.results() %}
+                    <div class="result-row">
+                        <div class="d-flex justify-content-between">
+                            <span class="{% if option in winners %}winner{% endif %}">
+                                {% if option in winners %}<i class="fas fa-trophy"></i>{% endif %} {{ option.label }}
+                            </span>
+                            <span>{{ count }} vote(s) · {{ pct }} %</span>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar {% if option in winners %}bg-success{% endif %}" role="progressbar" style="width: {{ pct }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not poll.is_open and winners|length > 1 %}
+                    <div class="alert alert-info small">Égalité entre plusieurs choix : le bureau doit trancher ou organiser un second tour.</div>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-muted small mt-3"><i class="fas fa-eye-slash"></i> Les résultats seront visibles après votre vote ou à la clôture.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if voters %}
+            <div class="card">
+                <div class="card-header">Détail des votes (vote public)</div>
+                <div class="table-container">
+                    <table class="table table-sm">
+                        <thead><tr><th>Membre</th><th>Choix</th><th>Date</th></tr></thead>
+                        <tbody>
+                        {% for v in voters %}
+                        <tr><td>{{ v.member.full_name }}</td><td>{{ v.option.label }}</td><td>{{ v.voted_at.strftime('%d/%m/%Y %H:%M') }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small">Participation</h6>
+                    {% set rate = (poll.total_votes * 100 / eligible)|round(0)|int if eligible else 0 %}
+                    <div class="display-4 font-weight-bold text-gradient">{{ rate }} %</div>
+                    <p class="mb-2">{{ poll.total_votes }} vote(s) sur {{ eligible }} membres actifs</p>
+                    <div class="progress mb-3"><div class="progress-bar" style="width: {{ rate }}%"></div></div>
+                    <ul class="list-unstyled small text-muted mb-0">
+                        <li><i class="fas fa-user"></i> Créé par {{ poll.creator.username if poll.creator else 'Système' }}</li>
+                        <li><i class="far fa-calendar"></i> Le {{ poll.created_at.strftime('%d/%m/%Y') }}</li>
+                        {% if poll.end_date %}<li><i class="far fa-clock"></i> Clôture : {{ poll.end_date.strftime('%d/%m/%Y %H:%M') }}</li>{% endif %}
+                        {% if poll.closed_at %}<li><i class="fas fa-lock"></i> Clos le {{ poll.closed_at.strftime('%d/%m/%Y') }}</li>{% endif %}
+                        <li><i class="fas fa-user-secret"></i> {{ 'Anonyme' if poll.is_anonymous else 'Public' }}</li>
+                    </ul>
+                </div>
+            </div>
+
+            {% if can_manage %}
+            <div class="card"><div class="card-body">
+                {% if poll.status == 'OUVERT' and current_user.role in ['PRESIDENT', 'SECRETAIRE'] %}
+                <form method="POST" action="{{ url_for('close_vote', poll_id=poll.id) }}" class="mb-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-warning btn-block" onclick="return confirm('Clore ce vote ? Plus personne ne pourra voter.');"><i class="fas fa-lock"></i> Clore le vote</button>
+                </form>
+                {% endif %}
+                {% if current_user.role == 'PRESIDENT' %}
+                <form method="POST" action="{{ url_for('delete_vote', poll_id=poll.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger btn-block" onclick="return confirm('Supprimer définitivement ce vote et tous ses bulletins ?');"><i class="fas fa-trash"></i> Supprimer</button>
+                </form>
+                {% endif %}
+            </div></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$('.vote-option input').on('change', function() {
+    $('.vote-option').removeClass('selected');
+    $(this).closest('.vote-option').addClass('selected');
+});
+// Confirmation au clic (avant le handler global de base.html qui désactive le bouton)
+$('#voteForm button[type="submit"]').on('click', function() {
+    var label = $('.vote-option.selected').text().trim();
+    if (!label) return true;  // laisse la validation HTML "required" s'afficher
+    return confirm('Confirmer votre vote pour : ' + label + ' ?');
+});
+</script>
+{% endblock %}

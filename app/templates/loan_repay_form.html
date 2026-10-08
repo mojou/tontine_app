@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Remboursement - emprunt #{{ loan.id }}{% endblock %}
+{% block page_title %}<i class="fas fa-money-bill-wave"></i> Remboursement de l'emprunt #{{ loan.id }}{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block content %}
+<div class="row fade-in">
+    <div class="col-lg-6 mx-auto">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="mb-3">{{ loan.member_name }}</h5>
+                <table class="table table-sm">
+                    <tr><th>Montant emprunté</th><td class="text-right">{{ fcfa(loan.amount) }} FCFA</td></tr>
+                    <tr><th>Intérêts</th><td class="text-right">{{ fcfa(loan.interest) }} FCFA</td></tr>
+                    <tr><th>Total dû</th><td class="text-right">{{ fcfa(loan.total_amount) }} FCFA</td></tr>
+                    <tr><th>Déjà remboursé</th><td class="text-right">{{ fcfa(loan.amount_paid or 0) }} FCFA</td></tr>
+                    <tr class="font-weight-bold" style="color: var(--hl-green)"><th>Reste à payer</th><td class="text-right">{{ fcfa(loan.remaining_amount) }} FCFA</td></tr>
+                    {% if loan.end_date %}<tr><th>Échéance</th><td class="text-right {{ 'text-danger' if loan.is_overdue }}">{{ loan.end_date.strftime('%d/%m/%Y') }}</td></tr>{% endif %}
+                </table>
+
+                <form method="POST" action="{{ url_for('repay_loan', loan_id=loan.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="expected_paid" value="{{ (loan.amount_paid or 0)|float }}">
+                    <div class="form-group">
+                        <label for="amount">Montant versé (FCFA)</label>
+                        <input type="number" class="form-control" id="amount" name="amount" min="1" max="{{ loan.remaining_amount|int }}" step="1"
+                               value="{{ loan.remaining_amount|int }}" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="payment_mode">Mode de paiement</label>
+                            <select class="form-control" id="payment_mode" name="payment_mode">
+                                {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="payment_reference">Référence (paiement mobile)</label>
+                            <input type="text" class="form-control" id="payment_reference" name="payment_reference" maxlength="60">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Enregistrer le remboursement</button>
+                    <a href="{{ url_for('loans') }}" class="btn btn-link">Annuler</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

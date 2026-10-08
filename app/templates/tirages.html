@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Tirages au sort{% if current_tontine %} - {{ current_tontine.name }}{% endif %}{% endblock %}
+{% block page_title %}<i class="fas fa-dice"></i> Tirages au sort{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <p class="text-muted">L'ordre de passage des bénéficiaires est tiré au sort et chaque tirage est conservé ici pour la transparence.</p>
+
+    {% if cycles %}
+    <div class="row">
+        {% for cycle in cycles %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Cycle #{{ cycle.cycle_number }} <span class="badge badge-success">En cours</span></h5>
+                    <p class="small text-muted mb-2">{{ cycle.beneficiaries_count }}/{{ cycle.total_members }} bénéficiaires · {{ '{:,.0f}'.format(cycle.total_amount|float).replace(',', ' ') }} FCFA par tour</p>
+                    <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-dice"></i> {{ 'Lancer / voir le tirage' if can_draw else "Voir l'ordre de passage" }}
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-history"></i> Historique des tirages</div>
+        {% if draws %}
+        <div class="table-container">
+            <table class="table">
+                <thead><tr><th>Date</th><th>Cycle</th><th>Membres tirés</th><th>Effectué par</th><th>Note</th><th></th></tr></thead>
+                <tbody>
+                {% for d in draws %}
+                <tr>
+                    <td>{{ d.drawn_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>#{{ d.cycle.cycle_number }}</td>
+                    <td>{{ d.results|length }}</td>
+                    <td>{{ d.drawer.username if d.drawer else '—' }}</td>
+                    <td class="small text-muted">{{ d.notes or '' }}</td>
+                    <td><a href="{{ url_for('tirage_cycle', cycle_id=d.cycle_id, reveal=d.id) }}" class="btn btn-sm btn-outline-primary">Voir</a></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted text-center">Aucun tirage effectué pour l'instant.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

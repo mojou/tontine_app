@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction #{{ transaction.id }} - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-receipt"></i> Transaction #{{ transaction.id }}{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block content %}
+<div class="row fade-in">
+    <div class="col-lg-7 mx-auto">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="text-muted small text-uppercase">{{ transaction.get_type_display() }}</div>
+                        <div class="h3 mb-0 {{ 'text-danger' if transaction.is_outflow else 'text-success' }}">
+                            {{ '−' if transaction.is_outflow else '+' }}{{ fcfa(transaction.amount) }} FCFA
+                        </div>
+                    </div>
+                    <span class="badge badge-light">{{ transaction_types.get(transaction.type, (transaction.type, '', ''))[1]|lower }}</span>
+                </div>
+                <table class="table table-sm mb-0">
+                    <tr><th style="width: 40%">Membre</th><td>{% if transaction.member %}<a href="{{ url_for('member_detail', member_id=transaction.member_id) }}">{{ transaction.member_name }}</a>{% else %}—{% endif %}</td></tr>
+                    <tr><th>Date</th><td>{{ transaction.date.strftime('%d/%m/%Y') if transaction.date else '—' }}</td></tr>
+                    <tr><th>Mode de paiement</th><td>{{ payment_modes.get(transaction.payment_mode, transaction.payment_mode or '—') }}</td></tr>
+                    {% if transaction.payment_reference %}<tr><th>Référence</th><td><code>{{ transaction.payment_reference }}</code></td></tr>{% endif %}
+                    {% if transaction.contribution_type %}<tr><th>Rubrique</th><td>{{ transaction.contribution_type.name }}</td></tr>{% endif %}
+                    {% if transaction.cycle_id %}<tr><th>Cycle</th><td><a href="{{ url_for('tontine_cycle_detail', cycle_id=transaction.cycle_id) }}">Voir le cycle</a></td></tr>{% endif %}
+                    {% if transaction.seance %}<tr><th>Séance</th><td>{{ transaction.seance.display_name }}</td></tr>{% endif %}
+                    {% if transaction.description %}<tr><th>Description</th><td>{{ transaction.description }}</td></tr>{% endif %}
+                    <tr><th>Enregistrée par</th><td>{{ transaction.creator_name }}{% if transaction.created_at %} · {{ transaction.created_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}</td></tr>
+                </table>
+            </div>
+        </div>
+        <a href="{{ url_for('transactions') }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Toutes les transactions</a>
+    </div>
+</div>
+{% endblock %}

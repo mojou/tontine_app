@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Page non trouvée - 404{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 50px 20px;">
+    <i class="fas fa-search" style="font-size: 80px; color: #95a5a6;"></i>
+    <h1 style="margin-top: 20px;">Page non trouvée</h1>
+    <p>La page que vous recherchez n'existe pas ou a été déplacée.</p>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary" style="margin-top: 20px;">
+        <i class="fas fa-home"></i> Retour au tableau de bord
+    </a>
+</div>
+{% endblock %}

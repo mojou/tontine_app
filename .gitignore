@@ -1,0 +1,36 @@
+# --- Environnements Python ---
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+
+# --- Données privées : JAMAIS dans l'historique ---
+# Base réelle, clé secrète (signe les sessions et les liens de réinitialisation)
+instance/
+*.db
+*.db-journal
+*.db.avant_multitenant_*
+# ... sauf la base de test anonymisée, nécessaire à run_tests.py
+!tests/fixtures/base_reference.db
+
+# Sauvegardes et anciens fichiers (contiennent des copies de la vraie base)
+backups/
+
+# Photos envoyées par les membres (données personnelles)
+app/static/uploads/
+app/static/images/*/
+app/static/images/*_*.*
+# ancien dossier d'images à la racine (non servi par l'application)
+/static/
+
+# --- Fichiers générés ---
+logs/
+reports/
+*.log
+
+# --- Éditeurs / système ---
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

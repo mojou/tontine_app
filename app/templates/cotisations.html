@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Cotisations - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-coins"></i> Cotisations{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .fund-card { border-radius: 14px; padding: 18px; background: #fff; border: 1px solid #ece9dd; height: 100%; }
+    .fund-card .label { font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--hl-muted); }
+    .fund-card .value { font-size: 1.5rem; font-weight: 800; color: var(--hl-green); }
+    .fund-card.total { background: var(--hl-green); border-color: var(--hl-green); }
+    .fund-card.total .label, .fund-card.total .small { color: rgba(255,255,255,.8) !important; }
+    .fund-card.total .value { color: var(--hl-gold); }
+    .matrix td, .matrix th { white-space: nowrap; }
+    .rub-inactive { opacity: .55; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+        <p class="text-muted mb-2">Ce qui entre dans la tontine : rubriques, fonds et paiements de chaque membre.</p>
+        <form method="GET" class="form-inline mb-2">
+            <label for="year" class="mr-2 small">Exercice</label>
+            <select name="year" id="year" class="form-control form-control-sm" onchange="this.form.submit()">
+                {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+            </select>
+        </form>
+    </div>
+
+    {# ---------------- Situation des fonds ---------------- #}
+    {% if is_bureau %}
+    <div class="row mb-2">
+        <div class="col-6 col-lg mb-3">
+            <div class="fund-card total">
+                <div class="label">Solde total</div>
+                <div class="value">{{ fcfa(total_balance) }}</div>
+                <div class="small">FCFA en caisse</div>
+            </div>
+        </div>
+        {% for f in funds %}
+        <div class="col-6 col-lg mb-3">
+            <div class="fund-card">
+                <div class="label">{{ f.label }}</div>
+                <div class="value {% if f.balance < 0 %}text-danger{% endif %}">{{ fcfa(f.balance) }}</div>
+                <div class="small text-muted">+{{ fcfa(f['in']) }} / −{{ fcfa(f['out']) }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ---------------- Rubriques ---------------- #}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-list-ul"></i> Rubriques de cotisation</span>
+            {% if can_manage %}
+            <button class="btn btn-sm btn-primary" data-toggle="collapse" data-target="#newRubrique"><i class="fas fa-plus"></i> Nouvelle rubrique</button>
+            {% endif %}
+        </div>
+        {% if can_manage %}
+        <div class="collapse" id="newRubrique">
+            <div class="card-body border-bottom" style="background: var(--hl-cream)">
+                {% with r=None, action=url_for('add_rubrique'), submit='Créer la rubrique' %}{% include "_rubrique_form.html" %}{% endwith %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="table-container">
+            <table class="table mb-0">
+                <thead>
+                    <tr><th>Rubrique</th><th>Fonds</th><th>Montant</th><th>Périodicité</th><th>Obligatoire</th><th class="text-right">Encaissé {{ year }}</th>{% if can_manage %}<th></th>{% endif %}</tr>
+                </thead>
+                <tbody>
+                {% for r in rubriques %}
+                <tr class="{{ 'rub-inactive' if not r.is_active }}">
+                    <td>
+                        <strong>{{ r.name }}</strong>{% if not r.is_active %} <span class="badge badge-secondary">désactivée</span>{% endif %}
+                        {% if r.description %}<br><small class="text-muted">{{ r.description }}</small>{% endif %}
+                    </td>
+                    <td><span class="badge badge-light">{{ r.fund_display }}</span></td>
+                    <td>{% if r.amount and r.amount > 0 %}{{ fcfa(r.amount) }} FCFA{% else %}<em class="text-muted">libre</em>{% endif %}</td>
+                    <td>{{ r.frequency_display }}</td>
+                    <td>{% if r.is_mandatory %}<i class="fas fa-check text-success"></i>{% else %}<span class="text-muted">facultative</span>{% endif %}</td>
+                    <td class="text-right font-weight-bold">{{ fcfa(by_rubrique.get(r.id, 0) or 0) }}</td>
+                    {% if can_manage %}
+                    <td class="text-right">
+                        <button class="btn btn-sm btn-outline-primary" data-toggle="collapse" data-target="#edit{{ r.id }}" title="Modifier"><i class="fas fa-pen"></i></button>
+                        <form method="POST" action="{{ url_for('update_rubrique', rubrique_id=r.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="toggle">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary" title="{{ 'Désactiver' if r.is_active else 'Réactiver' }}">
+                                <i class="fas {{ 'fa-eye-slash' if r.is_active else 'fa-eye' }}"></i>
+                            </button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% if can_manage %}
+                <tr class="collapse" id="edit{{ r.id }}"><td colspan="7" style="background: var(--hl-cream)">
+                    {% with action=url_for('update_rubrique', rubrique_id=r.id), submit='Enregistrer' %}{% include "_rubrique_form.html" %}{% endwith %}
+                </td></tr>
+                {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer small text-muted bg-white">
+            <i class="fas fa-info-circle"></i> Les sanctions, intérêts d'emprunt et remboursements entrent aussi en caisse : ils sont gérés dans leurs modules (Sanctions, Emprunts).
+        </div>
+    </div>
+
+    {# ---------------- État par membre ---------------- #}
+    <div class="card">
+        <div class="card-header"><i class="fas fa-table"></i> {{ 'État des cotisations par membre' if is_bureau else 'Mes cotisations' }} · {{ year }}</div>
+        <div class="table-container">
+            <table class="table table-sm matrix mb-0">
+                <thead>
+                    <tr>
+                        <th>Membre</th>
+                        {% for c in categories %}<th class="text-right">{{ transaction_types[c][0] }}</th>{% endfor %}
+                        <th class="text-right">Total</th>
+                        <th>À régulariser</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for mm in members %}
+                {% set row = matrix.get(mm.id, {}) %}
+                <tr>
+                    <td><a href="{{ url_for('member_detail', member_id=mm.id) }}">{{ mm.full_name }}</a></td>
+                    {% for c in categories %}
+                    <td class="text-right {{ 'text-muted' if not row.get(c) }}">{{ fcfa(row.get(c, 0)) if row.get(c) else '–' }}</td>
+                    {% endfor %}
+                    <td class="text-right font-weight-bold">{{ fcfa(row.values()|sum) }}</td>
+                    <td>
+                        {% for r in missing.get(mm.id, []) %}<span class="badge badge-warning mr-1">{{ r.name }}</span>{% else %}<i class="fas fa-check-circle text-success"></i>{% endfor %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ categories|length + 3 }}" class="text-muted text-center">Aucun membre.</td></tr>
+                {% endfor %}
+                </tbody>
+                {% if is_bureau and members %}
+                <tfoot>
+                    <tr class="font-weight-bold" style="background: var(--hl-green-100)">
+                        <td>Total</td>
+                        {% for c in categories %}<td class="text-right">{{ fcfa(by_type.get(c, 0) or 0) }}</td>{% endfor %}
+                        {% set ns = namespace(total=0) %}
+                        {% for c in categories %}{% set ns.total = ns.total + ((by_type.get(c) or 0)|float) %}{% endfor %}
+                        <td class="text-right">{{ fcfa(ns.total) }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+        <div class="card-footer small text-muted bg-white">
+            « À régulariser » : cotisations uniques obligatoires (adhésion, fonds de caisse…) pas encore payées en totalité.
+        </div>
+    </div>
+</div>
+{% endblock %}

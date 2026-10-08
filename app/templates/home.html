@@ -1,0 +1,290 @@
+{% from "_brand.html" import brand, favicon with context %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} · {{ app_tagline }}</title>
+    <meta name="description" content="{{ app_name }} : créez et gérez votre tontine en ligne. Cotisations, emprunts, tirages au sort et votes, en toute transparence.">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {{ favicon() }}
+    <style>
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', sans-serif; background: #fff; }
+        .section { padding: 90px 0; }
+        .eyebrow { color: var(--hl-gold-dark); font-weight: 700; text-transform: uppercase; letter-spacing: 2px; font-size: .78rem; }
+        .section-title { font-weight: 800; font-size: 2.2rem; color: var(--hl-green); margin: 8px 0 14px; }
+        .section-lead { color: var(--hl-muted); max-width: 640px; margin: 0 auto 50px; font-size: 1.05rem; }
+
+        /* Navigation */
+        .hl-nav { position: fixed; inset: 0 0 auto 0; z-index: 1000; padding: 16px 0; transition: all .3s; }
+        .hl-nav.scrolled { background: var(--hl-green-900); box-shadow: 0 4px 20px rgba(0,0,0,.18); padding: 10px 0; }
+        .hl-nav .nav-link { color: rgba(255,255,255,.88); font-weight: 500; }
+        .hl-nav .nav-link:hover { color: #fff; }
+        .hl-nav .navbar-toggler { color: #fff; border-color: rgba(255,255,255,.4); }
+        @media (max-width: 991px) { .hl-nav .navbar-collapse { background: var(--hl-green-900); border-radius: 12px; padding: 12px; margin-top: 10px; } }
+
+        /* Hero */
+        .hero { min-height: 100vh; display: flex; align-items: center; color: #fff; padding: 110px 0 70px;
+                background:
+                    radial-gradient(circle at 85% 15%, rgba(201,162,39,.22) 0, transparent 38%),
+                    radial-gradient(circle at 10% 90%, rgba(201,162,39,.14) 0, transparent 35%),
+                    linear-gradient(135deg, var(--hl-green-900) 0%, var(--hl-green) 55%, var(--hl-green-700) 100%); }
+        .hero h1 { font-weight: 800; font-size: 3.3rem; line-height: 1.1; }
+        .hero h1 span { color: var(--hl-gold); }
+        .hero .lead { font-size: 1.18rem; color: rgba(255,255,255,.88); max-width: 560px; }
+        .btn-hero { border-radius: 50px; padding: 13px 30px; font-weight: 700; }
+        .btn-ghost { border: 2px solid rgba(255,255,255,.65); color: #fff; }
+        .btn-ghost:hover { background: #fff; color: var(--hl-green); }
+        .hero-points { list-style: none; padding: 0; margin: 28px 0 0; color: rgba(255,255,255,.85); }
+        .hero-points li { margin-bottom: 6px; }
+        .hero-points i { color: var(--hl-gold); width: 22px; }
+
+        /* Illustration (aperçu de l'application) */
+        .mock { background: #fff; color: var(--hl-ink); border-radius: 20px; padding: 22px; box-shadow: 0 30px 60px rgba(0,0,0,.3); max-width: 420px; margin-left: auto; }
+        .mock .tag { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--hl-muted); }
+        .mock .row-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef0ec; }
+        .mock .row-item:last-child { border-bottom: none; }
+        .mock .pos { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; background: var(--hl-green-100); color: var(--hl-green); flex-shrink: 0; }
+        .mock .pos.done { background: var(--hl-green); color: #fff; }
+        .mock .pos.next { background: var(--hl-gold); color: var(--hl-ink); }
+        .mock .amount { font-size: 1.6rem; font-weight: 800; color: var(--hl-green); }
+        .mock-badge { position: relative; top: -14px; left: -14px; display: inline-block; background: var(--hl-gold); color: var(--hl-ink); font-weight: 700; font-size: .8rem; padding: 6px 14px; border-radius: 30px; box-shadow: 0 8px 20px rgba(0,0,0,.2); }
+
+        /* Étapes / fonctionnalités */
+        .step { text-align: center; padding: 10px 24px; }
+        .step-num { width: 70px; height: 70px; border-radius: 50%; background: var(--hl-gold-100); color: var(--hl-gold-dark); font-size: 1.6rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--hl-gold); }
+        .step h5 { font-weight: 700; color: var(--hl-green); }
+        .step p { color: var(--hl-muted); }
+        .bg-soft { background: var(--hl-cream); }
+        .feature { background: #fff; border-radius: 16px; padding: 28px; height: 100%; border: 1px solid #ece9dd; transition: transform .25s, box-shadow .25s; }
+        .feature:hover { transform: translateY(-6px); box-shadow: 0 16px 34px rgba(20,83,45,.1); }
+        .feature i { font-size: 1.4rem; color: var(--hl-gold); background: var(--hl-green); width: 54px; height: 54px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+        .feature h5 { font-weight: 700; color: var(--hl-green); }
+        .feature p { color: var(--hl-muted); margin: 0; font-size: .95rem; }
+
+        /* Rejoindre */
+        .t-card { display: block; background: #fff; border-radius: 14px; padding: 20px; border: 1px solid #ece9dd; color: inherit; text-decoration: none !important; height: 100%; transition: all .2s; }
+        .t-card:hover { border-color: var(--hl-gold); box-shadow: 0 10px 24px rgba(0,0,0,.07); color: inherit; }
+        .t-card h6 { font-weight: 700; color: var(--hl-green); margin-bottom: 4px; }
+        .t-card .go { color: var(--hl-gold-dark); font-weight: 600; font-size: .9rem; }
+
+        /* Appel final */
+        .cta { background: linear-gradient(135deg, var(--hl-gold) 0%, #d8b545 100%); border-radius: 24px; padding: 54px 30px; text-align: center; color: var(--hl-ink); }
+        .cta h2 { font-weight: 800; color: var(--hl-green-900); }
+        footer { background: var(--hl-green-900); color: rgba(255,255,255,.7); padding: 50px 0 24px; }
+        footer a { color: rgba(255,255,255,.85); }
+        .flash-wrap { position: fixed; top: 84px; right: 16px; z-index: 1100; max-width: 380px; }
+        @media (max-width: 768px) { .hero h1 { font-size: 2.3rem; } .mock { margin: 40px auto 0; } }
+    </style>
+</head>
+<body>
+
+<nav class="hl-nav navbar navbar-expand-lg" id="hlNav">
+    <div class="container">
+        {{ brand(38, True, '#top') }}
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#hlMenu" aria-label="Menu"><i class="fas fa-bars"></i></button>
+        <div class="collapse navbar-collapse" id="hlMenu">
+            <ul class="navbar-nav ml-auto align-items-lg-center">
+                <li class="nav-item"><a class="nav-link" href="#comment">Comment ça marche</a></li>
+                <li class="nav-item"><a class="nav-link" href="#fonctionnalites">Fonctionnalités</a></li>
+                <li class="nav-item"><a class="nav-link" href="#rejoindre">Rejoindre une tontine</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Se connecter</a></li>
+                {% if allow_signup %}
+                <li class="nav-item ml-lg-2"><a class="btn btn-gold btn-sm px-4" style="border-radius: 30px" href="{{ url_for('signup') }}">Créer ma tontine</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="flash-wrap">
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show shadow" role="alert">
+        {{ message }}<button type="button" class="close" data-dismiss="alert" aria-label="Fermer"><span aria-hidden="true">&times;</span></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- Hero -->
+<header class="hero" id="top">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1>Votre tontine,<br><span>simple et transparente.</span></h1>
+                <p class="lead my-4">{{ app_name }} accompagne votre groupe du premier membre jusqu'au dernier tour : cotisations, emprunts, tirage au sort de l'ordre de passage et votes, au même endroit.</p>
+                {% if allow_signup %}
+                <a href="{{ url_for('signup') }}" class="btn btn-gold btn-hero mr-2 mb-2"><i class="fas fa-plus-circle"></i> Créer ma tontine</a>
+                {% endif %}
+                <a href="#rejoindre" class="btn btn-ghost btn-hero mb-2"><i class="fas fa-users"></i> Rejoindre une tontine</a>
+                <ul class="hero-points">
+                    <li><i class="fas fa-check-circle"></i> Prête en 2 minutes, sans installation</li>
+                    <li><i class="fas fa-check-circle"></i> Chaque tirage et chaque vote est tracé et visible des membres</li>
+                    <li><i class="fas fa-check-circle"></i> Les données de chaque tontine restent séparées</li>
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                <div class="mock">
+                    <span class="mock-badge"><i class="fas fa-dice"></i> Exemple de cycle</span>
+                    <div class="d-flex justify-content-between align-items-end mb-2">
+                        <div>
+                            <div class="tag">Cagnotte de ce tour</div>
+                            <div class="amount">60 000 FCFA</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="tag">Progression</div>
+                            <strong>2 / 6</strong>
+                        </div>
+                    </div>
+                    <div class="progress mb-3" style="height: 8px;"><div class="progress-bar" style="width: 33%"></div></div>
+                    <div class="row-item"><span class="pos done">1</span> Hélène <span class="badge badge-success ml-auto">Servie</span></div>
+                    <div class="row-item"><span class="pos done">2</span> Aïcha <span class="badge badge-success ml-auto">Servie</span></div>
+                    <div class="row-item"><span class="pos next">3</span> <strong>Paul</strong> <span class="badge badge-warning ml-auto">Prochain tour</span></div>
+                    <div class="row-item"><span class="pos">4</span> Martine</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Comment ça marche -->
+<section class="section" id="comment">
+    <div class="container text-center">
+        <div class="eyebrow">Comment ça marche</div>
+        <h2 class="section-title">Trois étapes pour démarrer</h2>
+        <p class="section-lead">Du premier jour au dernier tour, tout le groupe suit la même information.</p>
+        <div class="row">
+            <div class="col-md-4 step">
+                <div class="step-num">1</div>
+                <h5>Créez votre tontine</h5>
+                <p>Donnez-lui un nom, fixez vos règles (cotisation, fonds de caisse, taux d'emprunt). Vous en devenez le président.</p>
+            </div>
+            <div class="col-md-4 step">
+                <div class="step-num">2</div>
+                <h5>Invitez vos membres</h5>
+                <p>Partagez votre lien d'inscription sur WhatsApp. Vous validez chaque demande et composez le bureau.</p>
+            </div>
+            <div class="col-md-4 step">
+                <div class="step-num">3</div>
+                <h5>Cotisez, tirez, votez</h5>
+                <p>Lancez un cycle, tirez au sort l'ordre de passage devant tous et suivez chaque versement.</p>
+            </div>
+        </div>
+        {% if allow_signup %}
+        <a href="{{ url_for('signup') }}" class="btn btn-primary btn-hero mt-3">Commencer maintenant <i class="fas fa-arrow-right"></i></a>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Fonctionnalités -->
+<section class="section bg-soft" id="fonctionnalites">
+    <div class="container">
+        <div class="text-center">
+            <div class="eyebrow">Fonctionnalités</div>
+            <h2 class="section-title">Tout ce dont votre groupe a besoin</h2>
+            <p class="section-lead">Le bureau gère, les membres consultent : chacun voit ce qui le concerne.</p>
+        </div>
+        <div class="row">
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-coins"></i><h5>Cotisations</h5><p>Présence, tontine et fonds de caisse enregistrés, avec l'historique de chaque membre.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-dice"></i><h5>Tirage au sort</h5><p>Ordre de passage tiré au hasard, animé en séance et conservé pour tous.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-vote-yea"></i><h5>Votes en ligne</h5><p>Élections du bureau et décisions : un membre, une voix, anonyme ou public.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-hand-holding-usd"></i><h5>Emprunts</h5><p>Demandes en ligne, intérêts calculés selon vos règles, suivi des remboursements.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-heart"></i><h5>Aides sociales</h5><p>Maladie, décès, mariage, naissance : la solidarité suivie et plafonnée.</p></div></div>
+            <div class="col-md-6 col-lg-4 mb-4"><div class="feature"><i class="fas fa-file-alt"></i><h5>Réunions et rapports</h5><p>Procès-verbaux, présences, sanctions, annonces et exports Excel.</p></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- Rejoindre -->
+<section class="section" id="rejoindre">
+    <div class="container">
+        <div class="text-center">
+            <div class="eyebrow">Déjà membre d'un groupe ?</div>
+            <h2 class="section-title">Rejoindre une tontine</h2>
+            <p class="section-lead">Trouvez votre tontine pour envoyer une demande d'inscription ou vous connecter.</p>
+        </div>
+        {% if tontines %}
+        <div class="row justify-content-center mb-4">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <div class="input-group-prepend"><span class="input-group-text bg-white"><i class="fas fa-search"></i></span></div>
+                    <input type="search" id="tontineSearch" class="form-control" placeholder="Nom ou ville de la tontine…" aria-label="Rechercher une tontine">
+                </div>
+            </div>
+        </div>
+        <div class="row" id="tontineList">
+            {% for t in tontines %}
+            <div class="col-sm-6 col-lg-4 mb-3 t-item" data-search="{{ (t.name ~ ' ' ~ (t.location or ''))|lower }}">
+                <a class="t-card" href="{{ url_for('tontine_home', slug=t.slug) }}">
+                    <h6>{{ t.name }}</h6>
+                    {% if t.location %}<div class="small text-muted mb-2"><i class="fas fa-map-marker-alt"></i> {{ t.location }}</div>{% endif %}
+                    <span class="go">Voir la tontine <i class="fas fa-arrow-right"></i></span>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="text-center text-muted small mt-2" id="noResult" style="display:none">Aucune tontine ne correspond. Demandez le lien d'inscription à votre président.</p>
+        {% else %}
+        <p class="text-center text-muted">Aucune tontine pour le moment. Soyez le premier à en créer une !</p>
+        {% endif %}
+    </div>
+</section>
+
+{% if allow_signup %}
+<section class="pb-5">
+    <div class="container">
+        <div class="cta">
+            <h2>Lancez votre tontine aujourd'hui</h2>
+            <p class="mb-4">Créez l'espace de votre groupe, invitez vos membres et faites votre premier tirage au sort.</p>
+            <a href="{{ url_for('signup') }}" class="btn btn-primary btn-hero"><i class="fas fa-plus-circle"></i> Créer ma tontine</a>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<footer>
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-6 mb-3">
+                {{ brand(32, True, '#top') }}
+                <p class="small mt-2 mb-0">{{ app_tagline }}.</p>
+            </div>
+            <div class="col-md-6 text-md-right small">
+                <a href="#comment" class="mr-3">Comment ça marche</a>
+                <a href="#rejoindre" class="mr-3">Rejoindre</a>
+                <a href="{{ url_for('login') }}">Se connecter</a>
+            </div>
+        </div>
+        <hr style="border-color: rgba(255,255,255,.1)">
+        <p class="small text-center mb-0">&copy; {{ current_year }} {{ app_name }}</p>
+    </div>
+</footer>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+$(function() {
+    var nav = $('#hlNav');
+    function onScroll() { nav.toggleClass('scrolled', $(window).scrollTop() > 40); }
+    $(window).on('scroll', onScroll); onScroll();
+    $('#hlMenu .nav-link').on('click', function() { $('#hlMenu').collapse('hide'); });
+
+    $('#tontineSearch').on('input', function() {
+        var q = $(this).val().trim().toLowerCase(), visible = 0;
+        $('.t-item').each(function() {
+            var show = !q || $(this).data('search').indexOf(q) !== -1;
+            $(this).toggle(show); if (show) visible++;
+        });
+        $('#noResult').toggle(visible === 0);
+    });
+    setTimeout(function() { $('.flash-wrap .alert').alert('close'); }, 6000);
+});
+</script>
+</body>
+</html>

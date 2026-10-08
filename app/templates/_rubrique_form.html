@@ -1,0 +1,44 @@
+{# Formulaire de rubrique : `r` (rubrique ou None), `action`, `submit` #}
+<form method="POST" action="{{ action }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+        <div class="form-group col-md-4">
+            <label class="small font-weight-bold">Nom</label>
+            <input type="text" name="name" class="form-control form-control-sm" maxlength="80" required value="{{ r.name if r else '' }}" placeholder="Ex : Caisse de secours">
+        </div>
+        <div class="form-group col-md-3">
+            <label class="small font-weight-bold">Catégorie (fonds)</label>
+            <select name="category" class="form-control form-control-sm">
+                {% for code, label in category_choices %}<option value="{{ code }}" {% if r and r.category == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group col-md-2">
+            <label class="small font-weight-bold">Montant (0 = libre)</label>
+            <input type="number" name="amount" class="form-control form-control-sm" min="0" step="1" value="{{ (r.amount|int) if r and r.amount else 0 }}">
+        </div>
+        <div class="form-group col-md-3">
+            <label class="small font-weight-bold">Périodicité</label>
+            <select name="frequency" class="form-control form-control-sm">
+                {% for code, label in frequency_choices %}<option value="{{ code }}" {% if r and r.frequency == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-row align-items-end">
+        <div class="form-group col-md-7">
+            <label class="small font-weight-bold">Description</label>
+            <input type="text" name="description" class="form-control form-control-sm" maxlength="255" value="{{ r.description if r and r.description else '' }}">
+        </div>
+        <div class="form-group col-md-2">
+            <label class="small font-weight-bold">Ordre</label>
+            <input type="number" name="display_order" class="form-control form-control-sm" value="{{ r.display_order if r else 0 }}">
+        </div>
+        <div class="form-group col-md-3">
+            <div class="custom-control custom-checkbox mb-2">
+                {% set cid = 'mand' ~ (r.id if r else 'new') %}
+                <input type="checkbox" class="custom-control-input" id="{{ cid }}" name="is_mandatory" {% if not r or r.is_mandatory %}checked{% endif %}>
+                <label class="custom-control-label small" for="{{ cid }}">Obligatoire</label>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary">{{ submit }}</button>
+        </div>
+    </div>
+</form>

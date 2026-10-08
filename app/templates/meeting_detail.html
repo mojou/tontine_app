@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}PV de la réunion - {{ meeting.title }}{% endblock %}
+{% block page_title %}
+    <i class="fas fa-calendar-alt"></i> PV de la réunion : {{ meeting.title }}
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="mb-3">
+        <a href="{{ url_for('meetings') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Retour à la liste
+        </a>
+        <a href="{{ url_for('edit_meeting', meeting_id=meeting.id) }}" class="btn btn-warning">
+            <i class="fas fa-edit"></i> Modifier
+        </a>
+        <a href="{{ url_for('manage_attendance', meeting_id=meeting.id) }}" class="btn btn-success">
+            <i class="fas fa-check-circle"></i> Gérer les présences
+        </a>
+        
+        <!-- Formulaire de suppression -->
+        <form method="POST" action="{{ url_for('delete_meeting', meeting_id=meeting.id) }}" 
+              style="display: inline;" 
+              onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce procès-verbal ? Cette action est irréversible.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">
+                <i class="fas fa-trash"></i> Supprimer
+            </button>
+        </form>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Informations générales -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <i class="fas fa-info-circle"></i> Informations générales
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th width="150">Titre :</th>
+                            <td>{{ meeting.title }}</td>
+                        </tr>
+                        <tr>
+                            <th>Date de la réunion :</th>
+                            <td>{{ meeting.event_date.strftime('%d/%m/%Y') if meeting.event_date else 'Non définie' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Créé par :</th>
+                            <td>{{ meeting.created_by_name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Créé le :</th>
+                            <td>{{ meeting.created_at.strftime('%d/%m/%Y à %H:%M') if meeting.created_at else '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Contenu du PV -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <i class="fas fa-file-alt"></i> Procès-verbal
+                </div>
+                <div class="card-body">
+                    {% if meeting.content %}
+                        {{ meeting.content|nl2br|safe }}
+                    {% else %}
+                        <p class="text-muted text-center mb-0">Aucun contenu.</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Ordre du jour -->
+            {% if agenda_items %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <i class="fas fa-list-ol"></i> Ordre du jour
+                </div>
+                <div class="card-body">
+                    <ol class="mb-0">
+                        {% for item in agenda_items %}
+                        <li>{{ item.title }}</li>
+                        {% endfor %}
+                    </ol>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Résolutions -->
+            {% if meeting.resolutions %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <i class="fas fa-check-circle"></i> Résolutions
+                </div>
+                <div class="card-body">
+                    {{ meeting.resolutions|nl2br|safe }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Présences -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <i class="fas fa-users"></i> Liste des présences
+                    <a href="{{ url_for('manage_attendance', meeting_id=meeting.id) }}" class="btn btn-sm btn-outline-primary float-right">
+                        <i class="fas fa-edit"></i> Modifier
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if attendances %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>Membre</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for att in attendances %}
+                                <tr>
+                                    <td>{{ att.member.full_name }}</a>
+                                    <td>
+                                        {% if att.attendance_status == 'PRESENT' %}
+                                            <span class="badge badge-success">
+                                                <i class="fas fa-check-circle"></i> Présent
+                                            </span>
+                                        {% elif att.attendance_status == 'ABSENT' %}
+                                            <span class="badge badge-danger">
+                                                <i class="fas fa-times-circle"></i> Absent
+                                            </span>
+                                        {% elif att.attendance_status == 'RETARD' %}
+                                            <span class="badge badge-warning">
+                                                <i class="fas fa-clock"></i> En retard
+                                            </span>
+                                        {% elif att.attendance_status == 'EXCUSE' %}
+                                            <span class="badge badge-info">
+                                                <i class="fas fa-envelope"></i> Excusé
+                                            </span>
+                                        {% else %}
+                                            <span class="badge badge-secondary">{{ att.attendance_status }}</span>
+                                        {% endif %}
+                                    </a>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-users fa-2x mb-2 d-block"></i>
+                        Aucune présence enregistrée.
+                        <br>
+                        <a href="{{ url_for('manage_attendance', meeting_id=meeting.id) }}" class="btn btn-sm btn-primary mt-2">
+                            <i class="fas fa-plus"></i> Ajouter
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Bénéficiaires -->
+            {% if beneficiaries %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <i class="fas fa-hand-holding-usd"></i> Bénéficiaires
+                </div>
+                <div class="card-body">
+                    {% for beneficiary in beneficiaries %}
+                    <div class="alert alert-success mb-2">
+                        <strong>{{ beneficiary.member.full_name }}</strong><br>
+                        Type: {{ beneficiary.benefit_type }}<br>
+                        Montant: {{ "{:,.0f}".format(beneficiary.amount) }} FCFA
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Prochaine réunion -->
+            {% if meeting.next_meeting_date %}
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-calendar-alt fa-2x mb-2"></i>
+                    <h6>Prochaine réunion</h6>
+                    <h4>{{ meeting.next_meeting_date.strftime('%d/%m/%Y') }}</h4>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.btn-group {
+    gap: 5px;
+}
+.btn-group .btn {
+    border-radius: 4px;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,12 @@
+{# Logo + nom de l'application. light=True : texte blanc (sur fond vert) #}
+{% macro brand(size=36, light=True, href=None) %}
+<a class="hl-brand" href="{{ href or url_for('index') }}" style="color: {{ '#fff' if light else 'var(--hl-green)' }}; font-size: {{ (size * 0.55)|round|int }}px;">
+    <img src="{{ url_for('static', filename='images/logo.svg') }}" width="{{ size }}" height="{{ size }}" alt="">
+    <span class="hl-name">{{ app_name_parts[0] }}<span>{{ app_name_parts[1] }}</span></span>
+</a>
+{% endmacro %}
+
+{% macro favicon() %}
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/logo.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+{% endmacro %}

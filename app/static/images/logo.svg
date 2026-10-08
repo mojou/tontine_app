@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Hélentine">
+  <!-- Pièce vert foncé cerclée d'or, avec un H et une jeune pousse (l'épargne qui grandit) -->
+  <circle cx="32" cy="32" r="31" fill="#14532d"/>
+  <circle cx="32" cy="32" r="25.5" fill="none" stroke="#c9a227" stroke-width="2.5"/>
+  <rect x="20" y="22" width="6" height="22" rx="1.5" fill="#ffffff"/>
+  <rect x="38" y="22" width="6" height="22" rx="1.5" fill="#ffffff"/>
+  <rect x="20" y="30.5" width="24" height="5" rx="1.5" fill="#c9a227"/>
+  <path d="M32 30.5 C32 24 34.5 19.5 40 17.5 C40.2 23 37.2 27.5 32 30.5 Z" fill="#c9a227"/>
+  <path d="M32 30.5 C32 26 30.5 22.5 26.5 20.5 C26 24.8 28 28.6 32 30.5 Z" fill="#e3c55a"/>
+</svg>

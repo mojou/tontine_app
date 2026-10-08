@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Plateforme - Tontines{% endblock %}
+{% block page_title %}<i class="fas fa-building"></i> Tontines de la plateforme{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="card">
+        <div class="card-header"><i class="fas fa-list"></i> {{ tontines|length }} tontine(s)</div>
+        {% if tontines %}
+        <div class="table-container">
+            <table class="table">
+                <thead><tr><th>Nom</th><th>URL</th><th>Membres actifs</th><th>Comptes</th><th>Cycles</th><th>Statut</th><th></th></tr></thead>
+                <tbody>
+                {% for t in tontines %}
+                <tr>
+                    <td><strong>{{ t.name }}</strong>{% if t.location %}<br><small class="text-muted">{{ t.location }}</small>{% endif %}</td>
+                    <td><a href="{{ url_for('tontine_home', slug=t.slug) }}" target="_blank">/t/{{ t.slug }}</a></td>
+                    <td>{{ counts[t.id].members }}</td>
+                    <td>{{ counts[t.id].users }}</td>
+                    <td>{{ counts[t.id].cycles }}</td>
+                    <td>{% if t.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-secondary">Désactivée</span>{% endif %}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('superadmin_toggle_tontine', tontine_id=t.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if t.is_active else 'btn-outline-success' }}"
+                                    onclick="return confirm('{{ 'Désactiver' if t.is_active else 'Réactiver' }} « {{ t.name }} » ? {{ 'Ses membres ne pourront plus se connecter.' if t.is_active else '' }}');">
+                                {{ 'Désactiver' if t.is_active else 'Réactiver' }}
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('superadmin_reset_president', tontine_id=t.id) }}" class="mt-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-link p-0" title="Le président a oublié son mot de passe">
+                                <i class="fas fa-key"></i> Mot de passe du président
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted">Aucune tontine pour l'instant.</div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-primary"><i class="fas fa-plus"></i> Créer une tontine</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('superadmin_add_tontine') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <h6 class="text-muted text-uppercase small">La tontine</h6>
+                <div class="form-row">
+                    <div class="form-group col-md-5">
+                        <label for="name">Nom *</label>
+                        <input type="text" class="form-control" id="name" name="name" maxlength="120" required value="{{ form_data.get('name', '') }}" placeholder="Ex : Tontine des Enseignants">
+                    </div>
+                    <div class="form-group col-md-3">
+                        <label for="slug">Identifiant d'URL *</label>
+                        <input type="text" class="form-control" id="slug" name="slug" maxlength="50" required pattern="[a-z0-9][a-z0-9\-]*" value="{{ form_data.get('slug', '') }}" placeholder="enseignants">
+                        <small class="text-muted">Adresse : /t/<em>identifiant</em></small>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label for="location">Lieu</label>
+                        <input type="text" class="form-control" id="location" name="location" maxlength="120" value="{{ form_data.get('location', '') }}">
+                    </div>
+                </div>
+
+                <h6 class="text-muted text-uppercase small mt-2">Son président (premier compte)</h6>
+                <div class="form-row">
+                    <div class="form-group col-md-3"><label for="first_name">Prénom *</label><input type="text" class="form-control" id="first_name" name="first_name" required value="{{ form_data.get('first_name', '') }}"></div>
+                    <div class="form-group col-md-3"><label for="last_name">Nom *</label><input type="text" class="form-control" id="last_name" name="last_name" required value="{{ form_data.get('last_name', '') }}"></div>
+                    <div class="form-group col-md-3"><label for="email">Email *</label><input type="email" class="form-control" id="email" name="email" required value="{{ form_data.get('email', '') }}"></div>
+                    <div class="form-group col-md-3"><label for="phone">Téléphone *</label><input type="text" class="form-control" id="phone" name="phone" required value="{{ form_data.get('phone', '') }}"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-4"><label for="username">Identifiant de connexion *</label><input type="text" class="form-control" id="username" name="username" required value="{{ form_data.get('username', '') }}"></div>
+                    <div class="form-group col-md-4"><label for="password">Mot de passe provisoire * (8 car. min.)</label><input type="password" class="form-control" id="password" name="password" minlength="8" required autocomplete="new-password"></div>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Créer la tontine</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Propose un identifiant d'URL à partir du nom
+$('#name').on('input', function() {
+    var slug = $('#slug');
+    if (slug.data('touched')) return;
+    slug.val($(this).val().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50));
+});
+$('#slug').on('input', function() { $(this).data('touched', true); });
+</script>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Séances - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-clipboard-check"></i> Séances de cotisation{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block content %}
+<div class="fade-in">
+    <p class="text-muted">À chaque réunion, ouvrez une feuille de séance : les montants attendus sont préremplis pour chaque membre, il suffit de cocher ce qui est payé.</p>
+
+    {% if can_manage %}
+    <div class="card">
+        <div class="card-header bg-primary"><i class="fas fa-plus"></i> Ouvrir une feuille de séance</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('add_seance') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-row">
+                    <div class="form-group col-md-3">
+                        <label for="date">Date</label>
+                        <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
+                    </div>
+                    <div class="form-group col-md-9">
+                        <label for="title">Intitulé (facultatif)</label>
+                        <input type="text" class="form-control" id="title" name="title" maxlength="120" placeholder="Ex : Réunion mensuelle d'octobre">
+                    </div>
+                </div>
+                <label class="font-weight-bold small">Cotisations encaissées pendant la séance</label>
+                <div class="row">
+                    {% if cycles %}
+                    <div class="col-md-6">
+                        <div class="small text-muted mb-1">Cycles de tontine en cours (montant x mains)</div>
+                        {% for c in cycles %}
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="col_c{{ c.id }}" name="columns" value="c{{ c.id }}" checked>
+                            <label class="custom-control-label" for="col_c{{ c.id }}">{{ c.display_name }} <span class="text-muted small">({{ fcfa(c.amount_per_member) }} / main)</span></label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="col-md-6">
+                        <div class="small text-muted mb-1">Rubriques</div>
+                        {% for r in rubriques %}
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="col_r{{ r.id }}" name="columns" value="r{{ r.id }}"
+                                   {% if r.is_mandatory and r.frequency == 'PAR_SEANCE' %}checked{% endif %}>
+                            <label class="custom-control-label" for="col_r{{ r.id }}">{{ r.name }} <span class="text-muted small">({{ fcfa(r.amount) if r.amount and r.amount > 0 else 'libre' }} · {{ r.frequency_display|lower }})</span></label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary mt-3"><i class="fas fa-clipboard-list"></i> Ouvrir la feuille</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-history"></i> Séances</div>
+        {% if seances %}
+        <div class="table-container">
+            <table class="table mb-0">
+                <thead><tr><th>Date</th><th>Séance</th><th class="text-right">Encaissé</th><th>Statut</th><th></th></tr></thead>
+                <tbody>
+                {% for s in seances %}
+                <tr>
+                    <td>{{ s.date.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ s.display_name }}</td>
+                    <td class="text-right font-weight-bold">{{ fcfa(s.total_collected) }} FCFA</td>
+                    <td>{% if s.is_closed %}<span class="badge badge-secondary">Clôturée</span>{% else %}<span class="badge badge-success">Ouverte</span>{% endif %}</td>
+                    <td class="text-right"><a href="{{ url_for('seance_detail', seance_id=s.id) }}" class="btn btn-sm btn-outline-primary">Ouvrir</a></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted">Aucune séance pour le moment.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
