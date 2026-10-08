@@ -119,6 +119,7 @@ import finance
 import report_export
 import re
 import secrets
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from tenancy import set_current_tenant, tenant_bypass
 
 # ============================================================
@@ -2353,6 +2354,54 @@ def delete_tontine_cycle(cycle_id):
 # RAPPORTS
 # ============================================================
 
+EXPORT_MAX_AGE = 10 * 60  # le lien de téléchargement d'un rapport est valable 10 minutes
+REPORT_ROLES = ['SECRETAIRE', 'PRESIDENT', 'TRESORIER']
+
+
+def _export_serializer():
+    return URLSafeTimedSerializer(app.config['SECRET_KEY'], salt='ghelia-report-export')
+
+
+@app.route('/reports/fichier/<token>')
+@login_required
+@role_required(REPORT_ROLES)
+def report_download(token):
+    """Génère le rapport demandé (adresse GET signée, liée à l'utilisateur, valable 10 min)"""
+    try:
+        data = _export_serializer().loads(token, max_age=EXPORT_MAX_AGE)
+    except SignatureExpired:
+        flash("Ce lien de rapport a expiré : générez-le de nouveau.", 'warning')
+        return redirect(url_for('reports'))
+    except BadSignature:
+        abort(404)
+    if data.get('u') != current_user.id or data.get('k') not in report_export.REPORT_TYPES:
+        abort(404)
+    start_date, end_date = date.fromisoformat(data['s']), date.fromisoformat(data['e'])
+    export_format = data.get('f')
+    report = report_export.build_report(data['k'], start_date, end_date)
+    tontine_name = current_tontine().name
+    filename = f"rapport_{data['k']}_{start_date:%Y%m%d}_{end_date:%Y%m%d}"
+    log_activity(current_user.id, current_user.role,
+                 f"Export {export_format} : {report.title} ({report.period})", request.remote_addr)
+
+    if export_format == 'PRINT':
+        # Page web prête à imprimer : aucun fichier transféré, rien à intercepter
+        return render_template('report_print.html', report=report, tontine_name=tontine_name,
+                               fcfa=report_export._fcfa, cell=report_export._cell_text,
+                               generated_by=current_user.member.full_name if current_user.member else current_user.username)
+    if export_format == 'PDF':
+        pdf = report_export.to_pdf(report, tontine_name, app.config['APP_NAME'],
+                                   current_user.member.full_name if current_user.member else current_user.username)
+        return send_file(io.BytesIO(pdf), mimetype='application/pdf', as_attachment=False,
+                         download_name=f'{filename}.pdf')
+    if export_format == 'CSV':
+        return send_file(io.BytesIO(report_export.to_csv(report)), mimetype='text/csv; charset=utf-8',
+                         as_attachment=True, download_name=f'{filename}.csv')
+    return send_file(io.BytesIO(report_export.to_excel(report, tontine_name)),
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=f'{filename}.xlsx')
+
+
 @app.route('/reports', methods=['GET', 'POST'])
 @login_required
 @role_required(['SECRETAIRE', 'PRESIDENT', 'TRESORIER'])
@@ -2371,28 +2420,15 @@ def reports():
         if start_date > end_date:
             flash("La date de début doit précéder la date de fin.", "danger")
             return redirect(url_for('reports'))
-        if report_type not in report_export.REPORT_TYPES or export_format not in ('PDF', 'CSV', 'EXCEL'):
+        if report_type not in report_export.REPORT_TYPES or export_format not in ('PDF', 'PRINT', 'CSV', 'EXCEL'):
             flash("Type de rapport ou format invalide.", "danger")
             return redirect(url_for('reports'))
 
-        report = report_export.build_report(report_type, start_date, end_date)
-        tontine_name = current_tontine().name
-        filename = f"rapport_{report_type}_{start_date:%Y%m%d}_{end_date:%Y%m%d}"
-        log_activity(current_user.id, current_user.role,
-                     f"Export {export_format} : {report.title} ({report.period})", request.remote_addr)
-
-        if export_format == 'PDF':
-            data = report_export.to_pdf(report, tontine_name, app.config['APP_NAME'],
-                                        current_user.member.full_name if current_user.member else current_user.username)
-            # Affiché dans le navigateur (bouton Imprimer), téléchargeable aussi
-            return send_file(io.BytesIO(data), mimetype='application/pdf', as_attachment=False,
-                             download_name=f'{filename}.pdf')
-        if export_format == 'CSV':
-            return send_file(io.BytesIO(report_export.to_csv(report)), mimetype='text/csv; charset=utf-8',
-                             as_attachment=True, download_name=f'{filename}.csv')
-        return send_file(io.BytesIO(report_export.to_excel(report, tontine_name)),
-                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                         as_attachment=True, download_name=f'{filename}.xlsx')
+        # Post/Redirect/Get : le fichier est servi par une adresse GET signée.
+        # Les gestionnaires de téléchargement (IDM...) ne savent pas rejouer un POST.
+        token = _export_serializer().dumps({'k': report_type, 'f': export_format, 's': start_date.isoformat(),
+                                            'e': end_date.isoformat(), 'u': current_user.id})
+        return redirect(url_for('report_download', token=token))
 
     total_members = Member.query.filter_by(is_active=True).count()
     total_transactions = Transaction.query.count()

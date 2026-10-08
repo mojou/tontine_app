@@ -49,34 +49,36 @@ with app.app_context():
 today = m.date.today()
 period = {'start_date': f'{today.year}-01-01', 'end_date': today.isoformat()}
 
-check(c.get('/reports').status_code == 200 and 'PDF (à imprimer)' in c.get('/reports').get_data(as_text=True),
-      'page Rapports : formats PDF, CSV, Excel proposés')
+check(c.get('/reports').status_code == 200 and 'Impression directe' in c.get('/reports').get_data(as_text=True),
+      'page Rapports : impression directe, PDF, CSV, Excel proposés')
 
 for kind in ('cotisations', 'loans', 'sanctions', 'financial'):
     # PDF : affiché dans le navigateur
     r = c.post('/reports', data=dict(period, report_type=kind, format='PDF'))
+    check(r.status_code == 302 and '/reports/fichier/' in r.headers['Location'], f'{kind} : redirection vers une adresse GET (compatible IDM)')
+    r = c.get(r.headers['Location'])
     pdf = r.data
     check(r.status_code == 200 and r.mimetype == 'application/pdf' and pdf.startswith(b'%PDF') and len(pdf) > 1500
           and 'inline' in r.headers.get('Content-Disposition', ''), f'{kind} : PDF généré et affiché pour impression ({len(pdf)} octets)')
     # CSV : téléchargé, lisible par Excel (BOM + ;)
-    r = c.post('/reports', data=dict(period, report_type=kind, format='CSV'))
+    r = c.post('/reports', data=dict(period, report_type=kind, format='CSV'), follow_redirects=True)
     text = r.data.decode('utf-8')
     rows = list(csv.reader(io.StringIO(text.lstrip('﻿')), delimiter=';'))
     check(r.status_code == 200 and text.startswith('﻿') and 'attachment' in r.headers.get('Content-Disposition', '')
           and len(rows) >= 2 and rows[-1][0] == 'TOTAL', f'{kind} : CSV ({len(rows) - 2} ligne(s) + en-tête + total)')
     # Excel
-    r = c.post('/reports', data=dict(period, report_type=kind, format='EXCEL'))
+    r = c.post('/reports', data=dict(period, report_type=kind, format='EXCEL'), follow_redirects=True)
     check(r.status_code == 200 and r.data[:2] == b'PK', f'{kind} : Excel généré')
 
 # Contenu des rapports
-r = c.post('/reports', data=dict(period, report_type='cotisations', format='CSV'))
+r = c.post('/reports', data=dict(period, report_type='cotisations', format='CSV'), follow_redirects=True)
 rows = list(csv.reader(io.StringIO(r.data.decode('utf-8').lstrip('﻿')), delimiter=';'))
 check(rows[0] == ['Date', 'Membre', 'Rubrique', 'Mode', 'Référence', 'Montant (FCFA)'], 'cotisations : colonnes attendues')
 check(rows[-1][-1] == '31050' and any('OM-EPARGNE' in row for row in rows), f'cotisations : total 31 050 et références ({rows[-1]})')
-r = c.post('/reports', data=dict(period, report_type='loans', format='CSV'))
+r = c.post('/reports', data=dict(period, report_type='loans', format='CSV'), follow_redirects=True)
 rows = list(csv.reader(io.StringIO(r.data.decode('utf-8').lstrip('﻿')), delimiter=';'))
 check(len(rows) == 3 and rows[1][1] == 'Paul Éboa' and rows[1][2] == '20000', f'emprunts : vrai rapport des prêts ({rows[1][:3]})')
-r = c.post('/reports', data=dict(period, report_type='financial', format='CSV'))
+r = c.post('/reports', data=dict(period, report_type='financial', format='CSV'), follow_redirects=True)
 rows = list(csv.reader(io.StringIO(r.data.decode('utf-8').lstrip('﻿')), delimiter=';'))
 check(rows[0][4:] == ['Entrée (FCFA)', 'Sortie (FCFA)'], 'financier : entrées et sorties séparées')
 
@@ -85,7 +87,7 @@ for bad in [dict(period, report_type='loans', format='DOCX'), dict(period, repor
             dict(report_type='loans', format='PDF', start_date='2026-12-31', end_date='2026-01-01'),
             dict(report_type='loans', format='PDF', start_date='zz', end_date='')]:
     r = c.post('/reports', data=bad)
-    check(r.status_code == 302, f"saisie invalide refusée proprement ({bad.get('format')}, {bad.get('report_type')})")
+    check(r.status_code == 302 and '/fichier/' not in r.headers['Location'], f"saisie invalide refusée proprement ({bad.get('format')}, {bad.get('report_type')})")
 
 # Isolation : la JSB n'exporte pas les données de cette tontine
 with app.app_context():
@@ -95,12 +97,22 @@ with app.app_context():
     db.session.commit()
 jsb = app.test_client()
 jsb.post('/login', data={'tontine': 'jsb', 'username': 'president', 'password': 'JsbPass123'})
-r = jsb.post('/reports', data=dict(period, report_type='cotisations', format='CSV'))
+r = jsb.post('/reports', data=dict(period, report_type='cotisations', format='CSV'), follow_redirects=True)
 check('Éboa' not in r.data.decode('utf-8'), "rapport d'une autre tontine : aucune donnée de « Tontine Rapports »")
 member = app.test_client()
 member.post('/login', data={'tontine': 'rapports', 'username': 'paul', 'password': 'Passw0rd1'})
 check(member.post('/reports', data=dict(period, report_type='financial', format='PDF')).status_code == 302,
       'un simple membre ne peut pas exporter les rapports')
+
+# Impression directe (page web) et sécurité du lien
+r = c.post('/reports', data=dict(period, report_type='financial', format='PRINT'), follow_redirects=True)
+h = r.get_data(as_text=True)
+check(r.status_code == 200 and r.mimetype == 'text/html' and 'window.print()' in h and 'Solde de la période' in h,
+      'impression directe : page web prête à imprimer (aucun fichier à télécharger)')
+link = c.post('/reports', data=dict(period, report_type='loans', format='PDF')).headers['Location']
+check(jsb.get(link).status_code == 404, "le lien d'un rapport ne fonctionne que pour la personne qui l'a demandé")
+check(c.get(link[:-4] + 'abcd').status_code == 404, 'lien de rapport falsifié refusé')
+check(c.get(link).status_code == 200 and c.get(link).data.startswith(b'%PDF'), 'le lien GET peut être rechargé (gestionnaire de téléchargement)')
 
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:

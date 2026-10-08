@@ -113,7 +113,8 @@
                     <div class="col-md-3 form-group">
                         <label for="format">Format d'export</label>
                         <select name="format" id="format" class="form-control" required>
-                            <option value="PDF">PDF (à imprimer)</option>
+                            <option value="PRINT">Impression directe (page web)</option>
+                            <option value="PDF">PDF</option>
                             <option value="CSV">CSV (tableur, import)</option>
                             <option value="EXCEL">Excel (.xlsx)</option>
                         </select>
@@ -124,7 +125,11 @@
                         <button type="submit" id="submitBtn" class="btn btn-success btn-block">
                             <i class="fas fa-file-download"></i> Générer le rapport
                         </button>
-                        <small class="form-text text-muted">Le PDF s'ouvre dans un nouvel onglet : utilisez le bouton Imprimer du navigateur (ou Ctrl+P).</small>
+                        <small class="form-text text-muted">
+                            Le rapport s'ouvre dans un nouvel onglet. « Impression directe » affiche la fenêtre d'impression
+                            (vous pouvez aussi y choisir « Enregistrer en PDF ») et fonctionne même avec un gestionnaire de
+                            téléchargement comme IDM.
+                        </small>
                     </div>
                 </div>
                 <script>

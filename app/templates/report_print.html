@@ -1,0 +1,89 @@
+{% from "_brand.html" import favicon with context %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.title }} - {{ tontine_name }}</title>
+    {{ favicon() }}
+    <style>
+        @page { size: A4 {{ 'landscape' if report.columns|length > 6 else 'portrait' }}; margin: 14mm 12mm; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #1b2a21; font-size: 12px; margin: 0; padding: 24px; background: #f7f5ee; }
+        .sheet { background: #fff; max-width: 1100px; margin: 0 auto; padding: 28px 32px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+        .toolbar { max-width: 1100px; margin: 0 auto 14px; display: flex; gap: 10px; justify-content: flex-end; }
+        .toolbar button, .toolbar a { background: #14532d; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-size: 14px; cursor: pointer; text-decoration: none; }
+        .toolbar a { background: #fff; color: #14532d; border: 1px solid #14532d; }
+        header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #c9a227; padding-bottom: 12px; margin-bottom: 18px; }
+        header img { width: 48px; height: 48px; }
+        header h1 { margin: 0; font-size: 20px; color: #14532d; }
+        header p { margin: 2px 0 0; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #14532d; color: #fff; text-align: left; padding: 6px 8px; font-size: 11px; }
+        td { padding: 5px 8px; border-bottom: 1px solid #e3dfcf; font-size: 11px; vertical-align: top; }
+        tbody tr:nth-child(even) td { background: #e6f1e9; }
+        .num { text-align: right; white-space: nowrap; }
+        tfoot td { background: #faf2d3; font-weight: bold; border-top: 2px solid #c9a227; }
+        .summary { margin-top: 22px; width: auto; min-width: 320px; }
+        .summary td:first-child { padding-right: 40px; }
+        footer { margin-top: 26px; font-size: 10px; color: #777; display: flex; justify-content: space-between; }
+        thead { display: table-header-group; }   /* en-tête répété sur chaque page imprimée */
+        tr { page-break-inside: avoid; }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .sheet { box-shadow: none; padding: 0; max-width: none; }
+            .toolbar { display: none; }
+            th, tbody tr:nth-child(even) td, tfoot td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <a href="{{ url_for('reports') }}">← Retour aux rapports</a>
+        <button type="button" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
+    </div>
+    <div class="sheet">
+        <header>
+            <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="">
+            <div>
+                <h1>{{ tontine_name }}</h1>
+                <p>{{ report.title }} — période {{ report.period }}</p>
+            </div>
+        </header>
+
+        <table>
+            <thead>
+                <tr>{% for col in report.columns %}<th class="{{ 'num' if loop.index0 in report.money_columns }}">{{ col }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+                {% for row in report.rows %}
+                <tr>{% for v in row %}<td class="{{ 'num' if loop.index0 in report.money_columns }}">{{ cell(v, loop.index0 in report.money_columns) }}</td>{% endfor %}</tr>
+                {% else %}
+                <tr><td colspan="{{ report.columns|length }}">Aucune donnée sur cette période.</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if report.totals and report.rows %}
+            <tfoot>
+                <tr>{% for v in report.totals %}<td class="{{ 'num' if loop.index0 in report.money_columns }}">{{ cell(v, loop.index0 in report.money_columns) }}</td>{% endfor %}</tr>
+            </tfoot>
+            {% endif %}
+        </table>
+
+        {% if report.summary %}
+        <table class="summary">
+            <thead><tr><th>Synthèse</th><th class="num">Montant (FCFA)</th></tr></thead>
+            <tbody>
+                {% for label, value in report.summary %}<tr><td>{{ label|trim }}</td><td class="num">{{ fcfa(value) }}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        <footer>
+            <span>{{ app_name }} · {{ tontine_name }} · généré le {{ now.strftime('%d/%m/%Y à %H:%M') }} par {{ generated_by }}</span>
+        </footer>
+    </div>
+    <script>
+        // Ouvre directement la fenêtre d'impression
+        window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 400); });
+    </script>
+</body>
+</html>
