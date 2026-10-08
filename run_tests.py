@@ -78,7 +78,7 @@ def main():
     if not os.path.exists(FIXTURE):
         sys.exit(f"Base de référence introuvable : {FIXTURE}")
     quick = '--rapide' in sys.argv
-    workdir = tempfile.mkdtemp(prefix='helentine_tests_')
+    workdir = tempfile.mkdtemp(prefix='ghelia_tests_')
     os.makedirs(os.path.join(workdir, 'uploads'), exist_ok=True)
     print(f"Tests dans {workdir}\n")
     started, total_ok, failures = time.time(), 0, 0

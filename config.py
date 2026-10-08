@@ -73,8 +73,8 @@ class Config:
     # ============================================================
     # IDENTITÉ DE LA PLATEFORME
     # ============================================================
-    APP_NAME = 'Hélentine'                     # Hélène + tontine
-    APP_NAME_PARTS = ('Hélen', 'tine')         # découpage affiché dans le logo (2e partie en or)
+    APP_NAME = 'Ghelia Finance'
+    APP_NAME_PARTS = ('Ghelia', ' Finance')    # découpage affiché dans le logo (2e partie en or)
     APP_TAGLINE = 'La tontine en ligne, simple, solidaire et transparente'
     # Création libre de tontines depuis la page d'accueil (sinon : super-admin uniquement)
     ALLOW_PUBLIC_SIGNUP = os.environ.get('ALLOW_PUBLIC_SIGNUP', 'True').lower() == 'true'

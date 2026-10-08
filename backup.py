@@ -394,7 +394,7 @@ def restore_backup(backup_filename):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🔄 SAUVEGARDE AUTOMATIQUE - Hélentine")
+    print("🔄 SAUVEGARDE AUTOMATIQUE - Ghelia Finance")
     print("=" * 60)
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Base sauvegardée: {DATABASE_PATH}")

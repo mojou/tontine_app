@@ -33,7 +33,7 @@ SIGNUP = {'name': 'Tontine des Amis', 'slug': 'amis', 'location': 'Bafoussam', '
 anon = app.test_client()
 r = anon.get('/')
 h = body(r)
-check(r.status_code == 200 and 'Hélen' in h and 'Créer ma tontine' in h and 'logo.svg' in h, "/ = page d'accueil Hélentine")
+check(r.status_code == 200 and 'Ghelia' in h and 'Créer ma tontine' in h and 'logo.svg' in h, "/ = page d'accueil Ghelia Finance")
 check('JSB Tontine' in h, "la JSB apparaît dans « Rejoindre une tontine »")
 check(anon.get('/static/images/logo.svg').status_code == 200 and anon.get('/static/css/theme.css').status_code == 200, 'logo et thème servis')
 check(anon.get('/inscription').status_code == 200, 'formulaire de création')

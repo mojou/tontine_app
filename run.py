@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Application Hélentine (gestion de tontines)
+Application Ghelia Finance (gestion de tontines)
 Point d'entrée pour le développement local.
 
     python run.py                      -> http://127.0.0.1:5000 (cette machine uniquement)
@@ -24,5 +24,5 @@ if __name__ == '__main__':
         # La console de débogage permet d'exécuter du code : interdite hors de cette machine
         print("[SÉCURITÉ] Mode débogage refusé avec HOST={0} : écoute limitée à 127.0.0.1.".format(host))
         host = '127.0.0.1'
-    print(f"Hélentine démarre sur http://{host}:{port}" + (" (débogage)" if debug else ""))
+    print(f"Ghelia Finance démarre sur http://{host}:{port}" + (" (débogage)" if debug else ""))
     app.run(debug=debug, host=host, port=port, threaded=True)

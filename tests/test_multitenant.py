@@ -65,7 +65,7 @@ set_password('jsb', 'president', 'JsbPass123')
 # ---------------------------------------------------------------- pages publiques
 anon = app.test_client()
 r = anon.get('/')
-check(r.status_code == 200 and 'Hélen' in body(r), 'accueil plateforme (plus de redirection auto)')
+check(r.status_code == 200 and 'Ghelia' in body(r), 'accueil plateforme (plus de redirection auto)')
 r = anon.get('/t/jsb')
 check(r.status_code == 200 and 'JSB Tontine' in body(r), 'accueil /t/jsb')
 check(anon.get('/t/inexistante').status_code == 404, 'tontine inconnue -> 404')
