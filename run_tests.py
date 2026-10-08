@@ -35,6 +35,7 @@ SUITES = [
     ('test_cycles.py', 'cy.db', 'Cycles, mains, tirage, enchères'),
     ('test_seances_exercice.py', 'se.db', "Séances et fin d'exercice"),
     ('test_mot_de_passe.py', 'rs.db', 'Mot de passe oublié'),
+    ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),
     ('test_audit.py', 'au.db', "Défauts corrigés lors de l'audit"),
 ]
 EXHAUSTIVE = [

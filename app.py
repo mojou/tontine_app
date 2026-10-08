@@ -116,6 +116,7 @@ from models import (
     LoginAttempt
 )
 import finance
+import report_export
 import re
 import secrets
 from tenancy import set_current_tenant, tenant_bypass
@@ -2360,67 +2361,38 @@ def reports():
     
     if request.method == 'POST':
         report_type = request.form.get('report_type')
-        start_date_str = request.form.get('start_date')
-        end_date_str = request.form.get('end_date')
-        export_format = request.form.get('format')
-
+        export_format = (request.form.get('format') or '').upper()
         try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        except (ValueError, TypeError):
+            start_date = datetime.strptime(request.form.get('start_date') or '', '%Y-%m-%d').date()
+            end_date = datetime.strptime(request.form.get('end_date') or '', '%Y-%m-%d').date()
+        except ValueError:
             flash("Dates invalides.", "danger")
             return redirect(url_for('reports'))
-
-        try:
-            transactions = Transaction.query.filter(
-                Transaction.date >= start_date,
-                Transaction.date <= end_date
-            ).order_by(Transaction.date.desc()).all()
-
-            if export_format == 'EXCEL':
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "Rapport"
-                
-                ws['A1'] = f"RAPPORT - {report_type.upper()}"
-                ws.append([f"Période : {start_date.strftime('%d/%m/%Y')} au {end_date.strftime('%d/%m/%Y')}"])
-                ws.append([])
-                
-                headers = ["Date", "Membre", "Type", "Montant (FCFA)"]
-                ws.append(headers)
-
-                total_amount = 0
-                for t in transactions:
-                    total_amount += t.amount or 0
-                    ws.append([
-                        t.date.strftime('%d/%m/%Y') if t.date else 'N/A',
-                        f"{t.member.first_name} {t.member.last_name}" if t.member else "Inconnu",
-                        t.type,
-                        t.amount
-                    ])
-                
-                ws.append([])
-                ws.append(["TOTAL", "", "", total_amount])
-
-                output = io.BytesIO()
-                wb.save(output)
-                file_data = output.getvalue()
-                output.close()
-
-                return send_file(
-                    io.BytesIO(file_data),
-                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    as_attachment=True,
-                    download_name=f'rapport_{report_type}_{start_date_str}.xlsx'
-                )
-
-            elif export_format == 'PDF':
-                flash("Format PDF non disponible pour le moment.", "warning")
-                return redirect(url_for('reports'))
-
-        except Exception as e:
-            flash(f"Erreur : {str(e)}", "danger")
+        if start_date > end_date:
+            flash("La date de début doit précéder la date de fin.", "danger")
             return redirect(url_for('reports'))
+        if report_type not in report_export.REPORT_TYPES or export_format not in ('PDF', 'CSV', 'EXCEL'):
+            flash("Type de rapport ou format invalide.", "danger")
+            return redirect(url_for('reports'))
+
+        report = report_export.build_report(report_type, start_date, end_date)
+        tontine_name = current_tontine().name
+        filename = f"rapport_{report_type}_{start_date:%Y%m%d}_{end_date:%Y%m%d}"
+        log_activity(current_user.id, current_user.role,
+                     f"Export {export_format} : {report.title} ({report.period})", request.remote_addr)
+
+        if export_format == 'PDF':
+            data = report_export.to_pdf(report, tontine_name, app.config['APP_NAME'],
+                                        current_user.member.full_name if current_user.member else current_user.username)
+            # Affiché dans le navigateur (bouton Imprimer), téléchargeable aussi
+            return send_file(io.BytesIO(data), mimetype='application/pdf', as_attachment=False,
+                             download_name=f'{filename}.pdf')
+        if export_format == 'CSV':
+            return send_file(io.BytesIO(report_export.to_csv(report)), mimetype='text/csv; charset=utf-8',
+                             as_attachment=True, download_name=f'{filename}.csv')
+        return send_file(io.BytesIO(report_export.to_excel(report, tontine_name)),
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=f'{filename}.xlsx')
 
     total_members = Member.query.filter_by(is_active=True).count()
     total_transactions = Transaction.query.count()
