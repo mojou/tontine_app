@@ -12,8 +12,8 @@
         <div>
             <p class="text-muted mb-0">Suivi des pénalités financières et amendes de comportement.</p>
         </div>
-        {% if current_user.is_admin() or current_user.role in ['CENSEUR', 'PRESIDENT', 'SECRETAIRE'] %}
-        <button class="btn btn-danger shadow-sm" data-toggle="modal" data-target="#addSanctionModal">
+        {% if can_add %}
+        <button type="button" class="btn btn-danger shadow-sm" data-toggle="modal" data-target="#addSanctionModal">
             <i class="fas fa-gavel mr-2"></i> Infliger une Sanction
         </button>
         {% endif %}
@@ -43,7 +43,7 @@
                         <tr>
                             <td><small class="font-weight-bold text-muted">#{{ sanction.id }}</small></td>
                             <td><strong>{{ sanction.member_name }}</strong></td>
-                            <td><span class="badge badge-warning text-dark">{{ sanction.type_display }}</span></td>
+                            <td><span class="badge badge-warning text-dark">{{ sanction.get_type_display() }}</span></td>
                             <td><small class="text-muted">{{ sanction.description|truncate(50) }}</small></td>
                             <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
                             <td class="font-weight-bold text-danger">{{ "{:,.0f}".format(sanction.amount).replace(',', ' ') }} FCFA</td>
@@ -52,16 +52,19 @@
                                     <span class="badge badge-success px-3 py-1">
                                         <i class="fas fa-check mr-1"></i> Acquittée
                                     </span>
-                                {% else %}
+                                {% elif can_pay %}
                                     <form action="{{ url_for('pay_sanction', sanction_id=sanction.id) }}" method="POST" style="display:inline;">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-outline-success">
                                             <i class="fas fa-check-circle mr-1"></i> Payer
                                         </button>
                                     </form>
+                                {% else %}
+                                    <span class="badge badge-danger px-3 py-1">À payer</span>
                                 {% endif %}
                             </td>
                             <td class="text-center">
+                                {% if can_edit %}
                                 <div class="btn-group" role="group">
                                     <button type="button" class="btn btn-sm btn-warning" data-toggle="modal" data-target="#editSanctionModal{{ sanction.id }}" title="Modifier">
                                         <i class="fas fa-edit"></i>
@@ -80,6 +83,7 @@
                                     </button>
                                     {% endif %}
                                 </div>
+                                {% else %}<span class="text-muted small">—</span>{% endif %}
                             </td>
                         </tr>
                         {% else %}
@@ -96,7 +100,7 @@
     </div>
 </div>
 
-{% for sanction in sanctions %}
+{% if can_edit %}{% for sanction in sanctions %}
 <div class="modal fade" id="editSanctionModal{{ sanction.id }}" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <form action="{{ url_for('edit_sanction', sanction_id=sanction.id) }}" method="POST">
@@ -110,6 +114,9 @@
                     <div class="form-group">
                         <label class="font-weight-bold">Membre concerné</label>
                         <select name="member_id" class="form-control" required>
+                            {% if sanction.member_id not in members|map(attribute='id')|list %}
+                                <option value="{{ sanction.member_id }}" selected>{{ sanction.member_name }} (inactif)</option>
+                            {% endif %}
                             {% for m in members %}
                                 <option value="{{ m.id }}" {% if m.id == sanction.member_id %}selected{% endif %}>{{ m.full_name }}</option>
                             {% endfor %}
@@ -120,18 +127,16 @@
                             <div class="form-group">
                                 <label class="font-weight-bold">Nature du Manquement</label>
                                 <select name="type_sanction" class="form-control">
-                                    <option value="RETARD_PAIEMENT" {% if sanction.type_sanction == 'RETARD_PAIEMENT' %}selected{% endif %}>Retard de paiement</option>
-                                    <option value="NON_PAIEMENT" {% if sanction.type_sanction == 'NON_PAIEMENT' %}selected{% endif %}>Non-paiement</option>
-                                    <option value="ABSENCE" {% if sanction.type_sanction == 'ABSENCE' %}selected{% endif %}>Absence non justifiée</option>
-                                    <option value="RETARD_REUNION" {% if sanction.type_sanction == 'RETARD_REUNION' %}selected{% endif %}>Retard à la réunion</option>
-                                    <option value="AUTRE" {% if sanction.type_sanction == 'AUTRE' %}selected{% endif %}>Autre</option>
+                                    {% for code, label in sanction_types %}
+                                    <option value="{{ code }}" {% if sanction.type_sanction == code %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label class="font-weight-bold">Amende (FCFA)</label>
-                                <input type="number" name="amount" class="form-control" value="{{ sanction.amount }}" required>
+                                <input type="number" name="amount" class="form-control" min="1" step="1" value="{{ sanction.amount|int }}" required>
                             </div>
                         </div>
                     </div>
@@ -152,7 +157,62 @@
         </form>
     </div>
 </div>
-{% endfor %}
+{% endfor %}{% endif %}
+
+{# ---------------- Fenêtre « Infliger une sanction » ---------------- #}
+{% if can_add %}
+<div class="modal fade" id="addSanctionModal" tabindex="-1" role="dialog" aria-labelledby="addSanctionTitle" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form action="{{ url_for('add_sanction') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title font-weight-bold" id="addSanctionTitle"><i class="fas fa-gavel mr-2"></i>Infliger une sanction</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Fermer"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    {% if members %}
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="newSanctionMember">Membre concerné</label>
+                        <select name="member_id" id="newSanctionMember" class="form-control" required>
+                            <option value="">-- Choisir un membre --</option>
+                            {% for m in members %}<option value="{{ m.id }}">{{ m.full_name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-7">
+                            <label class="font-weight-bold" for="newSanctionType">Nature du manquement</label>
+                            <select name="type_sanction" id="newSanctionType" class="form-control" required>
+                                {% for code, label in sanction_types %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group col-md-5">
+                            <label class="font-weight-bold" for="newSanctionAmount">Amende (FCFA)</label>
+                            <input type="number" name="amount" id="newSanctionAmount" class="form-control" min="1" step="1" required placeholder="Ex : 500">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="newSanctionDate">Date du constat</label>
+                        <input type="date" name="sanction_date" id="newSanctionDate" class="form-control" value="{{ now.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="font-weight-bold" for="newSanctionDesc">Motif / description</label>
+                        <textarea name="description" id="newSanctionDesc" class="form-control" rows="3" maxlength="500" required
+                                  placeholder="Ex : arrivé 40 minutes après l'ouverture de la séance"></textarea>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucun membre actif à sanctionner.</p>
+                    {% endif %}
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                    {% if members %}<button type="submit" class="btn btn-danger font-weight-bold"><i class="fas fa-gavel"></i> Infliger la sanction</button>{% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <style>
 .btn-group { gap: 5px; }

@@ -34,14 +34,16 @@ def no_html_tags(message=None):
 
 
 def no_special_characters(message=None):
-    """Bloque les caractères spéciaux dangereux"""
+    """Bloque les caractères propres au code (balises, gabarits).
+    L'apostrophe, la barre oblique, les parenthèses, % et ; restent autorisés : ils sont
+    courants en français (« l'heure », « 12/10 », « (retard) », « 5 % »). La sécurité est
+    assurée par l'échappement automatique des pages et les requêtes paramétrées de la base."""
     if message is None:
-        message = 'Caractères interdits: < > " \' & / \\ ; $ % ` = ( ) { } [ ] |'
-    
+        message = 'Caractères interdits : < > ` { } | \\'
+
     def _no_special_characters(form, field):
         if field.data and isinstance(field.data, str):
-            # Caractères interdits
-            forbidden = r'[<>"\'&;/\\$%`=\(\)\{\}\[\]|]'
+            forbidden = r'[<>`{}|\\]'
             if re.search(forbidden, field.data):
                 raise ValidationError(message)
     return _no_special_characters
@@ -559,15 +561,8 @@ class LoanApprovalForm(FlaskForm):
 
 class SanctionForm(FlaskForm):
     member_id = SelectField('Membre', coerce=int, validators=[DataRequired()])
-    type_sanction = SelectField('Type de sanction', choices=[
-        ('RETARD_PAIEMENT', 'Retard de paiement'),
-        ('NON_PAIEMENT', 'Non-paiement'),
-        ('ABSENCE', 'Absence non justifiée'),
-        ('RETARD_REUNION', 'Retard réunion'),
-        ('RETARD_EMPRUNT', 'Retard remboursement'),
-        ('ECHEC_COTISATION', 'Échec de cotisation'),
-        ('AUTRE', 'Autre')
-    ], validators=[DataRequired()])
+    # Choix = liste unique Sanction.TYPES (models.py)
+    type_sanction = SelectField('Type de sanction', choices=[], validators=[DataRequired()])
     amount = FloatField('Montant (FCFA)', validators=[
         DataRequired(), 
         NumberRange(min=0, max=999999999),
@@ -581,6 +576,11 @@ class SanctionForm(FlaskForm):
     ])
     sanction_date = DateField('Date de la sanction', default=date.today, format='%Y-%m-%d')
     submit = SubmitField('Appliquer')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from models import Sanction
+        self.type_sanction.choices = list(Sanction.TYPES)
 
 
 # ============================================================

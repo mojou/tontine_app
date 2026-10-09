@@ -137,6 +137,80 @@
                     {% endfor %}
                 </ul>
             </div>
+
+            {% if cycle.status == 'EN_COURS' and can_manage %}
+            <div class="card" style="border-left: 5px solid var(--hl-green)">
+                <div class="card-header"><i class="fas fa-user-plus"></i> Ajouter un participant en cours de cycle</div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        Pour rejoindre le cycle, le nouveau paie le <strong>rappel</strong> : ce que chaque main a déjà cotisé
+                        ({{ cycle.beneficiaries_count }} tour(s) versé(s) × {{ fcfa(cycle.amount_per_member) }} FCFA par main).
+                        {% if not cycle.is_auction %}Ses mains passent après toutes les mains déjà inscrites.{% endif %}
+                    </p>
+                    <form method="POST" action="{{ url_for('add_cycle_participant', cycle_id=cycle.id) }}" id="joinForm"
+                          data-amount="{{ cycle.amount_per_member|int }}" data-tours="{{ cycle.beneficiaries_count }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="expected_total" id="expectedTotal" value="">
+                        <div class="form-row">
+                            <div class="form-group col-8">
+                                <label class="small font-weight-bold" for="joinMember">Membre</label>
+                                <select name="member_id" id="joinMember" class="form-control form-control-sm" required>
+                                    <option value="">-- Choisir --</option>
+                                    {% for m in join_candidates if hands_by_member.get(m.id, 0) < max_hands %}
+                                    <option value="{{ m.id }}" data-has="{{ hands_by_member.get(m.id, 0) }}">
+                                        {{ m.full_name }}{% if hands_by_member.get(m.id) %} (a déjà {{ hands_by_member[m.id] }} main(s)){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group col-4">
+                                <label class="small font-weight-bold" for="joinHands">Mains</label>
+                                <input type="number" name="hands" id="joinHands" class="form-control form-control-sm" min="1" max="{{ max_hands }}" value="1" required>
+                            </div>
+                        </div>
+                        <div class="custom-control custom-checkbox mb-2">
+                            <input type="checkbox" class="custom-control-input" id="includeCurrent" name="include_current">
+                            <label class="custom-control-label small" for="includeCurrent">Encaisser aussi sa cotisation du tour en cours (tour {{ cycle.beneficiaries_count + 1 }})</label>
+                        </div>
+                        {% if cycle.beneficiaries_count > 0 %}
+                        <div class="small font-weight-bold mb-1">Destination du rappel</div>
+                        <div class="custom-control custom-radio">
+                            <input type="radio" class="custom-control-input" id="destBenef" name="destination" value="BENEFICIAIRES" checked>
+                            <label class="custom-control-label small" for="destBenef">Reverser aux {{ cycle.beneficiaries_count }} main(s) déjà servie(s) (complément de leur cagnotte) — recommandé</label>
+                        </div>
+                        <div class="custom-control custom-radio mb-2">
+                            <input type="radio" class="custom-control-input" id="destCaisse" name="destination" value="CAISSE">
+                            <label class="custom-control-label small" for="destCaisse">Garder en caisse</label>
+                        </div>
+                        {% endif %}
+
+                        <div class="p-2 mb-2 rounded" style="background: var(--hl-gold-100)">
+                            <div class="small">Rappel à encaisser</div>
+                            <div class="h4 mb-0" style="color: var(--hl-green)"><span id="joinTotal">0</span> FCFA</div>
+                            <div class="small text-muted" id="joinDetail"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-6">
+                                <label class="small font-weight-bold" for="joinMode">Mode de paiement</label>
+                                <select name="payment_mode" id="joinMode" class="form-control form-control-sm">
+                                    {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group col-6">
+                                <label class="small font-weight-bold" for="joinRef">Référence mobile</label>
+                                <input type="text" name="payment_reference" id="joinRef" class="form-control form-control-sm" maxlength="60">
+                            </div>
+                        </div>
+                        <div class="custom-control custom-checkbox mb-3" id="confirmBox">
+                            <input type="checkbox" class="custom-control-input" id="confirmPaid" name="confirm_paid">
+                            <label class="custom-control-label small" for="confirmPaid">Je confirme avoir encaissé ce rappel</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-user-plus"></i> Ajouter au cycle</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
             {% if current_user.role == 'PRESIDENT' and cycle.beneficiaries_count == 0 %}
             <form method="POST" action="{{ url_for('delete_tontine_cycle', cycle_id=cycle.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -146,4 +220,28 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(function() {
+    var form = $('#joinForm');
+    if (!form.length) return;
+    var amount = parseInt(form.data('amount'), 10) || 0, tours = parseInt(form.data('tours'), 10) || 0;
+    var fmt = function(n) { return new Intl.NumberFormat('fr-FR').format(n); };
+    function refresh() {
+        var hands = Math.max(parseInt($('#joinHands').val(), 10) || 0, 0);
+        var past = amount * hands * tours, current = $('#includeCurrent').is(':checked') ? amount * hands : 0;
+        $('#joinTotal').text(fmt(past + current));
+        $('#expectedTotal').val(past + current);
+        var parts = [];
+        if (tours) parts.push(fmt(amount) + ' × ' + hands + ' main(s) × ' + tours + ' tour(s) = ' + fmt(past));
+        if (current) parts.push('+ tour en cours : ' + fmt(current));
+        $('#joinDetail').text(parts.length ? parts.join(' ') : 'Aucun tour versé : pas de rappel à payer.');
+        $('#confirmBox').toggle(past + current > 0);
+    }
+    $('#joinHands, #includeCurrent').on('input change', refresh);
+    refresh();
+});
+</script>
 {% endblock %}

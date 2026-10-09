@@ -1579,16 +1579,21 @@ def sanctions():
     pagination = query.order_by(Sanction.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     pagination_data = get_pagination_data(pagination)
     
-    members_list = Member.query.filter_by(is_active=True).order_by(Member.last_name).all() if current_user.is_admin() else []
+    members_list = (Member.query.filter_by(is_active=True, status='ACTIF').order_by(Member.last_name).all()
+                    if current_user.is_admin() else [])
     
     # Créer le formulaire pour l'ajout
     form = SanctionForm()
     form.member_id.choices = [(m.id, m.full_name) for m in Member.query.filter_by(is_active=True, status='ACTIF').order_by(Member.last_name).all()]
     
-    return render_template('sanctions.html', 
-                           sanctions=pagination_data['items'], 
-                           pagination=pagination_data, 
+    return render_template('sanctions.html',
+                           sanctions=pagination_data['items'],
+                           pagination=pagination_data,
                            members=members_list,
+                           sanction_types=Sanction.TYPES,
+                           can_add=current_user.role in ('CENSEUR', 'PRESIDENT', 'SECRETAIRE'),
+                           can_edit=current_user.role in ('CENSEUR', 'PRESIDENT'),
+                           can_pay=current_user.role in ('TRESORIER', 'PRESIDENT'),
                            status_filter=status_filter,
                            form=form)
 
@@ -2234,7 +2239,11 @@ def tontine_cycle_detail(cycle_id):
                            next_participant=next_participant, next_beneficiary=next_participant.member if next_participant else None,
                            pending_sanctions=pending_sanctions, collected=collected,
                            holders=sorted(holders.values(), key=lambda h: h['member'].last_name.lower()),
-                           can_manage=current_user.role in CYCLE_MANAGERS, payment_modes=finance.PAYMENT_MODES)
+                           can_manage=current_user.role in CYCLE_MANAGERS, payment_modes=finance.PAYMENT_MODES,
+                           join_candidates=Member.query.filter_by(is_active=True, status='ACTIF')
+                           .order_by(Member.last_name, Member.first_name).all(),
+                           hands_by_member={h['member'].id: len(h['parts']) for h in holders.values()},
+                           max_hands=MAX_HANDS)
 
 
 @app.route('/tontine-cycles/<int:cycle_id>/register-benefit', methods=['GET', 'POST'])
@@ -2329,6 +2338,102 @@ def register_benefit(cycle_id):
         details.append(f"amendes {deducted:,.0f}")
     flash(f"Cagnotte du tour {position} versée à {participant.label} : {net:,.0f} FCFA à remettre"
           + (f" ({gross:,.0f} − {' − '.join(details)})" if details else '') + '.', 'success')
+    return back
+
+
+@app.route('/tontine-cycles/<int:cycle_id>/participants/add', methods=['POST'])
+@login_required
+@role_required(CYCLE_MANAGERS)
+def add_cycle_participant(cycle_id):
+    """Ajoute un membre (une ou plusieurs mains) à un cycle déjà commencé.
+    Condition : il paie le RAPPEL, c'est-à-dire ce que chaque main a déjà cotisé
+    (cotisation x mains x tours déjà versés). Par défaut le rappel est reversé
+    aux mains déjà servies, qui avaient reçu une cagnotte sans sa part."""
+    cycle = db.get_or_404(TontineCycleDetail, cycle_id)
+    back = redirect(url_for('tontine_cycle_detail', cycle_id=cycle.id))
+    if cycle.status != 'EN_COURS':
+        flash("On ne peut rejoindre qu'un cycle en cours.", 'warning')
+        return back
+
+    member = db.session.get(Member, request.form.get('member_id', type=int) or 0)
+    hands = request.form.get('hands', type=int) or 0
+    if not member or not member.is_active or member.status != 'ACTIF':
+        flash('Choisissez un membre actif.', 'danger')
+        return back
+    existing = [p for p in cycle.participants if p.member_id == member.id]
+    if not 1 <= hands <= MAX_HANDS - len(existing):
+        flash(f"Nombre de mains invalide (maximum {MAX_HANDS} mains par membre dans un cycle).", 'danger')
+        return back
+
+    amount = Decimal(str(cycle.amount_per_member))
+    tours_done = cycle.beneficiaries_count
+    include_current = request.form.get('include_current') == 'on'
+    past_rappel = amount * hands * tours_done            # ce que chaque main a déjà versé
+    current_share = amount * hands if include_current else Decimal('0')
+    total_due = past_rappel + current_share
+    expected = _parse_decimal(request.form.get('expected_total') or '', 0, 10 ** 12)
+    if expected is not None and expected != total_due:
+        flash("Le cycle a changé entre-temps (un tour vient d'être versé) : vérifiez le nouveau montant du rappel.", 'warning')
+        return back
+    if total_due > 0 and request.form.get('confirm_paid') != 'on':
+        flash(f"Le rappel de {total_due:,.0f} FCFA doit être encaissé avant l'ajout : cochez la confirmation.".replace(',', ' '), 'danger')
+        return back
+    destination = request.form.get('destination', 'BENEFICIAIRES')
+    if destination not in ('BENEFICIAIRES', 'CAISSE'):
+        destination = 'BENEFICIAIRES'
+    payment_mode = _payment_mode_from_form()
+    reference = _payment_reference_from_form()
+
+    # 1) Nouvelles mains : en mode tirage, elles passent après toutes les mains déjà inscrites
+    positions = [p.position for p in cycle.participants if p.position is not None]
+    next_position = (max(positions) + 1) if positions and not cycle.needs_draw and not cycle.is_auction else None
+    first_hand = max([p.hand_number or 1 for p in existing], default=0) + 1
+    for i in range(hands):
+        cycle.participants.append(CycleParticipant(
+            member_id=member.id, hand_number=first_hand + i,
+            position=(next_position + i) if next_position is not None else None))
+
+    # 2) Encaissement du rappel (et éventuellement de la cotisation du tour en cours)
+    label = f"{hands} main(s)"
+    if past_rappel > 0:
+        db.session.add(Transaction(member_id=member.id, type='TONTINE', amount=past_rappel, date=date.today(),
+                                   cycle_id=cycle.id, contribution_type_id=cycle.contribution_type_id,
+                                   description=f"Rappel d'entrée {cycle.display_name} : {tours_done} tour(s) x {label}",
+                                   created_by=current_user.id, payment_mode=payment_mode, payment_reference=reference))
+    if current_share > 0:
+        db.session.add(Transaction(member_id=member.id, type='TONTINE', amount=current_share, date=date.today(),
+                                   cycle_id=cycle.id, contribution_type_id=cycle.contribution_type_id,
+                                   description=f"Cotisation du tour {tours_done + 1} ({label}) - {cycle.display_name}",
+                                   created_by=current_user.id, payment_mode=payment_mode, payment_reference=reference))
+
+    # 3) Reversement du rappel : chaque main déjà servie reçoit la part qui manquait à sa cagnotte
+    complement = amount * hands
+    paid_back = Decimal('0')
+    if past_rappel > 0 and destination == 'BENEFICIAIRES':
+        for beneficiary in CycleBeneficiary.query.filter_by(cycle_id=cycle.id).order_by(CycleBeneficiary.position).all():
+            beneficiary.gross_amount = Decimal(str(beneficiary.gross_amount)) + complement
+            beneficiary.net_amount = Decimal(str(beneficiary.net_amount)) + complement
+            db.session.add(Transaction(member_id=beneficiary.member_id, type='BENEFICE_TONTINE', amount=complement,
+                                       date=date.today(), cycle_id=cycle.id,
+                                       description=f"Complément de cagnotte (tour {beneficiary.position}) : rappel de {member.full_name}",
+                                       created_by=current_user.id, payment_mode=payment_mode))
+            paid_back += complement
+
+    # 4) Le cycle grandit : cagnotte des prochains tours et date de fin recalculées
+    parts = len(cycle.participants)
+    cycle.group_type = str(parts)[:5]
+    cycle.total_amount = amount * parts
+    cycle.end_date = cycle.start_date + timedelta(days=(cycle.frequency_days or 14) * (parts - 1))
+    db.session.commit()
+
+    log_activity(current_user.id, current_user.role,
+                 f"{member.full_name} rejoint {cycle.display_name} ({label}), rappel {total_due:,.0f} FCFA", request.remote_addr)
+    message = f"{member.full_name} rejoint le cycle avec {label}. Rappel encaissé : {total_due:,.0f} FCFA."
+    if paid_back:
+        message += f" À reverser aux bénéficiaires déjà servis : {paid_back:,.0f} FCFA ({complement:,.0f} par main servie)."
+    elif past_rappel:
+        message += " Le rappel reste en caisse."
+    flash(message.replace(',', ' '), 'success')
     return back
 
 

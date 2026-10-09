@@ -478,17 +478,24 @@ class Sanction(TenantMixin, db.Model):
         return self.status == 'PAID'
 
     # NOUVELLES MÉTHODES AJOUTÉES
+    # Liste unique des types de sanction (formulaires, pages, rapports)
+    TYPES = [
+        ('RETARD_PAIEMENT', 'Retard de paiement'),
+        ('NON_PAIEMENT', 'Non-paiement'),
+        ('ABSENCE', 'Absence non justifiée'),
+        ('RETARD_REUNION', 'Retard à la réunion'),
+        ('RETARD_EMPRUNT', 'Retard de remboursement'),
+        ('ECHEC_COTISATION', 'Échec de cotisation'),
+        ('COMPORTEMENT', 'Mauvais comportement'),
+        ('AUTRE', 'Autre'),
+    ]
+
     def get_type_display(self):
-        types = {
-            'RETARD_PAIEMENT': 'Retard de paiement',
-            'NON_PAIEMENT': 'Non-paiement',
-            'ABSENCE': 'Absence non justifiée',
-            'RETARD_REUNION': 'Retard à la réunion',
-            'RETARD_EMPRUNT': 'Retard remboursement',
-            'ECHEC_COTISATION': 'Échec de cotisation',
-            'AUTRE': 'Autre'
-        }
-        return types.get(self.type_sanction, self.type_sanction)
+        return dict(self.TYPES).get(self.type_sanction, self.type_sanction)
+
+    @property
+    def type_display(self):
+        return self.get_type_display()
 
     def mark_as_paid(self):
         self.status = 'PAID'

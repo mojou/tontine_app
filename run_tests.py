@@ -33,8 +33,10 @@ SUITES = [
     ('test_inscription.py', 'su.db', 'Création de tontine et inscription'),
     ('test_avals_cotisations.py', 'av.db', 'Avals et cotisations'),
     ('test_cycles.py', 'cy.db', 'Cycles, mains, tirage, enchères'),
+    ('test_ajout_cycle.py', 'aj.db', 'Ajout en cours de cycle (rappel)'),
     ('test_seances_exercice.py', 'se.db', "Séances et fin d'exercice"),
     ('test_mot_de_passe.py', 'rs.db', 'Mot de passe oublié'),
+    ('test_sanctions.py', 'sa.db', 'Sanctions + contrôle de toutes les pages'),
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),
     ('test_audit.py', 'au.db', "Défauts corrigés lors de l'audit"),
 ]
