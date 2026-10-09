@@ -65,7 +65,7 @@
                             <input type="number" class="form-control" id="loan_interest_rate" name="loan_interest_rate" min="0" max="100" step="0.1" required value="{{ val('loan_interest_rate') }}">
                         </div>
                         <div class="form-group col-md-3">
-                            <label for="max_aid_per_member">Aides max. par membre</label>
+                            <label for="max_aid_per_member">Aides max. par membre et par an</label>
                             <input type="number" class="form-control" id="max_aid_per_member" name="max_aid_per_member" min="0" max="50" step="1" required value="{{ val('max_aid_per_member') }}">
                         </div>
                     </div>
@@ -146,6 +146,87 @@
                     <input type="text" name="name" class="form-control form-control-sm mr-2 mb-2" maxlength="80" placeholder="Nom (facultatif)">
                     <button type="submit" class="btn btn-sm btn-primary mb-2"><i class="fas fa-plus"></i> Ajouter ce niveau</button>
                 </form>
+            </div>
+        </div>
+
+        {# ---------------- Aides sociales ---------------- #}
+        <div class="card mt-4" id="aides">
+            <div class="card-header"><i class="fas fa-hand-holding-heart" style="color: var(--hl-gold)"></i> Aides sociales : conditions et barème</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('aid_settings') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="section" value="rules">
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label class="small font-weight-bold" for="aidSeniority">Ancienneté minimale (jours)</label>
+                            <input type="number" class="form-control" id="aidSeniority" name="aid_min_seniority_days" min="0" max="3650" value="{{ aid_rule_values.seniority_days }}" required>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label class="small font-weight-bold" for="aidDelay">Délai de déclaration (jours)</label>
+                            <input type="number" class="form-control" id="aidDelay" name="aid_declaration_days" min="0" max="3650" value="{{ aid_rule_values.declaration_days }}" required>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label class="small font-weight-bold" for="aidMax">Aides max. par membre et par an</label>
+                            <input type="number" class="form-control" id="aidMax" name="max_aid_per_member" min="0" max="50" value="{{ aid_rule_values.max_per_year }}" required>
+                        </div>
+                    </div>
+                    {% for name, label, value in [
+                        ('aid_require_fonds_caisse', 'Avoir payé son fonds de caisse', aid_rule_values.require_fonds_caisse),
+                        ('aid_require_secours', 'Être à jour de la cotisation de la caisse de secours', aid_rule_values.require_secours),
+                        ('aid_double_validation', 'Double validation : président ET trésorier', aid_rule_values.double_validation),
+                        ("aid_deduct_sanctions", "Retenir les amendes impayées sur l'aide", aid_rule_values.deduct_sanctions)] %}
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="{{ name }}" name="{{ name }}" {% if value %}checked{% endif %}>
+                        <label class="custom-control-label" for="{{ name }}">{{ label }}</label>
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary btn-sm mt-3"><i class="fas fa-save"></i> Enregistrer les conditions</button>
+                </form>
+
+                <hr>
+                <h6 class="font-weight-bold">Barème</h6>
+                <p class="small text-muted">Montant versé pour chaque événement. « Montant libre » : le membre propose un montant, plafonné à la valeur indiquée.</p>
+                <div class="table-container">
+                    <table class="table table-sm">
+                        <thead><tr><th>Événement</th><th>Montant (FCFA)</th><th>Libre</th><th>Justificatif</th><th>Max / an</th><th>Actif</th><th></th></tr></thead>
+                        <tbody>
+                        {% for t in aid_types %}
+                        {% set fid = 'aidType' ~ t.id %}
+                        <tr>
+                            <td><input type="text" name="name" form="{{ fid }}" class="form-control form-control-sm" value="{{ t.name }}" maxlength="80" required aria-label="Nom"></td>
+                            <td><input type="number" name="amount" form="{{ fid }}" class="form-control form-control-sm" style="width:110px" min="1" value="{{ t.amount|int }}" required aria-label="Montant"></td>
+                            <td><input type="checkbox" name="free_amount" form="{{ fid }}" {% if t.free_amount %}checked{% endif %} aria-label="Montant libre"></td>
+                            <td><input type="checkbox" name="requires_document" form="{{ fid }}" {% if t.requires_document %}checked{% endif %} aria-label="Justificatif"></td>
+                            <td><input type="number" name="max_per_year" form="{{ fid }}" class="form-control form-control-sm" style="width:70px" min="0" max="50" value="{{ t.max_per_year or 0 }}" aria-label="Maximum par an"></td>
+                            <td><input type="checkbox" name="is_active" form="{{ fid }}" {% if t.is_active %}checked{% endif %} aria-label="Actif"></td>
+                            <td>
+                                <form method="POST" action="{{ url_for('aid_settings') }}" id="{{ fid }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="section" value="type">
+                                    <input type="hidden" name="type_id" value="{{ t.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">OK</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr style="background: var(--hl-cream)">
+                            <td><input type="text" name="name" form="aidTypeNew" class="form-control form-control-sm" maxlength="80" placeholder="Nouvel événement" required aria-label="Nom du nouvel événement"></td>
+                            <td><input type="number" name="amount" form="aidTypeNew" class="form-control form-control-sm" style="width:110px" min="1" required aria-label="Montant"></td>
+                            <td><input type="checkbox" name="free_amount" form="aidTypeNew" aria-label="Montant libre"></td>
+                            <td><input type="checkbox" name="requires_document" form="aidTypeNew" checked aria-label="Justificatif"></td>
+                            <td><input type="number" name="max_per_year" form="aidTypeNew" class="form-control form-control-sm" style="width:70px" min="0" max="50" value="0" aria-label="Maximum par an"></td>
+                            <td>—</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('aid_settings') }}" id="aidTypeNew">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="section" value="type">
+                                    <button type="submit" class="btn btn-sm btn-primary">Ajouter</button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

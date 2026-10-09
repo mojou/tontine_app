@@ -33,6 +33,13 @@ class Tontine(db.Model):
     # Avalistes : un aval est exigé au-delà de ce montant (0 = toujours)
     guarantee_threshold = db.Column(db.Numeric(10, 2), default=Decimal('0.00'))
     guarantors_min = db.Column(db.Integer, default=1)
+    # Aides sociales (caisse de secours) : règles votées par la tontine
+    aid_min_seniority_days = db.Column(db.Integer, default=90)      # ancienneté minimale
+    aid_require_fonds_caisse = db.Column(db.Boolean, default=True)  # fonds de caisse payé
+    aid_require_secours = db.Column(db.Boolean, default=True)       # à jour de la caisse de secours
+    aid_declaration_days = db.Column(db.Integer, default=30)        # délai pour déclarer l'événement
+    aid_double_validation = db.Column(db.Boolean, default=True)     # président ET trésorier
+    aid_deduct_sanctions = db.Column(db.Boolean, default=True)      # amendes impayées retenues
 
 
 # ============================================================
@@ -704,20 +711,39 @@ class Aide(TenantMixin, db.Model):
 
     approver = db.relationship('User', foreign_keys=[approved_by], backref='approved_aides')
 
+    aid_type_id = db.Column(db.Integer, db.ForeignKey('aid_types.id'), nullable=True)
+    aid_type = db.relationship('AidType')
+    event_date = db.Column(db.Date, nullable=True)
+    document = db.Column(db.String(200), nullable=True)            # justificatif (stockage privé)
+    president_approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    treasurer_approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    rejection_reason = db.Column(db.String(255), nullable=True)
+    sanctions_deducted = db.Column(db.Numeric(10, 2), nullable=True)
+    paid_at = db.Column(db.Date, nullable=True)
+
     @property
     def member_name(self):
         return self.member.full_name if self.member else "N/A"
 
-    # NOUVELLE MÉTHODE AJOUTÉE
+    LEGACY_TYPES = {'MALADIE': 'Maladie', 'DECES': 'Décès', 'MARIAGE': 'Mariage', 'NAISSANCE': 'Naissance', 'AUTRE': 'Autre'}
+
     def get_type_display(self):
-        types = {
-            'MALADIE': 'Maladie',
-            'DECES': 'Décès',
-            'MARIAGE': 'Mariage',
-            'NAISSANCE': 'Naissance',
-            'AUTRE': 'Autre'
-        }
-        return types.get(self.aide_type, self.aide_type)
+        if self.aid_type:
+            return self.aid_type.name
+        return self.LEGACY_TYPES.get(self.aide_type, self.aide_type)
+
+    @property
+    def status_display(self):
+        if self.is_paid:
+            return 'Versée'
+        return {'PENDING': 'En attente de validation', 'APPROVED': 'Approuvée, à verser',
+                'REJECTED': 'Refusée'}.get(self.status, self.status)
+
+    @property
+    def status_color(self):
+        if self.is_paid:
+            return 'success'
+        return {'PENDING': 'warning', 'APPROVED': 'primary', 'REJECTED': 'secondary'}.get(self.status, 'secondary')
 
 
 # ============================================================
@@ -1204,3 +1230,20 @@ class LoginAttempt(db.Model):
     ip_address = db.Column(db.String(45), nullable=False)
     identifier = db.Column(db.String(200), nullable=False)  # tontine:identifiant (en minuscules)
     created_at = db.Column(db.DateTime, default=utcnow, index=True)
+
+
+# ============================================================
+# BARÈME DES AIDES SOCIALES (propre à chaque tontine)
+# ============================================================
+class AidType(TenantMixin, db.Model):
+    __tablename__ = 'aid_types'
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(30), nullable=False)
+    name = db.Column(db.String(80), nullable=False)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)     # montant fixe (plafond si montant libre)
+    free_amount = db.Column(db.Boolean, default=False)        # montant proposé, plafonné (ex. « Autre »)
+    requires_document = db.Column(db.Boolean, default=True)
+    max_per_year = db.Column(db.Integer, default=0)           # 0 = pas de limite propre à ce type
+    is_active = db.Column(db.Boolean, default=True)
+    display_order = db.Column(db.Integer, default=0)

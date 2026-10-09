@@ -1,217 +1,234 @@
 {% extends "base.html" %}
 
-{% block title %}Assistance Sociale{% if current_tontine %} - {{ current_tontine.name }}{% else %} - {{ app_name }}{% endif %}{% endblock %}
+{% block title %}Aides sociales - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-hand-holding-heart"></i> Aides sociales{% endblock %}
+
+{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .bareme { display: flex; flex-wrap: wrap; gap: 10px; }
+    .bareme .item { flex: 1 1 200px; border: 1px solid #ece9dd; border-radius: 12px; padding: 12px 14px; background: #fff; }
+    .bareme .amount { font-size: 1.2rem; font-weight: 800; color: var(--hl-green); }
+    .check-ok { color: var(--hl-green-700); }
+    .check-ko { color: #c0392b; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="h3 font-weight-bold mb-0">Gestion de l'Aide Sociale</h2>
-        <p class="text-muted mb-0">Suivi des assistances octroyées (Maladies, Décès, Mariages, Naissances).</p>
-    </div>
-    {% if current_user.is_admin() or current_user.role in ['PRESIDENT', 'TRESORIER'] %}
-    <button class="btn btn-success shadow-sm" data-toggle="modal" data-target="#requestAideModal">
-        <i class="fas fa-hand-holding-heart mr-2"></i>Demander une Aide
-    </button>
-    {% endif %}
-</div>
-
-<div class="card shadow-sm border-0 mb-5">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="bg-dark text-white">
-                    <tr>
-                        <th>ID</th>
-                        <th>Bénéficiaire</th>
-                        <th>Type d'Événement</th>
-                        <th>Description / Contexte</th>
-                        <th>Date de demande</th>
-                        <th>Montant (FCFA)</th>
-                        <th>Statut</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if aides %}
-                        {% for aide in aides %}
-                        <tr>
-                            <td><small class="font-weight-bold text-muted">#{{ aide.id }}</small></td>
-                            <td><strong>{{ aide.member.full_name }}</strong></td>
-                            <td>
-                                {% if aide.aide_type == 'MALADIE' %}
-                                    <span class="badge badge-danger"><i class="fas fa-heartbeat mr-1"></i>Maladie</span>
-                                {% elif aide.aide_type == 'DECES' %}
-                                    <span class="badge badge-secondary"><i class="fas fa-ribbon mr-1"></i>Décès</span>
-                                {% elif aide.aide_type == 'MARIAGE' %}
-                                    <span class="badge badge-success"><i class="fas fa-ring mr-1"></i>Mariage</span>
-                                {% elif aide.aide_type == 'NAISSANCE' %}
-                                    <span class="badge badge-info"><i class="fas fa-baby mr-1"></i>Naissance</span>
-                                {% else %}
-                                    <span class="badge badge-dark">{{ aide.aide_type }}</span>
-                                {% endif %}
-                            </td>
-                            <td><small class="text-muted">{{ aide.description or 'Non renseigné' }}</small></td>
-                            <td>{{ aide.request_date.strftime('%d/%m/%Y') }}</td>
-                            <td class="font-weight-bold text-success">{{ "{:,.0f}".format(aide.amount).replace(',', ' ') }} FCFA</td>
-                            <td>
-                                {% if aide.is_paid %}
-                                    <span class="badge badge-success px-3 py-1">Payée</span>
-                                {% elif aide.status == 'APPROVED' %}
-                                    <span class="badge badge-info px-3 py-1">Approuvée</span>
-                                {% elif aide.status == 'PENDING' %}
-                                    <span class="badge badge-warning px-3 py-1">En attente</span>
-                                {% elif aide.status == 'REJECTED' %}
-                                    <span class="badge badge-danger px-3 py-1">Rejetée</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    {% if aide.status == 'PENDING' and current_user.role in ['PRESIDENT', 'TRESORIER'] %}
-                                    <form action="{{ url_for('approve_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
-                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
-                                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Approuver cette aide ?')" title="Approuver">
-                                            <i class="fas fa-check"></i>
-                                        </button>
-                                    </form>
-                                    
-                                    <form action="{{ url_for('reject_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
-                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
-                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Rejeter cette aide ?')" title="Rejeter">
-                                            <i class="fas fa-times"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                    
-                                    {% if aide.status == 'APPROVED' and not aide.is_paid and current_user.role in ['PRESIDENT', 'TRESORIER'] %}
-                                    <form action="{{ url_for('pay_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
-                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
-                                        <input type="hidden" name="payment_mode" value="ESPECE">
-                                        <button type="submit" class="btn btn-sm btn-info" onclick="return confirm('Payer cette aide ?')" title="Payer">
-                                            <i class="fas fa-money-bill"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                    
-                                    {% if aide.status == 'PENDING' and current_user.role == 'PRESIDENT' %}
-                                    <form action="{{ url_for('delete_aide', aide_id=aide.id) }}" method="POST" style="display:inline;">
-                                        {{ approval_form.csrf_token if approval_form else form.csrf_token }}
-                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer cette demande ?')" title="Supprimer">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
+<div class="fade-in">
+    <div class="row">
+        <div class="col-lg-8">
+            {# ---------------- Barème ---------------- #}
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                    <span><i class="fas fa-list"></i> Barème des aides de la tontine</span>
+                    {% if current_user.role == 'PRESIDENT' %}<a href="{{ url_for('tontine_settings') }}#aides" class="small">Modifier le barème et les règles</a>{% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="bareme">
+                        {% for t in types %}
+                        <div class="item">
+                            <div class="small text-muted">{{ t.name }}</div>
+                            <div class="amount">{{ 'jusqu\'à ' if t.free_amount }}{{ fcfa(t.amount) }} FCFA</div>
+                            <div class="small text-muted">
+                                {% if t.requires_document %}<i class="fas fa-paperclip"></i> justificatif{% endif %}
+                                {% if t.max_per_year %} · {{ t.max_per_year }}/an max{% endif %}
+                            </div>
+                        </div>
                         {% endfor %}
-                    {% else %}
-                        <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">
-                                <i class="fas fa-hand-holding-heart fa-2x mb-2 d-block"></i>
-                                Aucune aide sociale enregistrée pour le moment.
-                            </td>
-                        </tr>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        Règles : ancienneté d'au moins {{ rules.seniority_days }} jours ;
+                        {% if rules.require_fonds_caisse %}fonds de caisse payé ; {% endif %}
+                        {% if rules.require_secours %}être à jour de la caisse de secours ; {% endif %}
+                        déclaration dans les {{ rules.declaration_days }} jours ;
+                        {{ rules.max_per_year }} aide(s) par an maximum ;
+                        {{ 'validation par le président ET le trésorier' if rules.double_validation else 'validation par le président ou le trésorier' }}
+                        {% if rules.deduct_sanctions %} ; les amendes impayées sont retenues sur l'aide{% endif %}.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            {# ---------------- Éligibilité de l'utilisateur ---------------- #}
+            {% if my_checks %}
+            <div class="card">
+                <div class="card-header"><i class="fas fa-user-check"></i> Mon droit à une aide</div>
+                <ul class="list-group list-group-flush small">
+                    {% for ok, label, detail in my_checks %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="{{ 'check-ok' if ok else 'check-ko' }}"><i class="fas {{ 'fa-check-circle' if ok else 'fa-times-circle' }}"></i> {{ label }}</span>
+                        <span class="text-muted">{{ detail }}</span>
+                    </li>
+                    {% endfor %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Aides demandées cette année</span><span class="text-muted">{{ used_this_year }} / {{ rules.max_per_year }}</span>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+            {% if is_bureau %}
+            <div class="card">
+                <div class="card-body">
+                    <div class="small text-muted">Caisse de secours disponible</div>
+                    <div class="h4 mb-0 {{ 'text-danger' if secours_balance <= 0 }}" style="color: var(--hl-green)">{{ fcfa(secours_balance) }} FCFA</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ---------------- Demande ---------------- #}
+    <div class="card">
+        <div class="card-header bg-primary"><i class="fas fa-file-medical"></i> Demander une aide</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('request_aide') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-row">
+                    {% if is_bureau %}
+                    <div class="form-group col-md-4">
+                        <label class="small font-weight-bold" for="aidMember">Membre</label>
+                        <select name="member_id" id="aidMember" class="form-control" required>
+                            <option value="">-- Choisir --</option>
+                            {% for m in members %}<option value="{{ m.id }}">{{ m.full_name }}</option>{% endfor %}
+                        </select>
+                    </div>
                     {% endif %}
+                    <div class="form-group col-md-{{ 4 if is_bureau else 6 }}">
+                        <label class="small font-weight-bold" for="aidType">Événement</label>
+                        <select name="aid_type_id" id="aidType" class="form-control" required>
+                            <option value="">-- Choisir --</option>
+                            {% for t in types %}
+                            <option value="{{ t.id }}" data-free="{{ 1 if t.free_amount else 0 }}" data-amount="{{ t.amount|int }}" data-doc="{{ 1 if t.requires_document else 0 }}">
+                                {{ t.name }} — {{ 'jusqu\'à ' if t.free_amount }}{{ fcfa(t.amount) }} FCFA
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group col-md-{{ 4 if is_bureau else 6 }}">
+                        <label class="small font-weight-bold" for="aidDate">Date de l'événement</label>
+                        <input type="date" name="event_date" id="aidDate" class="form-control" max="{{ today }}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-4" id="amountGroup" style="display:none">
+                        <label class="small font-weight-bold" for="aidAmount">Montant demandé (FCFA)</label>
+                        <input type="number" name="amount" id="aidAmount" class="form-control" min="1" step="1">
+                        <small class="text-muted" id="amountHelp"></small>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label class="small font-weight-bold" for="aidDoc">Justificatif <span id="docRequired" class="text-danger" style="display:none">*</span></label>
+                        <input type="file" name="document" id="aidDoc" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        <small class="text-muted">Photo ou PDF (acte, certificat...). Visible seulement du bureau.</small>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label class="small font-weight-bold" for="aidDesc">Précisions</label>
+                        <textarea name="description" id="aidDesc" class="form-control" rows="2" maxlength="1000"></textarea>
+                    </div>
+                </div>
+                {% if current_user.role == 'PRESIDENT' %}
+                <div class="form-group">
+                    <label class="small font-weight-bold" for="aidDerog">Dérogation (président, si une condition n'est pas remplie)</label>
+                    <input type="text" name="derogation" id="aidDerog" class="form-control form-control-sm" maxlength="200"
+                           placeholder="Laisser vide sauf décision du bureau. Ex : dérogation votée en AG du 12/10">
+                </div>
+                {% endif %}
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Envoyer la demande</button>
+            </form>
+        </div>
+    </div>
+
+    {# ---------------- Liste ---------------- #}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+            <span><i class="fas fa-history"></i> {{ 'Demandes d\'aide' if is_bureau else 'Mes demandes' }}</span>
+            <form method="GET" class="form-inline">
+                <select name="status" class="form-control form-control-sm" onchange="this.form.submit()" aria-label="Filtrer">
+                    <option value="">Toutes</option>
+                    <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>En attente</option>
+                    <option value="APPROVED" {% if status_filter == 'APPROVED' %}selected{% endif %}>À verser</option>
+                    <option value="PAID" {% if status_filter == 'PAID' %}selected{% endif %}>Versées</option>
+                    <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>Refusées</option>
+                </select>
+            </form>
+        </div>
+        {% if aides %}
+        <div class="table-container">
+            <table class="table mb-0">
+                <thead><tr><th>Membre</th><th>Événement</th><th>Date</th><th class="text-right">Montant</th><th>Statut</th><th>Validations</th><th></th></tr></thead>
+                <tbody>
+                {% for a in aides %}
+                <tr>
+                    <td>{{ a.member_name }}</td>
+                    <td>{{ a.get_type_display() }}
+                        {% if is_bureau and a.description %}<br><small class="text-muted">{{ a.description|truncate(80) }}</small>{% endif %}
+                        {% if a.document and (is_bureau or a.member_id == current_user.member_id) %}<br><a href="{{ url_for('aid_document', aide_id=a.id) }}" target="_blank" class="small"><i class="fas fa-paperclip"></i> justificatif</a>{% endif %}
+                    </td>
+                    <td class="small">{{ a.event_date.strftime('%d/%m/%Y') if a.event_date else a.request_date.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-right">{{ fcfa(a.amount) }}{% if a.sanctions_deducted %}<br><small class="text-danger">− {{ fcfa(a.sanctions_deducted) }} amendes</small>{% endif %}</td>
+                    <td><span class="badge badge-{{ a.status_color }}">{{ a.status_display }}</span>
+                        {% if a.rejection_reason %}<br><small class="text-muted">{{ a.rejection_reason }}</small>{% endif %}</td>
+                    <td class="small">
+                        <i class="fas {{ 'fa-check-circle check-ok' if a.president_approved_by else 'fa-circle text-muted' }}"></i> Président<br>
+                        <i class="fas {{ 'fa-check-circle check-ok' if a.treasurer_approved_by else 'fa-circle text-muted' }}"></i> Trésorier
+                    </td>
+                    <td class="text-right" style="min-width: 190px">
+                        {% if can_manage and a.status == 'PENDING' and a.member_id != current_user.member_id
+                              and not ((current_user.role == 'PRESIDENT' and a.president_approved_by) or (current_user.role == 'TRESORIER' and a.treasurer_approved_by)) %}
+                        <form method="POST" action="{{ url_for('approve_aide', aide_id=a.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-success mb-1"><i class="fas fa-check"></i> Valider</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('reject_aide', aide_id=a.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="reason" value="">
+                            <button type="submit" class="btn btn-sm btn-outline-danger mb-1"
+                                    onclick="var r = prompt('Motif du refus :'); if (r === null) return false; this.form.reason.value = r; return true;"><i class="fas fa-times"></i> Refuser</button>
+                        </form>
+                        {% elif can_manage and a.status == 'APPROVED' and not a.is_paid %}
+                        <form method="POST" action="{{ url_for('pay_aide', aide_id=a.id) }}" class="form-inline justify-content-end">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <select name="payment_mode" class="form-control form-control-sm mr-1 mb-1" aria-label="Mode de paiement">
+                                {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-gold mb-1" onclick="return confirm('Verser cette aide ?');"><i class="fas fa-hand-holding-usd"></i> Verser</button>
+                        </form>
+                        {% endif %}
+                        {% if current_user.role == 'PRESIDENT' and a.status != 'APPROVED' and not a.is_paid %}
+                        <form method="POST" action="{{ url_for('delete_aide', aide_id=a.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-link text-danger mb-1" onclick="return confirm('Supprimer cette demande ?');" title="Supprimer"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
                 </tbody>
             </table>
         </div>
-    </div>
-    
-    {% if pagination and pagination.pages > 1 %}
-    <div class="card-footer bg-white">
-        <div class="d-flex justify-content-between align-items-center flex-wrap">
-            <div class="small text-muted">
-                Page {{ pagination.page }} sur {{ pagination.pages }} ({{ pagination.total }} aides)
-            </div>
-            <nav>
-                <ul class="pagination pagination-sm mb-0">
-                    {% if pagination.has_prev %}
-                    <li class="page-item">
-                        <a class="page-link" href="{{ url_for('aides', page=pagination.prev_num, status=status_filter) }}">Précédent</a>
-                    </li>
-                    {% endif %}
-                    
-                    {% for p in range(pagination.pages) %}
-                        <li class="page-item {% if p + 1 == pagination.page %}active{% endif %}">
-                            <a class="page-link" href="{{ url_for('aides', page=p+1, status=status_filter) }}">{{ p + 1 }}</a>
-                        </li>
-                    {% endfor %}
-                    
-                    {% if pagination.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="{{ url_for('aides', page=pagination.next_num, status=status_filter) }}">Suivant</a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
-        </div>
-    </div>
-    {% endif %}
-</div>
-
-{% if current_user.is_admin() or current_user.role in ['PRESIDENT', 'TRESORIER'] %}
-<div class="modal fade" id="requestAideModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <form action="{{ url_for('request_aide') }}" method="POST">
-            {{ form.hidden_tag() }}
-            
-            <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title font-weight-bold"><i class="fas fa-hand-holding-heart mr-2"></i>Demander une aide sociale</h5>
-                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    
-                    <div class="form-group">
-                        {{ form.member_id.label(class="font-weight-bold") }}
-                        {{ form.member_id(class="form-control", required=True) }}
-                        {% if form.member_id.errors %}
-                            <div class="text-danger small">{% for error in form.member_id.errors %}{{ error }}{% endfor %}</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                {{ form.aide_type.label(class="font-weight-bold") }}
-                                {{ form.aide_type(class="form-control", required=True) }}
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                {{ form.amount.label(class="font-weight-bold") }}
-                                {{ form.amount(class="form-control", placeholder="Ex: 50000", required=True) }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        {{ form.description.label(class="font-weight-bold") }}
-                        {{ form.description(class="form-control", rows="3", placeholder="Précisez le contexte...", required=True) }}
-                    </div>
-                    
-                    <div class="alert alert-info small mt-2">
-                        <i class="fas fa-info-circle"></i>
-                        Chaque membre peut bénéficier d'un maximum de 3 aides.
-                    </div>
-                </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
-                    {{ form.submit(class="btn btn-success font-weight-bold") }}
-                </div>
-            </div>
-        </form>
+        {% else %}
+        <div class="card-body text-muted">Aucune demande d'aide.</div>
+        {% endif %}
     </div>
 </div>
-{% endif %}
+{% endblock %}
 
+{% block extra_js %}
 <script>
-$(document).ready(function() {
-    setTimeout(function() {
-        $('.alert').fadeOut('slow');
-    }, 5000);
+$(function() {
+    function refresh() {
+        var opt = $('#aidType option:selected');
+        var free = opt.data('free') === 1, doc = opt.data('doc') === 1;
+        $('#amountGroup').toggle(free);
+        $('#aidAmount').prop('required', free).attr('max', opt.data('amount'));
+        $('#amountHelp').text(free ? 'Plafond : ' + new Intl.NumberFormat('fr-FR').format(opt.data('amount')) + ' FCFA' : '');
+        $('#docRequired').toggle(doc);
+        $('#aidDoc').prop('required', doc);
+    }
+    $('#aidType').on('change', refresh);
+    refresh();
 });
 </script>
 {% endblock %}

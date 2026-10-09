@@ -37,6 +37,7 @@ SUITES = [
     ('test_seances_exercice.py', 'se.db', "Séances et fin d'exercice"),
     ('test_mot_de_passe.py', 'rs.db', 'Mot de passe oublié'),
     ('test_sanctions.py', 'sa.db', 'Sanctions + contrôle de toutes les pages'),
+    ('test_aides.py', 'ai.db', 'Aides sociales (règles, barème, versement)'),
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),
     ('test_audit.py', 'au.db', "Défauts corrigés lors de l'audit"),
 ]

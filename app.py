@@ -113,12 +113,13 @@ from models import (
     ContributionPlanning, CycleReport, CaisseBalance,
     Poll, PollOption, PollVote, TontineDraw, TontineDrawResult, GalleryPhoto, Tontine,
     ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest,
-    LoginAttempt
+    LoginAttempt, AidType
 )
 import finance
 import report_export
 import re
 import secrets
+import uuid
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from tenancy import set_current_tenant, tenant_bypass
 
@@ -2580,182 +2581,402 @@ def reports():
 # ============================================================
 
 # ============================================================
-# GESTION DES AIDES SOCIALES
+# AIDES SOCIALES (CAISSE DE SECOURS)
 # ============================================================
+# Règles (réglables par tontine dans Paramètres) :
+#  - membre actif, ancienneté minimale, fonds de caisse payé, à jour de la
+#    caisse de secours, pas en statut rouge
+#  - montant fixé par le barème de la tontine (montant libre plafonné pour « Autre »)
+#  - justificatif obligatoire selon l'événement, déclaration dans un délai fixé
+#  - plafond d'aides par an (global et par type), pas deux fois le même événement
+#  - double validation président + trésorier ; on ne valide pas sa propre aide
+#  - versement seulement si la caisse de secours a les fonds ; amendes retenues
+
+AID_MANAGERS = ['PRESIDENT', 'TRESORIER']
+AID_VIEWERS = ['PRESIDENT', 'TRESORIER', 'SECRETAIRE']
+DOCUMENT_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'webp'}
+
+DEFAULT_AID_TYPES = [
+    ('DECES_MEMBRE', "Décès du membre (versé à l'ayant droit)", 100000, False, True, 0),
+    ('DECES_FAMILLE', "Décès du conjoint ou d'un enfant", 50000, False, True, 0),
+    ('DECES_PARENT', "Décès d'un parent (père, mère)", 25000, False, True, 0),
+    ('MALADIE', 'Maladie / hospitalisation', 15000, False, True, 2),
+    ('NAISSANCE', 'Naissance', 10000, False, True, 0),
+    ('MARIAGE', 'Mariage', 15000, False, True, 1),
+    ('AUTRE', 'Autre (incendie, sinistre...) : montant plafonné', 20000, True, True, 1),
+]
+
+
+def ensure_aid_types(tontine):
+    """Crée le barème par défaut si la tontine n'en a pas encore"""
+    if AidType.query.filter_by(tontine_id=tontine.id).count():
+        return
+    for order, (code, name, amount, free, doc, per_year) in enumerate(DEFAULT_AID_TYPES):
+        db.session.add(AidType(tontine_id=tontine.id, code=code, name=name, amount=Decimal(amount), free_amount=free,
+                               requires_document=doc, max_per_year=per_year, display_order=order))
+    db.session.commit()
+
+
+def aid_rules(tontine):
+    """Règles de la tontine, avec les valeurs par défaut pour les tontines créées avant leur ajout"""
+    def val(name, default):
+        value = getattr(tontine, name)
+        return default if value is None else value
+    return {
+        'seniority_days': val('aid_min_seniority_days', 90),
+        'require_fonds_caisse': val('aid_require_fonds_caisse', True),
+        'require_secours': val('aid_require_secours', True),
+        'declaration_days': val('aid_declaration_days', 30),
+        'double_validation': val('aid_double_validation', True),
+        'deduct_sanctions': val('aid_deduct_sanctions', True),
+        'max_per_year': tontine.max_aid_per_member if tontine.max_aid_per_member is not None else 2,
+    }
+
+
+def _member_paid(member, tx_type):
+    return Decimal(str(db.session.query(db.func.sum(Transaction.amount)).filter(
+        Transaction.member_id == member.id, Transaction.type == tx_type).scalar() or 0))
+
+
+def secours_situation(member):
+    """(à jour ?, payé, attendu) pour les cotisations de secours obligatoires"""
+    rubriques = ContributionType.query.filter(ContributionType.category == 'SECOURS', ContributionType.is_active == True,
+                                              ContributionType.is_mandatory == True, ContributionType.amount > 0).all()
+    paid = _member_paid(member, 'SECOURS')
+    if not rubriques:
+        return True, paid, Decimal('0')
+    today = date.today()
+    expected = Decimal('0')
+    for r in rubriques:
+        since = max(member.registration_date or today, r.created_at.date() if r.created_at else today)
+        if r.frequency == 'UNIQUE':
+            periods = 1
+        elif r.frequency == 'PAR_SEANCE':
+            periods = Seance.query.filter(Seance.date >= since, Seance.date <= today).count()
+        elif r.frequency in finance.FREQUENCY_DAYS:
+            periods = max((today - since).days // finance.FREQUENCY_DAYS[r.frequency], 0)  # périodes échues
+        else:
+            periods = 0
+        expected += Decimal(str(r.amount)) * periods
+    return paid >= expected, paid, expected
+
+
+def aid_eligibility(member, tontine):
+    """Liste des conditions [(respectée ?, libellé, détail)]"""
+    rules = aid_rules(tontine)
+    checks = [(member.is_active and member.status == 'ACTIF', 'Membre actif', member.status)]
+    seniority = (date.today() - (member.registration_date or date.today())).days
+    checks.append((seniority >= rules['seniority_days'], f"Ancienneté d'au moins {rules['seniority_days']} jours",
+                   f"{seniority} jour(s)"))
+    if rules['require_fonds_caisse']:
+        due = Decimal(str(tontine.fonds_caisse_amount or 0))
+        paid = _member_paid(member, 'FONDS_CAISSE')
+        checks.append((paid >= due and (due > 0 or paid > 0 or due == 0), 'Fonds de caisse payé',
+                       f"{paid:,.0f} / {due:,.0f} FCFA".replace(',', ' ')))
+    if rules['require_secours']:
+        ok, paid, expected = secours_situation(member)
+        checks.append((ok, 'À jour de la caisse de secours', f"{paid:,.0f} / {expected:,.0f} FCFA".replace(',', ' ')))
+    checks.append((member.tontine_status != 'ROUGE', 'Pas en statut rouge', member.tontine_status or 'VERT'))
+    return checks
+
+
+def _save_aid_document(file):
+    """Justificatif rangé HORS du dossier public : instance/justificatifs/<tontine>/"""
+    if not file or not file.filename:
+        return None
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in DOCUMENT_EXTENSIONS:
+        return None
+    folder = os.path.join(BASE_DIR, 'instance', 'justificatifs', str(g.tenant_id))
+    os.makedirs(folder, exist_ok=True)
+    name = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(folder, name))
+    return f"{g.tenant_id}/{name}"
+
+
+def _secours_balance():
+    rows = dict(db.session.query(Transaction.type, db.func.sum(Transaction.amount))
+                .filter(Transaction.type.in_(['SECOURS', 'AIDE'])).group_by(Transaction.type).all())
+    return Decimal(str(rows.get('SECOURS') or 0)) - Decimal(str(rows.get('AIDE') or 0))
+
 
 @app.route('/aides')
 @login_required
 def aides():
-    """Page de gestion des aides sociales"""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
+    tontine = current_tontine()
+    ensure_aid_types(tontine)
+    rules = aid_rules(tontine)
     status_filter = request.args.get('status', '')
-    
+    is_bureau = current_user.role in AID_VIEWERS
     query = Aide.query
-    if not current_user.is_admin():
+    if not is_bureau:
         query = query.filter_by(member_id=current_user.member_id)
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-    
-    pagination = query.order_by(Aide.request_date.desc()).paginate(page=page, per_page=per_page, error_out=False)
-    pagination_data = get_pagination_data(pagination)
-
-    form = AideForm()
-    approval_form = AideApprovalForm()
-
-    if not current_user.is_admin():
-        form.member_id.choices = [(current_user.member_id, current_user.member.full_name)]
-    else:
-        form.member_id.choices = [(m.id, m.full_name) for m in Member.query.filter_by(is_active=True).all()]
-    
-    return render_template(
-        'aides.html', 
-        aides=pagination_data['items'], 
-        pagination=pagination_data,
-        status_filter=status_filter,
-        form=form,
-        approval_form=approval_form
-    )
+    if status_filter == 'PAID':
+        query = query.filter_by(is_paid=True)
+    elif status_filter:
+        query = query.filter_by(status=status_filter, is_paid=False)
+    aid_list = query.order_by(Aide.request_date.desc(), Aide.id.desc()).all()
+    types = AidType.query.filter_by(is_active=True).order_by(AidType.display_order).all()
+    my_checks = aid_eligibility(current_user.member, tontine) if current_user.member else []
+    members = (Member.query.filter_by(is_active=True).order_by(Member.last_name).all()
+               if is_bureau else [current_user.member] if current_user.member else [])
+    year = date.today().year
+    used_this_year = Aide.query.filter(Aide.member_id == current_user.member_id, Aide.status != 'REJECTED',
+                                       db.extract('year', Aide.request_date) == year).count() if current_user.member else 0
+    return render_template('aides.html', aides=aid_list, types=types, rules=rules, my_checks=my_checks,
+                           members=members, is_bureau=is_bureau, can_manage=current_user.role in AID_MANAGERS,
+                           status_filter=status_filter, secours_balance=_secours_balance(),
+                           used_this_year=used_this_year, today=date.today().isoformat(),
+                           payment_modes=finance.PAYMENT_MODES)
 
 
 @app.route('/aides/request', methods=['POST'])
 @login_required
 def request_aide():
-    """Soumettre une demande d'aide"""
-    form = AideForm()
-    
-    if not current_user.is_admin():
-        form.member_id.choices = [(current_user.member_id, current_user.member.full_name)]
+    """Demande d'aide : toutes les règles de la tontine sont vérifiées ici"""
+    tontine = current_tontine()
+    ensure_aid_types(tontine)
+    rules = aid_rules(tontine)
+    is_bureau = current_user.role in AID_VIEWERS
+    member_id = request.form.get('member_id', type=int) if is_bureau else current_user.member_id
+    if not member_id:
+        member_id = current_user.member_id  # le bureau peut aussi demander pour lui-même
+    member = db.session.get(Member, member_id or 0)
+    aid_type = AidType.query.filter_by(id=request.form.get('aid_type_id', type=int) or 0, is_active=True).first()
+    back = redirect(url_for('aides'))
+    if not member or not aid_type:
+        flash("Choisissez le membre et l'événement.", 'danger')
+        return back
+
+    problems = []
+    try:
+        event_date = datetime.strptime(request.form.get('event_date') or '', '%Y-%m-%d').date()
+    except ValueError:
+        event_date = None
+    if not event_date:
+        problems.append("Indiquez la date de l'événement.")
+    elif event_date > date.today():
+        problems.append("La date de l'événement ne peut pas être dans le futur.")
+    elif (date.today() - event_date).days > rules['declaration_days']:
+        problems.append(f"Délai de déclaration dépassé : l'événement doit être déclaré dans les {rules['declaration_days']} jours.")
+
+    if aid_type.free_amount:
+        amount = _parse_decimal(request.form.get('amount') or '0', 1, aid_type.amount)
+        if amount is None:
+            problems.append(f"Montant demandé invalide : entre 1 et {aid_type.amount:,.0f} FCFA.".replace(',', ' '))
     else:
-        form.member_id.choices = [(m.id, m.full_name) for m in Member.query.filter_by(is_active=True).all()]
-    
-    if form.validate_on_submit():
-        # Vérifier la limite de 3 aides
-        aide_count = Aide.query.filter_by(member_id=form.member_id.data, status='APPROVED').count()
-        max_aids = current_tontine().max_aid_per_member or 3
-        if aide_count >= max_aids:
-            flash(f'Ce membre a déjà atteint la limite de {max_aids} aides.', 'danger')
-            return redirect(url_for('aides'))
-        
-        aide = Aide(
-            member_id=form.member_id.data,
-            aide_type=form.aide_type.data,
-            amount=Decimal(str(form.amount.data)),
-            request_date=date.today(),
-            status='PENDING',
-            is_paid=False,
-            description=form.description.data
-        )
-        db.session.add(aide)
-        db.session.commit()
-        log_activity(current_user.id, current_user.role, f"Demande d'aide #{aide.id}", request.remote_addr)
-        flash('Demande d\'aide soumise avec succès.', 'success')
-        return redirect(url_for('aides'))
-    
-    # Afficher les erreurs du formulaire
-    for field, errors in form.errors.items():
-        for error in errors:
-            flash(f'Erreur dans le champ {field}: {error}', 'danger')
-    
-    return redirect(url_for('aides'))
+        amount = Decimal(str(aid_type.amount))
+
+    year = date.today().year
+    this_year = Aide.query.filter(Aide.member_id == member.id, Aide.status != 'REJECTED',
+                                  db.extract('year', Aide.request_date) == year)
+    if rules['max_per_year'] and this_year.count() >= rules['max_per_year']:
+        problems.append(f"Plafond atteint : {rules['max_per_year']} aide(s) par an et par membre.")
+    if aid_type.max_per_year and this_year.filter(Aide.aid_type_id == aid_type.id).count() >= aid_type.max_per_year:
+        problems.append(f"Plafond atteint pour « {aid_type.name} » : {aid_type.max_per_year} par an.")
+    if event_date and Aide.query.filter(Aide.member_id == member.id, Aide.aid_type_id == aid_type.id,
+                                        Aide.event_date == event_date, Aide.status != 'REJECTED').first():
+        problems.append('Une demande existe déjà pour ce même événement.')
+
+    file = request.files.get('document')
+    if aid_type.requires_document and not (file and file.filename):
+        problems.append('Justificatif obligatoire pour cet événement (photo ou PDF).')
+    elif file and file.filename and file.filename.rsplit('.', 1)[-1].lower() not in DOCUMENT_EXTENSIONS:
+        problems.append('Justificatif : formats acceptés PDF, JPG, PNG, WEBP.')
+
+    unmet = [label for ok, label, _ in aid_eligibility(member, tontine) if not ok]
+    derogation = (request.form.get('derogation') or '').strip()
+    if unmet and not (current_user.role == 'PRESIDENT' and derogation):
+        problems.append('Conditions non remplies : ' + ', '.join(unmet) + '.')
+
+    if problems:
+        for msg in problems:
+            flash(msg, 'danger')
+        return back
+
+    description = (request.form.get('description') or '').strip()[:1000]
+    if unmet and derogation:
+        description = f"[Dérogation du président : {derogation[:200]}] " + description
+    aide = Aide(member_id=member.id, aide_type=aid_type.code, aid_type_id=aid_type.id, amount=amount,
+                request_date=date.today(), event_date=event_date, status='PENDING', is_paid=False,
+                description=description or None, document=_save_aid_document(file))
+    db.session.add(aide)
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, f"Demande d'aide #{aide.id} ({aid_type.name}) pour {member.full_name}",
+                 request.remote_addr)
+    flash(f"Demande d'aide « {aid_type.name} » de {amount:,.0f} FCFA enregistrée : elle attend la validation du bureau.".replace(',', ' '), 'success')
+    return back
 
 
 @app.route('/aides/<int:aide_id>/approve', methods=['POST'])
 @login_required
-@role_required(['PRESIDENT', 'TRESORIER'])
+@role_required(AID_MANAGERS)
 def approve_aide(aide_id):
-    """Approuver une demande d'aide"""
     aide = db.get_or_404(Aide, aide_id)
-    
     if aide.status != 'PENDING':
-        flash('Cette aide ne peut pas être approuvée.', 'warning')
+        flash('Cette demande a déjà été traitée.', 'warning')
         return redirect(url_for('aides'))
-    
-    aide.status = 'APPROVED'
-    aide.approval_date = date.today()
-    aide.approved_by = current_user.id
+    if aide.member_id == current_user.member_id:
+        flash('Vous ne pouvez pas valider votre propre demande d\'aide.', 'danger')
+        return redirect(url_for('aides'))
+    if current_user.role == 'PRESIDENT':
+        aide.president_approved_by = current_user.id
+    else:
+        aide.treasurer_approved_by = current_user.id
+    rules = aid_rules(current_tontine())
+    complete = (aide.president_approved_by and aide.treasurer_approved_by) if rules['double_validation'] else True
+    if complete:
+        aide.status = 'APPROVED'
+        aide.approval_date = date.today()
+        aide.approved_by = current_user.id
+        flash('Aide approuvée : elle peut être versée.', 'success')
+    else:
+        waiting = 'du trésorier' if current_user.role == 'PRESIDENT' else 'du président'
+        flash(f'Validation enregistrée (1/2). En attente de la validation {waiting}.', 'info')
     db.session.commit()
-    
-    log_activity(current_user.id, current_user.role, f"Approbation aide #{aide_id}", request.remote_addr)
-    flash('Aide approuvée avec succès.', 'success')
+    log_activity(current_user.id, current_user.role, f"Validation aide #{aide_id}", request.remote_addr)
     return redirect(url_for('aides'))
 
 
 @app.route('/aides/<int:aide_id>/reject', methods=['POST'])
 @login_required
-@role_required(['PRESIDENT', 'TRESORIER'])
+@role_required(AID_MANAGERS)
 def reject_aide(aide_id):
-    """Rejeter une demande d'aide"""
     aide = db.get_or_404(Aide, aide_id)
-    
     if aide.status != 'PENDING':
-        flash('Cette aide ne peut pas être rejetée.', 'warning')
+        flash('Cette demande a déjà été traitée.', 'warning')
         return redirect(url_for('aides'))
-    
     aide.status = 'REJECTED'
+    aide.rejection_reason = (request.form.get('reason') or '').strip()[:255] or 'Refusée par le bureau'
     db.session.commit()
-    
     log_activity(current_user.id, current_user.role, f"Rejet aide #{aide_id}", request.remote_addr)
-    flash('Aide rejetée.', 'warning')
+    flash('Demande d\'aide refusée.', 'warning')
     return redirect(url_for('aides'))
 
 
 @app.route('/aides/<int:aide_id>/pay', methods=['POST'])
 @login_required
-@role_required(['TRESORIER', 'PRESIDENT'])
+@role_required(AID_MANAGERS)
 def pay_aide(aide_id):
-    """Payer une aide approuvée"""
+    """Versement : caisse de secours suffisante, amendes impayées retenues si la règle est active"""
     aide = db.get_or_404(Aide, aide_id)
-    
     if aide.status != 'APPROVED':
-        flash('Cette aide doit être approuvée avant paiement.', 'danger')
+        flash('Cette aide doit être approuvée avant d\'être versée.', 'danger')
         return redirect(url_for('aides'))
-    
     if aide.is_paid:
-        flash('Cette aide a déjà été payée.', 'warning')
+        flash('Cette aide a déjà été versée.', 'warning')
         return redirect(url_for('aides'))
-    
+    gross = Decimal(str(aide.amount))
+    balance = _secours_balance()
+    if balance < gross:
+        flash(f"Caisse de secours insuffisante ({balance:,.0f} FCFA disponibles pour {gross:,.0f} FCFA). "
+              "Lancez une cotisation exceptionnelle de solidarité (rubrique Caisse de secours) avant de verser.".replace(',', ' '),
+              'danger')
+        return redirect(url_for('aides'))
+
+    payment_mode = _payment_mode_from_form()
+    deducted = Decimal('0')
+    if aid_rules(current_tontine())['deduct_sanctions']:
+        for sanction in Sanction.query.filter_by(member_id=aide.member_id, status='PENDING').order_by(Sanction.sanction_date).all():
+            amount = Decimal(str(sanction.amount))
+            if deducted + amount > gross:
+                break
+            sanction.status = 'PAID'
+            deducted += amount
+            db.session.add(Transaction(member_id=aide.member_id, type='SANCTION', amount=amount, date=date.today(),
+                                       description=f"Amende #{sanction.id} retenue sur l'aide #{aide.id}",
+                                       created_by=current_user.id, payment_mode=payment_mode))
     aide.is_paid = True
-    
-    transaction = Transaction(
-        member_id=aide.member_id,
-        type='AIDE',
-        amount=aide.amount,
-        description=f"Aide {aide.get_type_display()} - {aide.description or 'Sans description'}",
-        date=date.today(),
-        created_by=current_user.id,
-        payment_mode=_payment_mode_from_form()
-    )
-    db.session.add(transaction)
+    aide.paid_at = date.today()
+    aide.sanctions_deducted = deducted or None
+    db.session.add(Transaction(member_id=aide.member_id, type='AIDE', amount=gross, date=date.today(),
+                               description=f"Aide « {aide.get_type_display()} » (demande #{aide.id})",
+                               created_by=current_user.id, payment_mode=payment_mode,
+                               payment_reference=_payment_reference_from_form()))
     db.session.commit()
-    
-    log_activity(current_user.id, current_user.role, f"Paiement aide #{aide_id}", request.remote_addr)
-    flash('Aide payée avec succès.', 'success')
+    log_activity(current_user.id, current_user.role, f"Versement aide #{aide_id} : {gross - deducted:,.0f} FCFA", request.remote_addr)
+    message = f"Aide versée : {gross - deducted:,.0f} FCFA à remettre"
+    if deducted:
+        message += f" ({gross:,.0f} − {deducted:,.0f} d'amendes retenues)"
+    flash((message + '.').replace(',', ' '), 'success')
     return redirect(url_for('aides'))
+
+
+@app.route('/aides/<int:aide_id>/justificatif')
+@login_required
+def aid_document(aide_id):
+    """Justificatif visible seulement du bureau et du membre concerné"""
+    aide = db.get_or_404(Aide, aide_id)
+    if not aide.document or (current_user.role not in AID_VIEWERS and aide.member_id != current_user.member_id):
+        abort(404)
+    root = os.path.realpath(os.path.join(BASE_DIR, 'instance', 'justificatifs'))
+    path = os.path.realpath(os.path.join(root, aide.document))
+    if not path.startswith(root + os.sep) or not os.path.isfile(path):
+        abort(404)
+    return send_file(path, as_attachment=False, download_name=f"justificatif_aide_{aide.id}{os.path.splitext(path)[1]}")
 
 
 @app.route('/aides/<int:aide_id>/delete', methods=['POST'])
 @login_required
 @president_required
 def delete_aide(aide_id):
-    """Supprimer une demande d'aide (uniquement si non approuvée et non payée)"""
+    """Supprimer une demande d'aide (uniquement si elle n'est ni approuvée ni versée)"""
     aide = db.get_or_404(Aide, aide_id)
-    
-    if aide.status == 'APPROVED':
-        flash('Impossible de supprimer une aide déjà approuvée.', 'danger')
+    if aide.status == 'APPROVED' or aide.is_paid:
+        flash('Impossible de supprimer une aide approuvée ou versée.', 'danger')
         return redirect(url_for('aides'))
-    
-    if aide.is_paid:
-        flash('Impossible de supprimer une aide déjà payée.', 'danger')
-        return redirect(url_for('aides'))
-    
+    if aide.document:
+        try:
+            os.remove(os.path.join(BASE_DIR, 'instance', 'justificatifs', aide.document))
+        except OSError:
+            pass
     db.session.delete(aide)
     db.session.commit()
-    
     log_activity(current_user.id, current_user.role, f"Suppression aide #{aide_id}", request.remote_addr)
     flash('Demande d\'aide supprimée.', 'success')
     return redirect(url_for('aides'))
-    #============================================================
+
+
+@app.route('/parametres/aides', methods=['POST'])
+@login_required
+@president_required
+def aid_settings():
+    """Règles et barème des aides (Paramètres > Aides sociales)"""
+    tontine = current_tontine()
+    f = request.form
+    if f.get('section') == 'rules':
+        numbers = {k: f.get(k, type=int) for k in ('aid_min_seniority_days', 'aid_declaration_days', 'max_aid_per_member')}
+        if any(v is None or not 0 <= v <= 3650 for v in numbers.values()):
+            flash('Valeurs invalides (nombres entre 0 et 3650).', 'danger')
+            return redirect(url_for('tontine_settings') + '#aides')
+        tontine.aid_min_seniority_days = numbers['aid_min_seniority_days']
+        tontine.aid_declaration_days = numbers['aid_declaration_days']
+        tontine.max_aid_per_member = numbers['max_aid_per_member']
+        for flag in ('aid_require_fonds_caisse', 'aid_require_secours', 'aid_double_validation', 'aid_deduct_sanctions'):
+            setattr(tontine, flag, f.get(flag) == 'on')
+        flash('Règles des aides enregistrées.', 'success')
+    elif f.get('section') == 'type':
+        type_id = f.get('type_id', type=int)
+        aid_type = db.session.get(AidType, type_id) if type_id else AidType(code='PERSO', display_order=99)
+        if type_id and not aid_type:
+            abort(404)
+        name = (f.get('name') or '').strip()
+        amount = _parse_decimal(f.get('amount') or '', 1, 100_000_000)
+        per_year = f.get('max_per_year', type=int)
+        if not name or len(name) > 80 or amount is None or per_year is None or not 0 <= per_year <= 50:
+            flash("Événement invalide : nom, montant (> 0) et limite annuelle (0 à 50) requis.", 'danger')
+            return redirect(url_for('tontine_settings') + '#aides')
+        aid_type.name, aid_type.amount, aid_type.max_per_year = name, amount, per_year
+        aid_type.free_amount = f.get('free_amount') == 'on'
+        aid_type.requires_document = f.get('requires_document') == 'on'
+        aid_type.is_active = (f.get('is_active') == 'on') if type_id else True  # case décochée = désactivé
+        if not type_id:
+            db.session.add(aid_type)
+        flash(f"Événement « {name} » enregistré.", 'success')
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, 'Modification des règles des aides', request.remote_addr)
+    return redirect(url_for('tontine_settings') + '#aides')
+
 
     #===========================================================
 #audit logs
@@ -3805,7 +4026,8 @@ def tontine_settings():
         if errors:
             for e in errors:
                 flash(e, 'danger')
-            return render_template('tontine_settings.html', tontine=tontine, form_data=request.form, levels=tontine_levels(False), frequency_choices=list(finance.FREQUENCIES.items()))
+            return render_template('tontine_settings.html', tontine=tontine, form_data=request.form, levels=tontine_levels(False), frequency_choices=list(finance.FREQUENCIES.items()),
+                           aid_types=AidType.query.order_by(AidType.display_order, AidType.id).all(), aid_rule_values=aid_rules(tontine))
 
         tontine.name = name
         tontine.tagline = (request.form.get('tagline') or '').strip()[:200] or None
@@ -3827,7 +4049,9 @@ def tontine_settings():
         return redirect(url_for('tontine_settings'))
 
     ensure_contribution_types(tontine)
-    return render_template('tontine_settings.html', tontine=tontine, form_data=None, levels=tontine_levels(False), frequency_choices=list(finance.FREQUENCIES.items()))
+    ensure_aid_types(tontine)
+    return render_template('tontine_settings.html', tontine=tontine, form_data=None, levels=tontine_levels(False), frequency_choices=list(finance.FREQUENCIES.items()),
+                           aid_types=AidType.query.order_by(AidType.display_order, AidType.id).all(), aid_rule_values=aid_rules(tontine))
 
 
 # ============================================================
@@ -3931,6 +4155,7 @@ def create_tontine_with_president(form):
     db.session.add(user)
     db.session.commit()
     ensure_contribution_types(tontine)
+    ensure_aid_types(tontine)
     return tontine, user, []
 
 

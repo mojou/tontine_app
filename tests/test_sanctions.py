@@ -136,6 +136,17 @@ for f in glob.glob(os.path.join(tpl_dir, '*.html')):
     for target in re.findall(r'data-target="#([^"]+)"', src):
         if re.sub(r'\{\{[^}]+\}\}', '{}', target) not in ids:
             broken_buttons.append(f'{os.path.basename(f)} #{target}')
+syntax_errors, form_in_row = [], []
+for f in glob.glob(os.path.join(tpl_dir, '*.html')):
+    src = open(f, encoding='utf-8').read()
+    try:
+        app.jinja_env.parse(src)
+    except Exception as exc:  # erreur de syntaxe Jinja : la page planterait à l'ouverture
+        syntax_errors.append(f'{os.path.basename(f)}: {exc}')
+    if re.search(r'<tr\b[^>]*>\s*<form\b', src):  # <form> directement dans <tr> : HTML invalide, champs non envoyés
+        form_in_row.append(os.path.basename(f))
+check(not syntax_errors, f'tous les templates compilent {syntax_errors or ""}')
+check(not form_in_row, f'aucun formulaire placé directement dans une ligne de tableau {form_in_row or ""}')
 check(not missing_csrf, f'tous les formulaires envoyés ont leur jeton CSRF {missing_csrf or ""}')
 check(not broken_buttons, f'aucun bouton n\'ouvre une fenêtre inexistante {broken_buttons or ""}')
 
