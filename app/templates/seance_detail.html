@@ -21,6 +21,9 @@
         <a href="{{ url_for('seances') }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Toutes les séances</a>
         <div>
             <span class="h5 mb-0 mr-3">Encaissé : <strong style="color: var(--hl-green)">{{ fcfa(grand_total) }} FCFA</strong></span>
+            {% if seance.total_paid_out > 0 %}
+            <span class="h6 mb-0 mr-3">Cagnottes versées : <strong class="text-danger">{{ fcfa(seance.total_paid_out) }} FCFA</strong></span>
+            {% endif %}
             {% if current_user.role in ['PRESIDENT', 'TRESORIER'] %}
             <form method="POST" action="{{ url_for('close_seance', seance_id=seance.id) }}" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -97,6 +100,82 @@
             {% endif %}
         </div>
     </form>
+
+    {% if payouts %}
+    <div class="card mt-4" id="cagnottes">
+        <div class="card-header"><i class="fas fa-hand-holding-usd"></i> Cagnottes du jour</div>
+        <div class="card-body">
+            <p class="small text-muted">Après l'encaissement des parts, versez la cagnotte du tour de chaque cycle.
+                Le versement est enregistré dans le cycle et rattaché à cette séance.</p>
+            <div class="row">
+            {% for p in payouts %}
+            {% set cycle = p.cycle %}
+            <div class="col-lg-6 mb-3">
+                <div class="border rounded p-3 h-100 cagnotte" data-cycle="{{ cycle.id }}">
+                    <h6 class="font-weight-bold mb-1">{{ cycle.display_name }}</h6>
+                    <div class="small text-muted mb-2">
+                        Cagnotte du tour : <strong>{{ fcfa(cycle.total_amount) }} FCFA</strong>
+                        · encaissé aujourd'hui : <strong>{{ fcfa(p.collected) }} FCFA</strong>
+                    </div>
+                    {% for tx in p.done %}
+                    <div class="alert alert-success py-1 px-2 small mb-2">
+                        <i class="fas fa-check-circle"></i> Versée pendant cette séance à <strong>{{ tx.member_name }}</strong>
+                        ({{ fcfa(tx.amount) }} FCFA brut)
+                    </div>
+                    {% endfor %}
+
+                    {% if cycle.status != 'EN_COURS' %}
+                    <div class="small text-muted"><i class="fas fa-flag-checkered"></i> Cycle terminé : toutes les mains ont reçu la cagnotte.</div>
+                    {% elif not cycle.is_auction and not p.next %}
+                    <div class="small text-warning"><i class="fas fa-random"></i> L'ordre de passage n'est pas encore tiré.
+                        <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}">Faire le tirage</a></div>
+                    {% elif can_pay_out %}
+                    {% if p.collected < cycle.total_amount %}
+                    <div class="small text-danger mb-2"><i class="fas fa-exclamation-triangle"></i>
+                        Il manque {{ fcfa(cycle.total_amount - p.collected) }} FCFA d'encaissement aujourd'hui sur ce cycle.</div>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="expected_turn" value="{{ p.turn }}">
+                        <input type="hidden" name="seance_id" value="{{ seance.id }}">
+                        {% if cycle.is_auction %}
+                        <div class="small mb-2"><i class="fas fa-gavel"></i> Enchère du tour {{ p.turn }}</div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label class="small font-weight-bold">Gagnant</label>
+                                <select name="participant_id" class="form-control form-control-sm" required>
+                                    <option value="">-- Choisir --</option>
+                                    {% for part in cycle.remaining_participants %}<option value="{{ part.id }}">{{ part.label }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label class="small font-weight-bold">Mise retenue (FCFA)</label>
+                                <input type="number" name="bid_amount" class="form-control form-control-sm" min="0"
+                                       max="{{ (cycle.total_amount|int) - 1 }}" step="1" value="0" required>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="mb-2">Tour {{ p.next.position }} : <strong>{{ p.next.label }}</strong>
+                            {% if p.pending_sanctions > 0 %}<br><span class="text-danger small">Amendes impayées : {{ fcfa(p.pending_sanctions) }} FCFA</span>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% include "_payout_fields.html" %}
+                        <button type="submit" class="btn btn-gold btn-sm"
+                                onclick="return confirm('Confirmer le versement de la cagnotte du tour {{ p.turn }} ({{ cycle.display_name }}) ?');">
+                            <i class="fas fa-check"></i> Verser la cagnotte du tour {{ p.turn }}
+                        </button>
+                    </form>
+                    {% elif not seance.is_closed %}
+                    <div class="small text-muted">Prochain bénéficiaire :
+                        {{ p.next.label if p.next else 'enchère en séance' }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 

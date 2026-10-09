@@ -41,6 +41,7 @@ SUITES = [
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),
     ('test_audit.py', 'au.db', "Défauts corrigés lors de l'audit"),
     ('test_fiche_membre.py', 'fm.db', 'Fiche membre : nature de chaque ligne'),
+    ('test_seance_cagnotte.py', 'sc.db', 'Séance : versement des cagnottes'),
 ]
 EXHAUSTIVE = [
     ('verif_routes.py', 'crawl.db', 'Exploration de toutes les routes'),

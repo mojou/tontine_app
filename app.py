@@ -2266,6 +2266,22 @@ def register_benefit(cycle_id):
     back = redirect(url_for('tontine_cycle_detail', cycle_id=cycle.id))
     if request.method == 'GET':
         return back
+
+    # Versement fait depuis la feuille d'une séance : on y revient et les écritures y sont rattachées
+    seance = None
+    seance_id = request.form.get('seance_id', type=int)
+    if seance_id:
+        seance = Seance.query.filter_by(id=seance_id).first()
+        if seance is None:
+            abort(404)
+        back = redirect(url_for('seance_detail', seance_id=seance.id) + '#cagnottes')
+        if seance.is_closed:
+            flash('Cette séance est clôturée : rouvrez-la pour verser une cagnotte.', 'warning')
+            return back
+        if f'c{cycle.id}' not in (seance.columns or '').split(','):
+            flash("Ce cycle ne fait pas partie de cette séance.", 'danger')
+            return back
+
     if cycle.status != 'EN_COURS':
         flash('Ce cycle est terminé.', 'warning')
         return back
@@ -2311,7 +2327,8 @@ def register_benefit(cycle_id):
             deducted += amount
             db.session.add(Transaction(member_id=member.id, type='SANCTION', amount=amount, date=date.today(),
                                        description=f"Amende #{sanction.id} retenue sur la cagnotte ({cycle.display_name})",
-                                       created_by=current_user.id, payment_mode=payment_mode, cycle_id=cycle.id))
+                                       created_by=current_user.id, payment_mode=payment_mode, cycle_id=cycle.id,
+                                       seance_id=seance.id if seance else None))
     net = gross - bid - deducted
     position = cycle.beneficiaries_count + 1 if cycle.is_auction else participant.position
 
@@ -2329,11 +2346,12 @@ def register_benefit(cycle_id):
     db.session.add(Transaction(member_id=member.id, type='BENEFICE_TONTINE', amount=gross, date=date.today(),
                                description=f"Cagnotte {cycle.display_name} - tour {position}",
                                created_by=current_user.id, payment_mode=payment_mode,
-                               payment_reference=reference, cycle_id=cycle.id))
+                               payment_reference=reference, cycle_id=cycle.id, seance_id=seance.id if seance else None))
     if bid > 0:
         db.session.add(Transaction(member_id=member.id, type='ENCHERE', amount=bid, date=date.today(),
                                    description=f"Mise d'enchère retenue - {cycle.display_name} - tour {position}",
-                                   created_by=current_user.id, payment_mode=payment_mode, cycle_id=cycle.id))
+                                   created_by=current_user.id, payment_mode=payment_mode, cycle_id=cycle.id,
+                                   seance_id=seance.id if seance else None))
 
     if all(p.served for p in cycle.participants):
         cycle.status = 'TERMINE'
@@ -3874,9 +3892,26 @@ def seance_detail(seance_id):
             cells.append({'col': col, 'expected': expected, 'paid': paid.get((member.id, col['key']))})
         rows.append({'member': member, 'cells': cells})
     totals = {col['key']: sum((v for (mid, k), v in paid.items() if k == col['key']), Decimal('0')) for col in columns}
+
+    # Cagnottes du tour pour chaque cycle de la séance : bénéficiaire prévu et versements déjà faits
+    payouts = []
+    for col in columns:
+        cycle = col['cycle']
+        if not cycle:
+            continue
+        nxt = cycle.get_next_participant() if cycle.status == 'EN_COURS' else None
+        pending = Decimal('0')
+        if nxt:
+            pending = Decimal(str(db.session.query(db.func.sum(Sanction.amount)).filter(
+                Sanction.member_id == nxt.member_id, Sanction.status == 'PENDING').scalar() or 0))
+        done = (Transaction.query.filter_by(seance_id=seance.id, cycle_id=cycle.id, type='BENEFICE_TONTINE')
+                .order_by(Transaction.id).all())
+        payouts.append({'cycle': cycle, 'collected': totals[col['key']], 'next': nxt, 'pending_sanctions': pending,
+                        'done': done, 'turn': cycle.beneficiaries_count + 1})
     return render_template('seance_detail.html', seance=seance, columns=columns, rows=rows, totals=totals,
-                           grand_total=sum(totals.values(), Decimal('0')),
-                           can_manage=current_user.role in SEANCE_MANAGERS and not seance.is_closed)
+                           grand_total=sum(totals.values(), Decimal('0')), payouts=payouts,
+                           can_manage=current_user.role in SEANCE_MANAGERS and not seance.is_closed,
+                           can_pay_out=current_user.role in CYCLE_MANAGERS and not seance.is_closed)
 
 
 @app.route('/seances/<int:seance_id>/close', methods=['POST'])

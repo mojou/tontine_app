@@ -1183,7 +1183,16 @@ class Seance(TenantMixin, db.Model):
 
     @property
     def total_collected(self):
-        result = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.seance_id == self.id).scalar()
+        """Encaissé pendant la séance (les cagnottes versées ne s'y soustraient pas)"""
+        result = db.session.query(db.func.sum(Transaction.amount)).filter(
+            Transaction.seance_id == self.id, Transaction.type.in_(finance.INFLOW_TYPES)).scalar()
+        return Decimal(str(result or 0))
+
+    @property
+    def total_paid_out(self):
+        """Cagnottes versées pendant la séance"""
+        result = db.session.query(db.func.sum(Transaction.amount)).filter(
+            Transaction.seance_id == self.id, Transaction.type == 'BENEFICE_TONTINE').scalar()
         return Decimal(str(result or 0))
 
 
