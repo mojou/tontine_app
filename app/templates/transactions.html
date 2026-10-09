@@ -56,40 +56,24 @@
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card bg-success text-white shadow-sm">
-            <div class="card-body">
-                <small class="text-white-50">Tontine / Épargne</small>
-                <h5 class="mb-0">{{ "{:,.0f}".format(summary['TONTINE']|default(0)|int).replace(',', ' ') }} FCFA</h5>
+<div class="row mb-4" id="ledgerSummary">
+    {% set savings = (summary.get('EPARGNE', 0) or 0) - (summary.get('RETRAIT_EPARGNE', 0) or 0) %}
+    {% for label, amount, css, hint in [
+        ('Cotisations tontine', summary.get('TONTINE', 0), 'bg-success text-white', type_hints['TONTINE']),
+        ('Épargne des membres (restituable)', savings, 'bg-primary text-white', type_hints['EPARGNE']),
+        ('Droits de présence', summary.get('PRESENCE', 0), 'bg-info text-white', type_hints['PRESENCE']),
+        ('Sanctions recouvrées', summary.get('SANCTION', 0), 'bg-warning text-dark', type_hints['SANCTION']),
+        ('Total des sorties', total_out, 'bg-danger text-white', 'Prêts décaissés, cagnottes versées, aides, épargne rendue, dépenses...'),
+    ] %}
+    <div class="col-6 col-lg mb-2">
+        <div class="card {{ css }} shadow-sm h-100" title="{{ hint }}">
+            <div class="card-body py-3">
+                <small class="font-weight-bold" style="opacity: .85">{{ label }} <i class="fas fa-info-circle"></i></small>
+                <h5 class="mb-0">{{ "{:,.0f}".format((amount or 0)|int).replace(',', ' ') }} FCFA</h5>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card bg-info text-white shadow-sm">
-            <div class="card-body">
-                <small class="text-white-50">Cotisations Présence</small>
-                <h5 class="mb-0">{{ "{:,.0f}".format(summary['PRESENCE']|default(0)|int).replace(',', ' ') }} FCFA</h5>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-warning text-dark shadow-sm">
-            <div class="card-body">
-                <small class="font-weight-bold">Sanctions Recouvrées</small>
-                <h5 class="mb-0">{{ "{:,.0f}".format(summary['SANCTION']|default(0)|int).replace(',', ' ') }} FCFA</h5>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-danger text-white shadow-sm">
-            <div class="card-body">
-                <small class="text-white-50">Sorties (Prêts + Aides)</small>
-                {% set total_sorties = total_out|int %}
-                <h5 class="mb-0">{{ "{:,.0f}".format(total_sorties).replace(',', ' ') }} FCFA</h5>
-            </div>
-        </div>
-    </div>
+    {% endfor %}
 </div>
 
 <div class="card shadow-sm border-0">
@@ -133,19 +117,13 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge badge-light border px-2 py-1 small">
+                                <span class="badge badge-light border px-2 py-1 small" title="{{ tx.type_hint }}">
                                     {{ tx.get_type_display() if tx.get_type_display else tx.type }}
                                 </span>
                             </td>
                             <td>
-                                {% set payment_mode = tx.payment_mode if tx.payment_mode else 'ESPECE' %}
-                                {% if payment_mode == 'ORANGE_MONEY' %}
-                                    <span class="badge badge-warning text-dark">Orange Money</span>
-                                {% elif payment_mode == 'MTN_MOBILE' %}
-                                    <span class="badge badge-info">MTN Mobile</span>
-                                {% else %}
-                                    <span class="badge badge-secondary">Espèce</span>
-                                {% endif %}
+                                {% set payment_mode = tx.payment_mode or 'ESPECE' %}
+                                <span class="badge {{ 'badge-secondary' if payment_mode == 'ESPECE' else 'badge-info' }}">{{ payment_modes.get(payment_mode, payment_mode) }}</span>
                             </td>
                             <td><span class="small text-muted">{{ tx.description or '-' }}</span></td>
                             <td class="text-right font-weight-bold {% if tx.is_outflow %}text-danger{% else %}text-success{% endif %}">

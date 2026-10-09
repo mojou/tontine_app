@@ -62,6 +62,17 @@ summary = h[h.index('id="fundSummary"'):] if 'id="fundSummary"' in h else ''
 check('Épargne personnelle (restituable)' in summary and '5 000 FCFA' in summary and '12 000 FCFA' in summary,
       'la fiche sépare tontine, fonds de caisse et épargne restituable')
 
+# ---------------------------------------------------------------- registre de caisse
+pres.post('/transactions/add', data={'member_id': paul, 'type': 'PRESENCE', 'amount': 1050, 'payment_mode': 'WAVE',
+                                     'description': 'Présence'})
+h = body(pres.get('/transactions'))
+summary = h[h.index('id="ledgerSummary"'):h.index('Historique des transactions')]
+check('Tontine / Épargne' not in h, "le registre n'affiche plus la carte trompeuse « Tontine / Épargne »")
+check('Cotisations tontine' in summary and '12 000 FCFA' in summary, 'carte tontine = cotisations tontine seules')
+check('Épargne des membres (restituable)' in summary and '5 000 FCFA' in summary, "carte épargne séparée (5 000)")
+check('Total des sorties' in summary and 'Prêts + Aides' not in h, 'carte « Total des sorties » correctement nommée')
+check('>Wave</span>' in h, 'la colonne Mode affiche Wave (et non « Espèce »)')
+
 membre = app.test_client()
 membre.post('/login', data={'tontine': 'fiche', 'username': 'paul', 'password': 'Passw0rd1'})
 check(membre.get(f'/members/{paul}').status_code == 200, 'le membre voit sa propre fiche')
