@@ -220,15 +220,17 @@
             <div class="card mt-4 bg-light border-0">
                 <div class="card-body">
                     <h6 class="font-weight-bold mb-2">
-                        <i class="fas fa-info-circle text-primary mr-1"></i> Informations importantes
+                        <i class="fas fa-info-circle text-primary mr-1"></i> À quoi sert chaque type ?
                     </h6>
                     <ul class="small text-muted mb-0 pl-3">
-                        <li>Les transactions de type <strong>TONTINE</strong> et <strong>PRESENCE</strong> sont des entrées d'argent</li>
-                        <li>Les transactions de type <strong>SORTIE_LOAN</strong>, <strong>AIDE</strong> et <strong>BENEFICE_TONTINE</strong> sont des sorties d'argent</li>
-                        <li>Le fonds de caisse obligatoire est de <strong>5 000 FCFA</strong> par membre</li>
-                        <li>La cotisation présence est fixe: <strong>1 050 FCFA</strong> par semaine</li>
-                        <li>Les montants de tontine possibles: <strong>5 100 FCFA</strong>, <strong>10 200 FCFA</strong> ou <strong>20 200 FCFA</strong></li>
+                        {% for code in manual_transaction_types %}
+                        <li><strong>{{ transaction_types[code][0] }}</strong> : {{ type_hints.get(code, '') }}</li>
+                        {% endfor %}
                     </ul>
+                    {% if rubriques %}
+                    <p class="small text-muted mb-0 mt-2">Les montants proposés viennent des rubriques de la tontine
+                        (<a href="{{ url_for('cotisations') }}">Cotisations</a>) ; ils restent modifiables.</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -239,6 +241,9 @@
 {% block extra_js %}
 <script>
 $(document).ready(function() {
+    var HINTS = {{ type_hints|tojson }};
+    var OUTFLOWS = {{ outflow_types|tojson }};
+
     // Rubrique : impose le type et propose le montant (montant libre si 0)
     $('#rubrique').on('change', function() {
         var opt = $(this).find('option:selected');
@@ -252,119 +257,26 @@ $(document).ready(function() {
         }
     }).trigger('change');
 
-    // Mettre à jour l'aide en fonction du type de transaction sélectionné
+    // Explication du type choisi (évite de confondre épargne et fonds de caisse)
     function updateTypeHelp() {
-        var selectedType = $('#transactionType').val();
-        var helpText = '';
-        var amountHelp = '';
-        
-        switch(selectedType) {
-            case 'TONTINE':
-                helpText = 'Cotisation tontine - 2 fois par mois. Montants possibles: 5 100, 10 200 ou 20 200 FCFA';
-                amountHelp = 'Montant de la cotisation tontine (5 100, 10 200 ou 20 200 FCFA)';
-                break;
-            case 'PRESENCE':
-                helpText = 'Cotisation présence - 1 fois par semaine. Montant fixe: 1 050 FCFA';
-                amountHelp = 'Montant fixe de 1 050 FCFA par semaine';
-                break;
-            case 'SANCTION':
-                helpText = 'Paiement d\'une sanction ou pénalité';
-                amountHelp = 'Montant de la sanction (généralement 500 FCFA par jour de retard)';
-                break;
-            case 'REMBOURSEMENT':
-                helpText = 'Remboursement d\'un emprunt en cours';
-                amountHelp = 'Montant remboursé sur l\'emprunt';
-                break;
-            case 'AIDE':
-                helpText = 'Aide sociale (décès, mariage, naissance) - SORTIE D\'ARGENT';
-                amountHelp = 'Montant de l\'aide accordée';
-                break;
-            case 'FONDS_CAISSE':
-                helpText = 'Fonds de caisse obligatoire - 5 000 FCFA par membre';
-                amountHelp = 'Montant fixe de 5 000 FCFA';
-                break;
-            case 'SORTIE_LOAN':
-                helpText = 'Décaissement d\'un emprunt approuvé - SORTIE D\'ARGENT';
-                amountHelp = 'Montant décaissé pour l\'emprunt';
-                break;
-            case 'BENEFICE_TONTINE':
-                helpText = 'Bénéfice tontine versé au membre - SORTIE D\'ARGENT';
-                amountHelp = 'Montant net après déduction des sanctions';
-                break;
-            default:
-                helpText = 'Choisissez le type d\'opération financière';
-                amountHelp = 'Montant en Francs CFA (XAF)';
-        }
-        
-        $('#typeHelpText').text(helpText);
-        $('#amountHelp').text(amountHelp);
-        
-        // Ajouter un style spécial pour les sorties
-        if (selectedType === 'SORTIE_LOAN' || selectedType === 'AIDE' || selectedType === 'BENEFICE_TONTINE') {
-            $('#typeHelpText').parent().addClass('text-danger');
-        } else {
-            $('#typeHelpText').parent().removeClass('text-danger');
-        }
-        
-        // Pré-remplir le montant pour certains types
-        if (selectedType === 'PRESENCE') {
-            $('#amount').val(1050);
-            $('#amount').prop('readonly', true);
-        } else if (selectedType === 'FONDS_CAISSE') {
-            $('#amount').val(5000);
-            $('#amount').prop('readonly', true);
-        } else {
-            $('#amount').prop('readonly', false);
-            if ($('#amount').val() == 1050 || $('#amount').val() == 5000) {
-                $('#amount').val('');
-            }
-        }
-    }
-    
-    // Écouter le changement du type de transaction
-    $('#transactionType').on('change', updateTypeHelp);
-    
-    // Initialiser l'aide
-    updateTypeHelp();
-    
-    // Validation du montant
-    $('#amount').on('input', function() {
-        var value = parseInt($(this).val());
         var type = $('#transactionType').val();
-        
-        if (type === 'PRESENCE' && value !== 1050) {
-            $(this).addClass('is-invalid');
-            $('#amountHelp').addClass('text-danger').text('⚠️ Le montant pour une cotisation présence doit être de 1 050 FCFA');
-        } else if (type === 'FONDS_CAISSE' && value !== 5000) {
-            $(this).addClass('is-invalid');
-            $('#amountHelp').addClass('text-danger').text('⚠️ Le fonds de caisse est de 5 000 FCFA');
-        } else if (type === 'TONTINE' && value && ![5100, 10200, 20200].includes(value)) {
-            $(this).addClass('is-invalid');
-            $('#amountHelp').addClass('text-danger').text('⚠️ Montant invalide. Valeurs acceptées: 5 100, 10 200 ou 20 200 FCFA');
-        } else {
-            $(this).removeClass('is-invalid');
-            $('#amountHelp').removeClass('text-danger');
-        }
-    });
-    
-    // Confirmation avant soumission
+        var outflow = OUTFLOWS.indexOf(type) !== -1;
+        $('#typeHelpText').text(HINTS[type] || "Choisissez le type d'opération financière");
+        $('#typeHelpText').parent().toggleClass('text-danger', outflow).toggleClass('text-muted', !outflow);
+    }
+    $('#transactionType').on('change', updateTypeHelp);
+    updateTypeHelp();
+
+    // Confirmation avant une sortie d'argent
     $('#transactionForm').on('submit', function(e) {
         var type = $('#transactionType').val();
-        var amount = parseInt($('#amount').val());
-        
-        if (type === 'SORTIE_LOAN' || type === 'AIDE' || type === 'BENEFICE_TONTINE') {
-            if (!confirm('⚠️ Attention: Cette transaction est une SORTIE d\'argent.\n\nÊtes-vous sûr de vouloir continuer ?')) {
-                e.preventDefault();
-                return false;
-            }
-        }
-        
-        if (type === 'TONTINE' && ![5100, 10200, 20200].includes(amount)) {
-            alert('Le montant de tontine doit être de 5 100, 10 200 ou 20 200 FCFA');
+        if (OUTFLOWS.indexOf(type) !== -1 &&
+            !confirm("Attention : cette opération est une SORTIE d'argent.
+
+Êtes-vous sûr de vouloir continuer ?")) {
             e.preventDefault();
             return false;
         }
-        
         return true;
     });
 });

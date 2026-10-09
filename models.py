@@ -364,6 +364,10 @@ class Transaction(TenantMixin, db.Model):
             return self.contribution_type.name
         return finance.type_label(self.type)
 
+    @property
+    def type_hint(self):
+        return finance.type_hint(self.type)
+
 
 # ============================================================
 # TABLE LOAN

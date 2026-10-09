@@ -40,6 +40,7 @@ SUITES = [
     ('test_aides.py', 'ai.db', 'Aides sociales (règles, barème, versement)'),
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),
     ('test_audit.py', 'au.db', "Défauts corrigés lors de l'audit"),
+    ('test_fiche_membre.py', 'fm.db', 'Fiche membre : nature de chaque ligne'),
 ]
 EXHAUSTIVE = [
     ('verif_routes.py', 'crawl.db', 'Exploration de toutes les routes'),

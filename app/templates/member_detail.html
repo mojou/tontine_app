@@ -81,6 +81,17 @@
             
             <div class="stat-value text-danger">{{ "{:,.0f}".format(member.total_sanctions_pending | default(0)).replace(',', ' ') }} FCFA</div>
             <div class="stat-label">Sanctions impayées</div>
+            {% if fund_summary %}
+            <hr class="my-2">
+            <div class="small text-left" id="fundSummary">
+                {% for label, amount, hint in fund_summary %}
+                <div class="d-flex justify-content-between" title="{{ hint }}">
+                    <span>{{ label }} <i class="fas fa-info-circle text-muted"></i></span>
+                    <strong class="ml-2">{{ "{:,.0f}".format(amount | default(0)).replace(',', ' ') }} FCFA</strong>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
     </div>
     
@@ -146,6 +157,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Type</th>
+                                <th>Détail</th>
                                 <th class="text-right">Montant</th>
                             </tr>
                         </thead>
@@ -153,7 +165,11 @@
                             {% for trans in transactions[:10] %}
                             <tr>
                                 <td>{{ trans.date.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ trans.get_type_display() }}</td>
+                                <td title="{{ trans.type_hint }}">{{ trans.get_type_display() }}</td>
+                                <td class="small text-muted">
+                                    {{ trans.description or trans.type_hint }}
+                                    <div>Saisi par {{ trans.creator_name }}</div>
+                                </td>
                                 <td class="text-right {% if trans.is_outflow %}text-danger{% else %}text-success{% endif %}">
                                     {% if trans.is_outflow %}-{% else %}+{% endif %}
                                     {{ "{:,.0f}".format(trans.amount | default(0)).replace(',', ' ') }} FCFA
@@ -161,7 +177,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="3" class="text-center">Aucune transaction</td>
+                                <td colspan="4" class="text-center">Aucune transaction</td>
                             </tr>
                             {% endfor %}
                         </tbody>

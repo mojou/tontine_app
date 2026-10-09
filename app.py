@@ -91,6 +91,8 @@ def utility_processor():
         allow_signup=app.config['ALLOW_PUBLIC_SIGNUP'],
         transaction_types=finance.TRANSACTION_TYPES,
         manual_transaction_types=finance.MANUAL_TYPES,
+        type_hints=finance.TYPE_HINTS,
+        outflow_types=finance.OUTFLOW_TYPES,
         payment_modes=finance.PAYMENT_MODES,
         timedelta=timedelta,
         pending_aval_count=_pending_aval_count(),
@@ -777,8 +779,16 @@ def member_detail(member_id):
     
     can_edit = current_user.role == 'PRESIDENT'
     can_change_role = current_user.role == 'PRESIDENT'
-    
+
+    # Avoirs par fonds : chaque somme a une destination différente
+    fund_summary = [
+        ('Tontine (cycles)', member._sum_types(['TONTINE']), finance.type_hint('TONTINE')),
+        ('Fonds de caisse', member._sum_types(['FONDS_CAISSE']), finance.type_hint('FONDS_CAISSE')),
+        ('Épargne personnelle (restituable)', member.savings_balance, finance.type_hint('EPARGNE')),
+    ]
+
     return render_template('member_detail.html',
+                           fund_summary=fund_summary,
                            member=member,
                            transactions=transactions_pagination_data['items'],
                            transactions_pagination=transactions_pagination_data,

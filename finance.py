@@ -92,6 +92,34 @@ FREQUENCIES = OrderedDict([
 ])
 
 
+# Explication en langage simple de chaque type (formulaire de saisie, fiche membre)
+TYPE_HINTS = {
+    'TONTINE': "Part versée au cycle de tontine : elle est reversée en entier au bénéficiaire du tour.",
+    'PRESENCE': "Droit payé à chaque séance ; il alimente la caisse générale.",
+    'EPARGNE': "Argent mis de côté par le membre à titre personnel (« banque ») : il reste à lui "
+               "et lui est rendu en fin d'exercice. Ce n'est PAS le fonds de caisse.",
+    'FONDS_CAISSE': "Contribution obligatoire à la caisse générale (finance les prêts et le fonctionnement).",
+    'ADHESION': "Frais payés une seule fois à l'entrée dans la tontine.",
+    'SECOURS': "Cotisation à la caisse de solidarité qui finance les aides (décès, maladie, naissance...).",
+    'ACCUEIL': "Participation à la collation / l'accueil de la séance.",
+    'PROJET': "Cotisation pour un projet ou un investissement collectif.",
+    'AUTRE_COTISATION': "Autre versement à la caisse générale.",
+    'SANCTION': "Paiement d'une amende.",
+    'ENCHERE': "Mise de l'enchère retenue sur la cagnotte ; elle va en caisse.",
+    'REMBOURSEMENT': "Remboursement d'un emprunt.",
+    'SORTIE_LOAN': "Argent prêté au membre (sortie de caisse).",
+    'BENEFICE_TONTINE': "Cagnotte du cycle versée au membre (sortie).",
+    'AIDE': "Aide sociale versée au membre par la caisse de secours (sortie).",
+    'RETRAIT_EPARGNE': "Épargne rendue au membre (sortie).",
+    'PARTAGE': "Part des bénéfices de fin d'exercice versée au membre (sortie).",
+    'DEPENSE': "Dépense de fonctionnement de la tontine (sortie).",
+}
+
+
+def type_hint(code):
+    return TYPE_HINTS.get(code, '')
+
+
 def type_label(code):
     return TRANSACTION_TYPES.get(code, (code, IN, 'CAISSE'))[0]
 
