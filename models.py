@@ -24,6 +24,15 @@ class Tontine(db.Model):
     whatsapp_link = db.Column(db.String(200), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=utcnow)
+    # Inscription en ligne : la tontine attend la confirmation de l'e-mail du fondateur.
+    # NULL/False = confirmée (tontines existantes, créées par le super-admin).
+    pending_confirmation = db.Column(db.Boolean, nullable=True, default=False)
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    # Abonnement à la plateforme (voir billing.py)
+    billing_offered = db.Column(db.Boolean, nullable=True, default=False)   # version payante offerte sans limite
+    free_until = db.Column(db.Date, nullable=True)                          # mois gratuits offerts jusqu'au
+    paid_until = db.Column(db.Date, nullable=True)                          # payé jusqu'au
+    billing_started_on = db.Column(db.Date, nullable=True)                  # premier jour au-delà de 10 membres
 
     # Paramètres propres à chaque tontine (remplacent les constantes de config.py)
     presence_amount = db.Column(db.Numeric(10, 2), default=Decimal('1050.00'))
@@ -1234,6 +1243,43 @@ class PasswordResetRequest(TenantMixin, db.Model):
     handled_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
+
+
+# ============================================================
+# PAIEMENTS DE L'ABONNEMENT À LA PLATEFORME
+# ============================================================
+class BillingPayment(TenantMixin, db.Model):
+    __tablename__ = 'billing_payments'
+
+    STATUSES = {'EN_ATTENTE': ('En attente de validation', 'warning'),
+                'VALIDE': ('Validé', 'success'),
+                'REFUSE': ('Refusé', 'danger')}
+
+    id = db.Column(db.Integer, primary_key=True)
+    months = db.Column(db.Integer, nullable=False)
+    members_count = db.Column(db.Integer, nullable=False)
+    monthly_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    provider = db.Column(db.String(30), default='SASPAY')
+    reference = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(20), default='EN_ATTENTE')
+    declared_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    declared_at = db.Column(db.DateTime, default=utcnow)
+    validated_at = db.Column(db.DateTime, nullable=True)
+    period_start = db.Column(db.Date, nullable=True)
+    period_end = db.Column(db.Date, nullable=True)
+    note = db.Column(db.String(255), nullable=True)
+
+    tontine = db.relationship('Tontine', foreign_keys='BillingPayment.tontine_id')
+    declarer = db.relationship('User', foreign_keys=[declared_by])
+
+    @property
+    def status_display(self):
+        return self.STATUSES.get(self.status, (self.status, 'secondary'))[0]
+
+    @property
+    def status_color(self):
+        return self.STATUSES.get(self.status, (self.status, 'secondary'))[1]
 
 
 # ============================================================

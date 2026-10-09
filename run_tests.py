@@ -46,6 +46,8 @@ SUITES = [
     ('test_parcours.py', 'pa.db', 'Parcours utilisateur (tous les rôles)'),
     ('test_amendes_retard.py', 'am.db', 'Amendes de retard de cotisation'),
     ('test_ecarts_cycle.py', 'ec.db', 'Écarts de cycle et régularisation'),
+    ('test_confirmation_email.py', 'ce.db', "Confirmation e-mail à l'inscription"),
+    ('test_abonnement.py', 'ab.db', 'Abonnement, paiements, offres, suppression'),
 ]
 EXHAUSTIVE = [
     ('verif_routes.py', 'crawl.db', 'Exploration de toutes les routes'),
@@ -65,7 +67,8 @@ def migrated_copy(workdir, name):
 
 
 def run(script, workdir, extra=()):
-    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONWARNINGS='ignore')
+    # Les séries existantes créent leurs tontines sans e-mail ; test_confirmation_email l'active lui-même
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONWARNINGS='ignore', REQUIRE_EMAIL_CONFIRMATION='False')
     env.pop('DATABASE_URL', None)
     proc = subprocess.run([sys.executable, os.path.join(TESTS, script), workdir, ROOT, *extra], cwd=ROOT, env=env,
                           capture_output=True, text=True, encoding='utf-8', errors='replace')

@@ -94,6 +94,7 @@ MENU_ITEMS = {
         {'name': 'Tirages au sort', 'icon': 'fas fa-dice', 'url': 'tirages'},
         {'name': 'Galerie accueil', 'icon': 'fas fa-images', 'url': 'gallery_admin'},
         {'name': 'Paramètres', 'icon': 'fas fa-sliders-h', 'url': 'tontine_settings'},
+        {'name': 'Abonnement', 'icon': 'fas fa-credit-card', 'url': 'abonnement'},
         {'name': 'Mon profil', 'icon': 'fas fa-user-circle', 'url': 'profile'},
     ],
 
@@ -117,6 +118,7 @@ MENU_ITEMS = {
         {'name': 'Votes', 'icon': 'fas fa-vote-yea', 'url': 'votes'},
         {'name': 'Tirages au sort', 'icon': 'fas fa-dice', 'url': 'tirages'},
         {'name': 'Galerie accueil', 'icon': 'fas fa-images', 'url': 'gallery_admin'},
+        {'name': 'Abonnement', 'icon': 'fas fa-credit-card', 'url': 'abonnement'},
         {'name': 'Mon profil', 'icon': 'fas fa-user-circle', 'url': 'profile'},
     ],
     
@@ -134,6 +136,7 @@ MENU_ITEMS = {
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
         {'name': 'Votes', 'icon': 'fas fa-vote-yea', 'url': 'votes'},
         {'name': 'Tirages au sort', 'icon': 'fas fa-dice', 'url': 'tirages'},
+        {'name': 'Abonnement', 'icon': 'fas fa-credit-card', 'url': 'abonnement'},
         {'name': 'Mon profil', 'icon': 'fas fa-user-circle', 'url': 'profile'},
     ],
     
@@ -192,7 +195,7 @@ MENU_SECTIONS = [
     ('Argent', ['seances', 'cotisations', 'transactions', 'loans', 'avals', 'exercise']),
     ('Tontine', ['tontine_cycles', 'tirages']),
     ('Vie du groupe', ['members', 'sanctions', 'aides', 'meetings', 'annonces', 'votes']),
-    ('Administration', ['reports', 'tontine_settings', 'password_requests', 'audit_logs', 'gallery_admin', 'superadmin']),
+    ('Administration', ['reports', 'abonnement', 'tontine_settings', 'password_requests', 'audit_logs', 'gallery_admin', 'superadmin']),
     ('', ['profile']),
 ]
 _SECTION_OF = {url: (rank, title, pos) for rank, (title, urls) in enumerate(MENU_SECTIONS) for pos, url in enumerate(urls)}

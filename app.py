@@ -8,7 +8,7 @@ from decimal import Decimal
 import random
 import io
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, make_response, send_file, g
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, make_response, send_file, g, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
@@ -114,12 +114,14 @@ from models import (
     Aide, TontineCycleDetail, CycleBeneficiary, MeetingAttendanceDetail,
     ContributionPlanning, CycleReport, CaisseBalance,
     Poll, PollOption, PollVote, TontineDraw, TontineDrawResult, GalleryPhoto, Tontine,
-    ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest,
+    ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest, BillingPayment,
     LoginAttempt, AidType
 )
 import finance
 import report_export
+import billing
 import re
+import time
 
 _THOUSANDS_COMMA = re.compile(r'(?<=\d),(?=\d{3}\b)')
 
@@ -157,6 +159,7 @@ def load_user(user_id):
 
 # Pages accessibles au super-admin (qui n'appartient à aucune tontine)
 SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine',
+                        'superadmin_billing_payment', 'superadmin_billing_offer', 'superadmin_delete_tontine',
                         'logout', 'static', 'index', 'tontine_home', 'login', 'signup',
                         'superadmin_reset_president', 'reset_password'}
 # Pages publiques qui fixent elles-mêmes la tontine (via l'URL ou le formulaire)
@@ -182,7 +185,35 @@ def resolve_current_tenant():
         return redirect(url_for('index'))
     set_current_tenant(tontine.id)
     g.tontine = tontine
+    g.billing = tontine_billing(tontine)
+    # Abonnement impayé après le délai de grâce : lecture seule (tout se consulte, rien ne s'enregistre)
+    if (g.billing['state'] == billing.READ_ONLY and request.method == 'POST'
+            and request.endpoint not in BILLING_ALLOWED_ENDPOINTS):
+        flash("Abonnement impayé : la tontine est en lecture seule. Réglez l'abonnement pour enregistrer à nouveau.", 'danger')
+        return redirect(url_for('abonnement') if current_user.role in BILLING_MANAGERS else url_for('dashboard'))
     return None
+
+
+BILLING_MANAGERS = ['PRESIDENT', 'TRESORIER']
+# Toujours permis en lecture seule : payer, se déconnecter, changer son mot de passe
+BILLING_ALLOWED_ENDPOINTS = {'abonnement', 'logout', 'login', 'change_password', 'profile'}
+
+
+def active_members_count(tontine_id):
+    with tenant_bypass():
+        return Member.query.filter_by(tontine_id=tontine_id, is_active=True, status='ACTIF').count()
+
+
+def tontine_billing(tontine):
+    """Situation d'abonnement ; mémorise le premier jour au-delà de 10 membres (départ du délai de grâce)"""
+    members = active_members_count(tontine.id)
+    if billing.monthly_price(members) and not tontine.billing_started_on:
+        tontine.billing_started_on = date.today()
+        db.session.commit()
+    elif not billing.monthly_price(members) and tontine.billing_started_on:
+        tontine.billing_started_on = None   # repassée à 10 membres ou moins : nouveau délai si elle grandit
+        db.session.commit()
+    return billing.status(tontine, members)
 
 
 def current_tontine():
@@ -356,8 +387,13 @@ with app.app_context():
 PLATFORM_LOGIN = '__plateforme__'
 
 
+def _public_tontines():
+    """Tontines actives et confirmées (une inscription en attente de confirmation reste invisible)"""
+    return Tontine.query.filter(Tontine.is_active == True, Tontine.pending_confirmation.isnot(True))  # noqa: E712
+
+
 def _active_tontines():
-    return Tontine.query.filter_by(is_active=True).order_by(Tontine.name).all()
+    return _public_tontines().order_by(Tontine.name).all()
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -367,7 +403,7 @@ def register():
 
     # L'inscription se fait toujours auprès d'une tontine précise : /register?t=<slug>
     slug = request.args.get('t', '')
-    tontine = Tontine.query.filter_by(slug=slug, is_active=True).first() if slug else None
+    tontine = _public_tontines().filter_by(slug=slug).first() if slug else None
     if not tontine:
         flash('Choisissez votre tontine avant de vous inscrire.', 'warning')
         return redirect(url_for('index'))
@@ -515,6 +551,10 @@ def login():
 
         if user and user.check_password(form.password.data) and user.is_active:
             _clear_failures(attempt_key)
+            if user.tontine and user.tontine.pending_confirmation:
+                flash(f"Confirmez d'abord votre adresse e-mail : un lien a été envoyé à {user.email}. Sans confirmation, "
+                      f"la tontine est supprimée {app.config['EMAIL_CONFIRMATION_HOURS']} h après sa création.", 'warning')
+                return redirect(url_for('signup_pending', slug=user.tontine.slug))
             login_user(user, remember=form.remember.data)
             user.last_login = utcnow()
             db.session.commit()
@@ -682,7 +722,7 @@ def tontine_home(slug):
     if current_user.is_authenticated and not current_user.is_superadmin:
         return redirect(url_for('dashboard'))
 
-    tontine = Tontine.query.filter_by(slug=slug, is_active=True).first_or_404()
+    tontine = _public_tontines().filter_by(slug=slug).first_or_404()
     set_current_tenant(tontine.id)
     g.tontine = tontine
 
@@ -4516,7 +4556,19 @@ def superadmin():
                 'users': User.query.filter_by(tontine_id=t.id).count(),
                 'cycles': TontineCycleDetail.query.filter_by(tontine_id=t.id).count(),
             }
-    return render_template('superadmin.html', tontines=tontines, counts=counts, form_data={})
+    return _superadmin_render(tontines, counts, {})
+
+
+def _superadmin_render(tontines, counts, form_data):
+    with tenant_bypass():
+        billing_info = {t.id: billing.status(t, active_members_count(t.id)) for t in tontines}
+        pending = BillingPayment.query.filter_by(status='EN_ATTENTE').order_by(BillingPayment.declared_at).all()
+        recent = BillingPayment.query.filter(BillingPayment.status != 'EN_ATTENTE').order_by(
+            BillingPayment.validated_at.desc()).limit(10).all()
+        due_total = sum(i['monthly'] for i in billing_info.values() if i['plan'] == 'PAYANT')
+        return render_template('superadmin.html', tontines=tontines, counts=counts, form_data=form_data,
+                               billing_info=billing_info, pending_payments=pending, recent_payments=recent,
+                               monthly_total=due_total)
 
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
@@ -4597,7 +4649,7 @@ def _superadmin_page(form_data):
                          'users': User.query.filter_by(tontine_id=t.id).count(),
                          'cycles': TontineCycleDetail.query.filter_by(tontine_id=t.id).count()}
                   for t in tontines}
-    return render_template('superadmin.html', tontines=tontines, counts=counts, form_data=form_data)
+    return _superadmin_render(tontines, counts, form_data)
 
 
 @app.route('/superadmin/tontines/add', methods=['POST'])
@@ -4636,11 +4688,322 @@ def signup():
 
         set_current_tenant(tontine.id)
         log_activity(user.id, user.role, f"Création de la tontine « {tontine.name} » (inscription en ligne)", request.remote_addr)
+        if app.config['REQUIRE_EMAIL_CONFIRMATION']:
+            tontine.pending_confirmation = True
+            db.session.commit()
+            sent, link = send_confirmation_email(tontine, user)
+            if not sent and _is_local_request():
+                session['local_confirmation_link'] = link   # poste local sans e-mail configuré : lien affiché
+            return redirect(url_for('signup_pending', slug=tontine.slug))
         login_user(user)
         flash(f"Bienvenue ! Votre tontine « {tontine.name} » est prête. Suivez les premiers pas ci-dessous.", 'success')
         return redirect(url_for('dashboard'))
 
     return render_template('signup.html', form_data={})
+
+
+# ------------------------------------------------------------
+# CONFIRMATION DE L'E-MAIL À L'INSCRIPTION
+# ------------------------------------------------------------
+# La tontine créée en ligne reste invisible et inaccessible tant que son fondateur
+# n'a pas cliqué sur le lien reçu par e-mail. Passé EMAIL_CONFIRMATION_HOURS (3 h),
+# elle est supprimée avec tout son contenu : il faut la recréer.
+CONFIRM_SALT = 'ghelia-email-confirm'
+_last_purge = [0.0]
+
+
+def _confirm_serializer():
+    return URLSafeTimedSerializer(app.config['SECRET_KEY'], salt=CONFIRM_SALT)
+
+
+def _is_local_request():
+    return (request.host or '').split(':')[0] in ('127.0.0.1', 'localhost')
+
+
+def send_email(to, subject, body):
+    """Envoie un e-mail texte via le serveur SMTP configuré (variables MAIL_*). Sans configuration
+    (poste local, tests), le message est gardé dans app.extensions['outbox'] et noté dans le journal."""
+    import smtplib
+    from email.message import EmailMessage
+    cfg = app.config
+    if not to:
+        return False
+    if cfg.get('MAIL_SUPPRESS_SEND') or not (cfg.get('MAIL_USERNAME') and cfg.get('MAIL_PASSWORD')):
+        app.extensions.setdefault('outbox', []).append({'to': to, 'subject': subject, 'body': body})
+        app.logger.warning("E-mail non envoyé (serveur d'envoi non configuré) à %s : %s", to, subject)
+        return False
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = cfg.get('MAIL_DEFAULT_SENDER') or cfg['MAIL_USERNAME']
+    msg['To'] = to
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(cfg['MAIL_SERVER'], cfg['MAIL_PORT'], timeout=20) as smtp:
+            if cfg.get('MAIL_USE_TLS', True):
+                smtp.starttls()
+            smtp.login(cfg['MAIL_USERNAME'], cfg['MAIL_PASSWORD'])
+            smtp.send_message(msg)
+        return True
+    except (smtplib.SMTPException, OSError) as exc:
+        app.logger.error("Échec d'envoi d'e-mail à %s : %s", to, exc)
+        return False
+
+
+def send_confirmation_email(tontine, user):
+    """Envoie le lien de confirmation ; retourne (envoyé ?, lien)"""
+    token = _confirm_serializer().dumps({'t': tontine.id, 'u': user.id, 'e': user.email})
+    link = url_for('confirm_signup', token=token, _external=True)
+    hours = app.config['EMAIL_CONFIRMATION_HOURS']
+    deadline = (tontine.created_at or utcnow()) + timedelta(hours=hours)
+    body = (f"Bonjour,\n\n"
+            f"Vous venez de créer la tontine « {tontine.name} » sur {app.config['APP_NAME']}.\n"
+            f"Pour l'activer, confirmez votre adresse e-mail en ouvrant ce lien :\n\n{link}\n\n"
+            f"Ce lien est valable {hours} heures (jusqu'au {deadline:%d/%m/%Y à %H:%M} UTC). Sans confirmation, "
+            f"la tontine sera supprimée et il faudra la recréer.\n\n"
+            f"Votre identifiant de connexion : {user.username}\n\n"
+            f"Si vous n'êtes pas à l'origine de cette inscription, ignorez ce message.\n\n"
+            f"{app.config['APP_NAME']}")
+    return send_email(user.email, f"Confirmez votre tontine « {tontine.name} »", body), link
+
+
+def delete_tontine_completely(tontine_id):
+    """Supprime une tontine et TOUT son contenu (toutes les tables qui ont tontine_id), ses fichiers
+    et les lignes sans tontine_id qui pointent vers ses comptes ou ses membres."""
+    import shutil
+    with tenant_bypass():
+        user_ids = [u.id for u in User.query.filter_by(tontine_id=tontine_id).all()]
+        member_ids = [mb.id for mb in Member.query.filter_by(tontine_id=tontine_id).all()]
+        for table in reversed(db.metadata.sorted_tables):
+            if table.name == 'tontines':
+                continue
+            if 'tontine_id' in table.c:
+                db.session.execute(table.delete().where(table.c.tontine_id == tontine_id))
+                continue
+            for fk in table.foreign_keys:   # ex. journal d'audit rattaché à un compte de la tontine
+                target = fk.column.table.name
+                ids = user_ids if target == 'users' else member_ids if target == 'members' else None
+                if ids:
+                    db.session.execute(table.delete().where(fk.parent.in_(ids)))
+        db.session.execute(Tontine.__table__.delete().where(Tontine.__table__.c.id == tontine_id))
+        db.session.commit()
+    for folder in (os.path.join(app.config['UPLOAD_FOLDER'], str(tontine_id)),
+                   os.path.join(BASE_DIR, 'instance', 'justificatifs', str(tontine_id))):
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def purge_unconfirmed_tontines(force=False):
+    """Supprime les tontines non confirmées depuis plus de EMAIL_CONFIRMATION_HOURS (au plus toutes les 5 min)"""
+    now = time.time()
+    if not force and now - _last_purge[0] < 300:
+        return 0
+    _last_purge[0] = now
+    cutoff = utcnow() - timedelta(hours=app.config['EMAIL_CONFIRMATION_HOURS'])
+    with tenant_bypass():
+        expired = [t.id for t in Tontine.query.filter(Tontine.pending_confirmation == True,  # noqa: E712
+                                                      Tontine.created_at < cutoff).all()]
+    for tid in expired:
+        delete_tontine_completely(tid)
+        app.logger.info("Tontine %s supprimée : e-mail non confirmé dans le délai", tid)
+    return len(expired)
+
+
+@app.before_request
+def _purge_unconfirmed_signups():
+    if request.endpoint and request.endpoint != 'static':
+        try:
+            purge_unconfirmed_tontines()
+        except Exception as exc:   # le nettoyage ne doit jamais bloquer une page
+            db.session.rollback()
+            app.logger.error("Nettoyage des inscriptions non confirmées impossible : %s", exc)
+
+
+@app.route('/inscription/en-attente/<slug>', methods=['GET', 'POST'])
+def signup_pending(slug):
+    """Page « vérifiez votre e-mail » ; POST = renvoyer le lien"""
+    with tenant_bypass():
+        tontine = Tontine.query.filter_by(slug=slug, pending_confirmation=True).first()
+        if tontine is None:
+            flash("Cette inscription n'existe plus : le délai de confirmation est dépassé ou elle est déjà confirmée.", 'info')
+            return redirect(url_for('login'))
+        president = User.query.filter_by(tontine_id=tontine.id, role='PRESIDENT').first()
+        deadline = (tontine.created_at or utcnow()) + timedelta(hours=app.config['EMAIL_CONFIRMATION_HOURS'])
+        if request.method == 'POST' and president:
+            if is_rate_limited('confirm', slug):   # 5 renvois max par inscription et par adresse IP
+                flash('Trop de demandes. Réessayez plus tard.', 'danger')
+            else:
+                _record_failure(('confirm', request.remote_addr or '?', slug.lower()), ('confirm', request.remote_addr or '?'))
+                sent, link = send_confirmation_email(tontine, president)
+                if not sent and _is_local_request():
+                    session['local_confirmation_link'] = link
+                flash('Un nouveau lien vient d\'être envoyé.' if sent else "L'e-mail n'a pas pu être envoyé.",
+                      'success' if sent else 'warning')
+            return redirect(url_for('signup_pending', slug=slug))
+        email = president.email if president else ''
+    masked = re.sub(r'(?<=^.)[^@]*(?=[^@]@)', lambda mo: '•' * len(mo.group(0)), email) if email else ''
+    return render_template('signup_pending.html', tontine=tontine, email=masked, deadline=deadline,
+                           hours=app.config['EMAIL_CONFIRMATION_HOURS'],
+                           local_link=session.pop('local_confirmation_link', None))
+
+
+@app.route('/inscription/confirmer/<token>')
+def confirm_signup(token):
+    try:
+        data = _confirm_serializer().loads(token, max_age=app.config['EMAIL_CONFIRMATION_HOURS'] * 3600)
+    except SignatureExpired:
+        purge_unconfirmed_tontines(force=True)
+        flash("Ce lien a expiré : la tontine n'a pas été confirmée à temps et a été supprimée. Recréez-la.", 'warning')
+        return redirect(url_for('signup'))
+    except BadSignature:
+        abort(404)
+    with tenant_bypass():
+        tontine = db.session.get(Tontine, data.get('t'))
+        user = db.session.get(User, data.get('u'))
+        if not tontine or not user or user.tontine_id != tontine.id or user.email != data.get('e'):
+            flash("Cette inscription n'existe plus. Recréez votre tontine.", 'warning')
+            return redirect(url_for('signup'))
+        if not tontine.pending_confirmation:
+            flash('Votre adresse e-mail est déjà confirmée : connectez-vous.', 'info')
+            return redirect(url_for('login', t=tontine.slug))
+        tontine.pending_confirmation = False
+        tontine.confirmed_at = utcnow()
+        db.session.commit()
+    set_current_tenant(tontine.id)
+    log_activity(user.id, user.role, f"Adresse e-mail confirmée : tontine « {tontine.name} » activée", request.remote_addr)
+    login_user(user)
+    flash(f"Adresse e-mail confirmée. Bienvenue ! Votre tontine « {tontine.name} » est prête. "
+          "Suivez les premiers pas ci-dessous.", 'success')
+    return redirect(url_for('dashboard'))
+
+
+# ------------------------------------------------------------
+# ABONNEMENT : page du président / trésorier
+# ------------------------------------------------------------
+@app.route('/abonnement', methods=['GET', 'POST'])
+@login_required
+@role_required(BILLING_MANAGERS + ['SECRETAIRE'])
+def abonnement():
+    tontine = current_tontine()
+    info = g.get('billing') or tontine_billing(tontine)
+    if request.method == 'POST':
+        if current_user.role not in BILLING_MANAGERS:
+            abort(403)
+        months = request.form.get('months', type=int) or 0
+        reference = (request.form.get('reference') or '').strip()
+        if not 1 <= months <= billing.MAX_MONTHS:
+            flash(f"Choisissez entre 1 et {billing.MAX_MONTHS} mois.", 'danger')
+        elif not info['monthly']:
+            flash("Votre tontine ne paie rien actuellement : aucun paiement à déclarer.", 'info')
+        elif not re.match(r'^[A-Za-z0-9._\-/]{4,80}$', reference):
+            flash("Référence SasPay invalide (lettres, chiffres, . _ - /, 4 caractères minimum).", 'danger')
+        elif BillingPayment.query.filter(db.func.lower(BillingPayment.reference) == reference.lower()).first():
+            flash("Cette référence a déjà été déclarée.", 'warning')
+        else:
+            amount = Decimal(info['monthly']) * months
+            db.session.add(BillingPayment(months=months, members_count=info['members'],
+                                          monthly_amount=Decimal(info['monthly']), amount=amount, provider='SASPAY',
+                                          reference=reference, status='EN_ATTENTE', declared_by=current_user.id))
+            db.session.commit()
+            log_activity(current_user.id, current_user.role,
+                         f"Paiement d'abonnement déclaré : {_fmt(amount)} FCFA ({months} mois), réf. {reference}",
+                         request.remote_addr)
+            flash(f"Paiement de {_fmt(amount)} FCFA déclaré. Il sera validé après vérification par l'administrateur "
+                  "de la plateforme.", 'success')
+        return redirect(url_for('abonnement'))
+    payments = BillingPayment.query.order_by(BillingPayment.id.desc()).all()
+    pay_url = app.config.get('SASPAY_PAYMENT_URL') or ''
+    if pay_url:
+        pay_url = pay_url.replace('{montant}', str(int(info['monthly']))).replace('{reference}', tontine.slug)
+    return render_template('abonnement.html', info=info, payments=payments, pay_url=pay_url, max_months=billing.MAX_MONTHS,
+                           can_pay=current_user.role in BILLING_MANAGERS)
+
+
+# ------------------------------------------------------------
+# ABONNEMENT : actions du super-admin
+# ------------------------------------------------------------
+@app.route('/superadmin/paiements/<int:payment_id>', methods=['POST'])
+@login_required
+@superadmin_required
+def superadmin_billing_payment(payment_id):
+    with tenant_bypass():
+        payment = db.get_or_404(BillingPayment, payment_id)
+        tontine = db.session.get(Tontine, payment.tontine_id)
+        if payment.status != 'EN_ATTENTE':
+            flash('Ce paiement a déjà été traité.', 'warning')
+            return redirect(url_for('superadmin'))
+        action = request.form.get('action')
+        if action == 'valider':
+            start, end = billing.next_period(tontine, payment.months)
+            payment.status, payment.period_start, payment.period_end = 'VALIDE', start, end
+            payment.validated_at = utcnow()
+            tontine.paid_until = end
+            message = f"Paiement validé : « {tontine.name} » payée jusqu'au {end:%d/%m/%Y}."
+        elif action == 'refuser':
+            payment.status = 'REFUSE'
+            payment.validated_at = utcnow()
+            payment.note = (request.form.get('note') or '').strip()[:255] or 'Paiement introuvable'
+            message = f"Paiement de « {tontine.name} » refusé."
+        else:
+            abort(400)
+        db.session.commit()
+    log_activity(current_user.id, current_user.role, message, request.remote_addr)
+    flash(message, 'success' if action == 'valider' else 'info')
+    return redirect(url_for('superadmin'))
+
+
+@app.route('/superadmin/tontines/<int:tontine_id>/abonnement', methods=['POST'])
+@login_required
+@superadmin_required
+def superadmin_billing_offer(tontine_id):
+    """Offrir la version payante (sans limite), offrir des mois gratuits, ou retirer l'offre"""
+    tontine = db.get_or_404(Tontine, tontine_id)
+    action = request.form.get('action')
+    if action == 'offrir_illimite':
+        tontine.billing_offered = True
+        message = f"Version payante offerte sans limite de durée à « {tontine.name} »."
+    elif action == 'retirer_illimite':
+        tontine.billing_offered = False
+        message = f"Offre illimitée retirée à « {tontine.name} » : la facturation normale reprend."
+    elif action == 'offrir_mois':
+        months = request.form.get('months', type=int) or 0
+        if not 1 <= months <= 36:
+            flash('Nombre de mois invalide (1 à 36).', 'danger')
+            return redirect(url_for('superadmin'))
+        start, end = billing.next_period(tontine, months)
+        tontine.free_until = end
+        message = f"{months} mois offert(s) à « {tontine.name} » : gratuit jusqu'au {end:%d/%m/%Y}."
+    elif action == 'annuler_mois':
+        tontine.free_until = None
+        message = f"Mois offerts annulés pour « {tontine.name} »."
+    else:
+        abort(400)
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, message, request.remote_addr)
+    flash(message, 'success')
+    return redirect(url_for('superadmin'))
+
+
+@app.route('/superadmin/tontines/<int:tontine_id>/supprimer', methods=['POST'])
+@login_required
+@superadmin_required
+def superadmin_delete_tontine(tontine_id):
+    """Suppression définitive d'une tontine (nom à retaper ; sauvegarde de la base avant)"""
+    tontine = db.get_or_404(Tontine, tontine_id)
+    if (request.form.get('confirm_name') or '').strip() != tontine.name:
+        flash(f"Suppression annulée : tapez exactement le nom « {tontine.name} » pour confirmer.", 'danger')
+        return redirect(url_for('superadmin'))
+    name, slug = tontine.name, tontine.slug
+    uri = app.config['SQLALCHEMY_DATABASE_URI']
+    if uri.startswith('sqlite:///'):   # copie de sécurité de toute la base avant suppression
+        import shutil
+        src = uri[len('sqlite:///'):]
+        folder = app.config.get('BACKUP_FOLDER') or os.path.join(BASE_DIR, 'backups')
+        os.makedirs(folder, exist_ok=True)
+        db.session.commit()
+        shutil.copy2(src, os.path.join(folder, f"avant-suppression-{slug}-{datetime.now():%Y%m%d-%H%M%S}.db"))
+    delete_tontine_completely(tontine_id)
+    log_activity(current_user.id, current_user.role, f"Tontine « {name} » ({slug}) supprimée définitivement", request.remote_addr)
+    flash(f"Tontine « {name} » supprimée définitivement (une copie de sauvegarde de la base a été faite).", 'success')
+    return redirect(url_for('superadmin'))
 
 
 @app.route('/superadmin/tontines/<int:tontine_id>/toggle', methods=['POST'])
@@ -4694,30 +5057,6 @@ def _load_reset_user(token):
     return user, None
 
 
-def send_email(to, subject, body):
-    """Envoi SMTP si MAIL_USERNAME / MAIL_PASSWORD sont configurés ; sinon False"""
-    cfg = app.config
-    if cfg.get('TESTING') or not (cfg.get('MAIL_USERNAME') and cfg.get('MAIL_PASSWORD')) or not to:
-        return False
-    try:
-        import smtplib
-        from email.message import EmailMessage
-        msg = EmailMessage()
-        msg['Subject'] = subject
-        msg['From'] = cfg.get('MAIL_DEFAULT_SENDER') or cfg['MAIL_USERNAME']
-        msg['To'] = to
-        msg.set_content(body)
-        with smtplib.SMTP(cfg.get('MAIL_SERVER'), cfg.get('MAIL_PORT', 587), timeout=10) as server:
-            if cfg.get('MAIL_USE_TLS', True):
-                server.starttls()
-            server.login(cfg['MAIL_USERNAME'], cfg['MAIL_PASSWORD'])
-            server.send_message(msg)
-        return True
-    except Exception as exc:
-        app.logger.warning(f"Envoi d'email impossible : {exc}")
-        return False
-
-
 def whatsapp_url(phone, text):
     """Lien de partage WhatsApp (destinataire pré-rempli si le numéro est international)"""
     raw = (phone or '').strip()
@@ -4749,7 +5088,7 @@ def forgot_password():
             flash('Trop de demandes. Réessayez dans 15 minutes.', 'danger')
             return redirect(url_for('forgot_password', t=selected) if selected else url_for('forgot_password'))
         _record_failure(('forgot', request.remote_addr or '?', identifier.lower()), ('forgot', request.remote_addr or '?'))
-        tontine = Tontine.query.filter_by(slug=selected, is_active=True).first() if selected else None
+        tontine = _public_tontines().filter_by(slug=selected).first() if selected else None
         if tontine and identifier:
             with tenant_bypass():
                 user = User.query.filter(

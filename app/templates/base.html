@@ -462,6 +462,26 @@
             </nav>
             
             <main class="main-content">
+                <!-- Rappel d'abonnement (délai de grâce / lecture seule) -->
+                {% set bill = g.get('billing') %}
+                {% if bill and bill.state != 'OK' and current_user.is_authenticated %}
+                <div class="alert {{ 'alert-danger' if bill.state == 'LECTURE_SEULE' else 'alert-warning' }} d-flex align-items-center flex-wrap" id="billingBanner">
+                    <i class="fas {{ 'fa-lock' if bill.state == 'LECTURE_SEULE' else 'fa-hourglass-half' }} mr-2"></i>
+                    <span class="mr-auto">
+                        {% if bill.state == 'LECTURE_SEULE' %}
+                        <strong>Lecture seule :</strong> l'abonnement de la tontine n'est pas réglé. Les données restent consultables.
+                        {% else %}
+                        <strong>Abonnement à régler</strong> avant le {{ bill.grace_end.strftime('%d/%m/%Y') }}
+                        ({{ bill.members }} membres × {{ bill.price_per_member }} = {{ bill.monthly|fcfa }} FCFA / mois).
+                        {% endif %}
+                    </span>
+                    {% if current_user.role in ['PRESIDENT', 'TRESORIER'] %}
+                    <a href="{{ url_for('abonnement') }}" class="btn btn-sm btn-light ml-2">Régler l'abonnement</a>
+                    {% else %}
+                    <small class="ml-2">Le président ou le trésorier doit régler l'abonnement.</small>
+                    {% endif %}
+                </div>
+                {% endif %}
                 <!-- Flash Messages -->
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}

@@ -78,6 +78,11 @@ class Config:
     APP_TAGLINE = 'La tontine en ligne, simple, solidaire et transparente'
     # Création libre de tontines depuis la page d'accueil (sinon : super-admin uniquement)
     ALLOW_PUBLIC_SIGNUP = os.environ.get('ALLOW_PUBLIC_SIGNUP', 'True').lower() == 'true'
+    # Une tontine créée en ligne doit être confirmée par e-mail, sinon elle est supprimée
+    REQUIRE_EMAIL_CONFIRMATION = os.environ.get('REQUIRE_EMAIL_CONFIRMATION', 'True').lower() == 'true'
+    EMAIL_CONFIRMATION_HOURS = int(os.environ.get('EMAIL_CONFIRMATION_HOURS', '3'))
+    # Abonnement : lien de paiement SasPay (facultatif). {montant} et {reference} sont remplacés.
+    SASPAY_PAYMENT_URL = os.environ.get('SASPAY_PAYMENT_URL', '')
 
     # ============================================================
     # PARAMÈTRES DE LA TONTINE

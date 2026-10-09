@@ -5,22 +5,79 @@
 
 {% block content %}
 <div class="fade-in">
+    {# ---------------- Paiements d'abonnement à valider ---------------- #}
+    <div class="card" id="paiementsAValider">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-credit-card"></i> Paiements d'abonnement à valider</span>
+            <span class="small">Revenu mensuel attendu : <strong>{{ monthly_total|fcfa }} FCFA</strong></span>
+        </div>
+        {% if pending_payments %}
+        <div class="table-container">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Tontine</th><th>Déclaré le</th><th>Membres</th><th>Mois</th><th class="text-right">Montant</th><th>Référence SasPay</th><th></th></tr></thead>
+                <tbody>
+                {% for p in pending_payments %}
+                <tr>
+                    <td><strong>{{ p.tontine.name if p.tontine else '—' }}</strong></td>
+                    <td>{{ p.declared_at.strftime('%d/%m/%Y %H:%M') if p.declared_at else '—' }}</td>
+                    <td>{{ p.members_count }}</td>
+                    <td>{{ p.months }}</td>
+                    <td class="text-right font-weight-bold">{{ p.amount|fcfa }} FCFA</td>
+                    <td><code>{{ p.reference }}</code></td>
+                    <td class="text-nowrap">
+                        <form method="POST" action="{{ url_for('superadmin_billing_payment', payment_id=p.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="valider">
+                            <button type="submit" class="btn btn-sm btn-success"
+                                    onclick="return confirm('Avez-vous bien reçu {{ p.amount|fcfa }} FCFA sur SasPay (réf. {{ p.reference }}) ?');">
+                                <i class="fas fa-check"></i> Valider</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('superadmin_billing_payment', payment_id=p.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="refuser">
+                            <input type="hidden" name="note" value="Paiement introuvable sur SasPay">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Refuser ce paiement ?');">Refuser</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted small">Aucun paiement en attente.</div>
+        {% endif %}
+    </div>
+
     <div class="card">
         <div class="card-header"><i class="fas fa-list"></i> {{ tontines|length }} tontine(s)</div>
         {% if tontines %}
         <div class="table-container">
             <table class="table">
-                <thead><tr><th>Nom</th><th>URL</th><th>Membres actifs</th><th>Comptes</th><th>Cycles</th><th>Statut</th><th></th></tr></thead>
+                <thead><tr><th>Nom</th><th>URL</th><th>Membres actifs</th><th>Comptes</th><th>Cycles</th><th>Abonnement</th><th>Statut</th><th></th></tr></thead>
                 <tbody>
                 {% for t in tontines %}
+                {% set b = billing_info[t.id] %}
                 <tr>
-                    <td><strong>{{ t.name }}</strong>{% if t.location %}<br><small class="text-muted">{{ t.location }}</small>{% endif %}</td>
+                    <td><strong>{{ t.name }}</strong>{% if t.location %}<br><small class="text-muted">{{ t.location }}</small>{% endif %}
+                        {% if t.pending_confirmation %}<br><span class="badge badge-warning">e-mail non confirmé</span>{% endif %}</td>
                     <td><a href="{{ url_for('tontine_home', slug=t.slug) }}" target="_blank">/t/{{ t.slug }}</a></td>
                     <td>{{ counts[t.id].members }}</td>
                     <td>{{ counts[t.id].users }}</td>
                     <td>{{ counts[t.id].cycles }}</td>
+                    <td class="small">
+                        {% if b.plan == 'OFFERT' %}<span class="badge badge-success">Offerte (illimité)</span>
+                        {% elif b.plan == 'GRATUIT' %}<span class="badge badge-light border">Gratuite (≤ {{ b.free_members }})</span>
+                        {% else %}
+                        <strong>{{ b.monthly|fcfa }} FCFA/mois</strong><br>
+                        {% if b.state == 'OK' %}<span class="text-success">couverte jusqu'au {{ b.covered_until.strftime('%d/%m/%Y') }}</span>
+                        {% elif b.state == 'GRACE' %}<span class="text-warning">à payer avant le {{ b.grace_end.strftime('%d/%m/%Y') }}</span>
+                        {% else %}<span class="text-danger"><i class="fas fa-lock"></i> lecture seule</span>{% endif %}
+                        {% endif %}
+                        {% if b.free_until %}<br><span class="text-info">offerte jusqu'au {{ b.free_until.strftime('%d/%m/%Y') }}</span>{% endif %}
+                    </td>
                     <td>{% if t.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-secondary">Désactivée</span>{% endif %}</td>
-                    <td>
+                    <td class="small">
                         <form method="POST" action="{{ url_for('superadmin_toggle_tontine', tontine_id=t.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if t.is_active else 'btn-outline-success' }}"
@@ -34,12 +91,71 @@
                                 <i class="fas fa-key"></i> Mot de passe du président
                             </button>
                         </form>
+                        <button type="button" class="btn btn-sm btn-link p-0 mt-1" data-toggle="collapse" data-target="#offre{{ t.id }}">
+                            <i class="fas fa-gift"></i> Offrir / abonnement</button>
+                        <br><button type="button" class="btn btn-sm btn-link text-danger p-0 mt-1" data-toggle="modal" data-target="#supprimer{{ t.id }}">
+                            <i class="fas fa-trash"></i> Supprimer</button>
                     </td>
                 </tr>
+                <tr class="collapse" id="offre{{ t.id }}"><td colspan="8" style="background: var(--hl-cream)">
+                    <div class="d-flex flex-wrap align-items-end">
+                        <form method="POST" action="{{ url_for('superadmin_billing_offer', tontine_id=t.id) }}" class="form-inline mr-4 mb-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="offrir_mois">
+                            <label class="small font-weight-bold mr-2">Offrir</label>
+                            <select name="months" class="form-control form-control-sm mr-2">
+                                {% for n in [1, 2, 3, 4, 5, 6, 9, 12, 24] %}<option value="{{ n }}">{{ n }} mois</option>{% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-gold">Offrir ces mois</button>
+                        </form>
+                        {% if t.free_until %}
+                        <form method="POST" action="{{ url_for('superadmin_billing_offer', tontine_id=t.id) }}" class="mr-4 mb-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="annuler_mois">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">Annuler les mois offerts</button>
+                        </form>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('superadmin_billing_offer', tontine_id=t.id) }}" class="mb-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% if t.billing_offered %}
+                            <input type="hidden" name="action" value="retirer_illimite">
+                            <button type="submit" class="btn btn-sm btn-outline-warning">Retirer la version offerte</button>
+                            {% else %}
+                            <input type="hidden" name="action" value="offrir_illimite">
+                            <button type="submit" class="btn btn-sm btn-success"
+                                    onclick="return confirm('Offrir la version payante sans limite de durée à « {{ t.name }} » ?');">
+                                Offrir la version payante (illimitée)</button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </td></tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
+        {% for t in tontines %}
+        <div class="modal fade" id="supprimer{{ t.id }}" tabindex="-1" role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <form method="POST" action="{{ url_for('superadmin_delete_tontine', tontine_id=t.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="modal-header bg-danger text-white"><h5 class="modal-title">Supprimer « {{ t.name }} »</h5>
+                            <button type="button" class="close text-white" data-dismiss="modal">&times;</button></div>
+                        <div class="modal-body">
+                            <p>La tontine, ses membres, comptes, cotisations, cycles, emprunts et fichiers seront <strong>supprimés définitivement</strong>.
+                                Une copie de sauvegarde de la base est faite automatiquement avant.</p>
+                            <label class="small font-weight-bold">Pour confirmer, tapez le nom exact : <code>{{ t.name }}</code></label>
+                            <input type="text" name="confirm_name" class="form-control" autocomplete="off" required>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Annuler</button>
+                            <button type="submit" class="btn btn-danger">Supprimer définitivement</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
         {% else %}
         <div class="card-body text-muted">Aucune tontine pour l'instant.</div>
         {% endif %}

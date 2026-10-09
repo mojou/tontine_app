@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Abonnement - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-credit-card"></i> Abonnement{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="card" id="situationAbonnement">
+                <div class="card-header"><i class="fas fa-info-circle"></i> Situation de la tontine</div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2"><span class="text-muted">Membres actifs</span><strong>{{ info.members }}</strong></div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Formule</span>
+                        <strong>
+                            {% if info.plan == 'OFFERT' %}<span class="badge badge-success">Version complète offerte</span>
+                            {% elif info.plan == 'GRATUIT' %}<span class="badge badge-success">Gratuite (jusqu'à {{ info.free_members }} membres)</span>
+                            {% else %}<span class="badge badge-primary">Payante</span>{% endif %}
+                        </strong>
+                    </div>
+                    {% if info.plan == 'PAYANT' %}
+                    <div class="d-flex justify-content-between mb-2"><span class="text-muted">Prix mensuel</span>
+                        <strong>{{ info.members }} × {{ info.price_per_member }} = {{ info.monthly|fcfa }} FCFA / mois</strong></div>
+                    {% if info.free_until %}
+                    <div class="d-flex justify-content-between mb-2"><span class="text-muted">Mois offerts jusqu'au</span><strong>{{ info.free_until.strftime('%d/%m/%Y') }}</strong></div>
+                    {% endif %}
+                    <div class="d-flex justify-content-between mb-2"><span class="text-muted">Couvert jusqu'au</span>
+                        <strong>{{ info.covered_until.strftime('%d/%m/%Y') if info.covered_until else '—' }}</strong></div>
+                    {% endif %}
+                    <hr>
+                    {% if info.state == 'OK' %}
+                    <div class="alert alert-success mb-0"><i class="fas fa-check-circle"></i> Tout est en ordre.</div>
+                    {% elif info.state == 'GRACE' %}
+                    <div class="alert alert-warning mb-0"><i class="fas fa-hourglass-half"></i> Abonnement à régler avant le
+                        <strong>{{ info.grace_end.strftime('%d/%m/%Y') }}</strong>. Passé cette date, la tontine passe en lecture seule
+                        (vos données sont conservées).</div>
+                    {% else %}
+                    <div class="alert alert-danger mb-0"><i class="fas fa-lock"></i> <strong>Lecture seule</strong> : l'abonnement n'est pas réglé.
+                        Tout reste consultable, mais plus rien ne peut être enregistré jusqu'à la validation du paiement.</div>
+                    {% endif %}
+                </div>
+                <div class="card-footer small text-muted bg-white">
+                    Gratuit jusqu'à {{ info.free_members }} membres actifs. Au-delà : {{ info.price_per_member }} FCFA par membre et par mois,
+                    pour tous les membres (ex. 15 membres = {{ (15 * info.price_per_member)|fcfa }} FCFA / mois).
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            {% if info.plan == 'PAYANT' and can_pay %}
+            <div class="card" id="payerAbonnement">
+                <div class="card-header bg-primary"><i class="fas fa-mobile-alt"></i> Payer l'abonnement</div>
+                <div class="card-body">
+                    <ol class="small pl-3">
+                        <li>Payez avec <strong>SasPay</strong> le montant indiqué ci-dessous.</li>
+                        <li>Recopiez ici la <strong>référence de la transaction</strong> SasPay.</li>
+                        <li>L'administrateur de la plateforme vérifie et valide (la date « couvert jusqu'au » avance).</li>
+                    </ol>
+                    {% if pay_url %}
+                    <a href="{{ pay_url }}" target="_blank" rel="noopener" class="btn btn-gold btn-block mb-3"><i class="fas fa-external-link-alt"></i> Payer avec SasPay</a>
+                    {% endif %}
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <label class="small font-weight-bold">Nombre de mois</label>
+                            <select name="months" id="months" class="form-control">
+                                {% for n in range(1, max_months + 1) %}<option value="{{ n }}" data-amount="{{ n * info.monthly }}">{{ n }} mois · {{ (n * info.monthly)|fcfa }} FCFA</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="small font-weight-bold">Référence de la transaction SasPay</label>
+                            <input type="text" name="reference" class="form-control" maxlength="80" required placeholder="Ex : SP-2026-104582">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-paper-plane"></i> Déclarer le paiement</button>
+                    </form>
+                </div>
+            </div>
+            {% elif info.plan == 'PAYANT' %}
+            <div class="alert alert-info">Le président ou le trésorier règle l'abonnement.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-history"></i> Historique des paiements</div>
+        <div class="table-container">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Déclaré le</th><th>Mois</th><th class="text-right">Montant</th><th>Référence</th><th>Période couverte</th><th>Statut</th></tr></thead>
+                <tbody>
+                {% for p in payments %}
+                <tr>
+                    <td>{{ p.declared_at.strftime('%d/%m/%Y') if p.declared_at else '—' }}</td>
+                    <td>{{ p.months }}</td>
+                    <td class="text-right">{{ p.amount|fcfa }} FCFA</td>
+                    <td><code>{{ p.reference }}</code></td>
+                    <td>{% if p.period_start %}{{ p.period_start.strftime('%d/%m/%Y') }} → {{ p.period_end.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
+                    <td><span class="badge badge-{{ p.status_color }}">{{ p.status_display }}</span>{% if p.note %}<br><small class="text-muted">{{ p.note }}</small>{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted">Aucun paiement pour l'instant.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
