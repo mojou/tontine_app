@@ -67,6 +67,10 @@ check('/administration' not in v.get('/', headers=PROXY).get_data(as_text=True),
 r = v.post('/login', headers=PROXY, data={'tontine': m.PLATFORM_LOGIN, 'username': sa_name, 'password': 'Super2026x'})
 check(r.status_code == 302 and r.headers['Location'].endswith('/superadmin'), 'le super-admin se connecte depuis la page de connexion')
 
+base_html = open(os.path.join(P, 'app', 'templates', 'base.html'), encoding='utf-8').read()
+check('.modal-open .card' in base_html and 'transform: none !important' in base_html,
+      'fenêtres : les cartes ne bougent plus quand une fenêtre est ouverte (pas de clignotement)')
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

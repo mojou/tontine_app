@@ -178,6 +178,14 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }
+
+        /* Fenêtre ouverte : les cartes ne bougent plus. Sinon une fenêtre placée dans une carte
+           est déplacée et redessinée à chaque mouvement de la souris (clignotement). */
+        .modal-open .card,
+        .modal-open .card:hover {
+            transform: none !important;
+            transition: none !important;
+        }
         
         .card-header {
             background: white;
