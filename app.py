@@ -43,6 +43,12 @@ app = Flask(__name__,
 
 app.config.from_object(Config)
 
+# En ligne (PythonAnywhere…), les visites passent par un serveur intermédiaire : on lit la vraie
+# adresse IP (limitation des tentatives de connexion) et le https (liens envoyés par e-mail).
+if os.environ.get('TRUST_PROXY', '').lower() in ('1', 'true', 'yes'):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # Initialisation des extensions
 csrf = CSRFProtect()
 csrf.init_app(app)
@@ -160,7 +166,7 @@ def load_user(user_id):
 # Pages accessibles au super-admin (qui n'appartient à aucune tontine)
 SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine',
                         'superadmin_billing_payment', 'superadmin_billing_offer', 'superadmin_delete_tontine',
-                        'logout', 'static', 'index', 'tontine_home', 'login', 'signup',
+                        'logout', 'static', 'index', 'tontine_home', 'login', 'signup', 'guide',
                         'superadmin_reset_president', 'reset_password'}
 # Pages publiques qui fixent elles-mêmes la tontine (via l'URL ou le formulaire)
 PUBLIC_ENDPOINTS = {'static', 'index', 'tontine_home', 'login', 'register', 'signup', 'forgot_password', 'reset_password'}
@@ -713,7 +719,19 @@ def index():
         return redirect(url_for('superadmin' if current_user.is_superadmin else 'dashboard'))
 
     tontines = _active_tontines()
-    return render_template('home.html', tontines=tontines)
+    return render_template('home.html', tontines=tontines, pricing=_pricing())
+
+
+def _pricing():
+    """Tarifs affichés publiquement (mêmes règles que la facturation : billing.py)"""
+    return {'free': billing.FREE_MEMBERS, 'price': billing.PRICE_PER_MEMBER, 'grace': billing.GRACE_DAYS,
+            'examples': [(n, billing.monthly_price(n)) for n in (5, 10, 11, 15, 20, 30)]}
+
+
+@app.route('/guide')
+def guide():
+    """Documentation illustrée (publique) : prise en main de l'application, écran par écran"""
+    return render_template('guide.html', pricing=_pricing())
 
 
 @app.route('/t/<slug>')

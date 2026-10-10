@@ -6,6 +6,8 @@
 {% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block extra_css %}
+<style>.etat-table td.text-right, .etat-table th.text-right { white-space: nowrap; }</style>
+
 <style>
     .kpi .label { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--hl-muted); }
     .kpi .value { font-size: 1.4rem; font-weight: 800; color: var(--hl-green); }
@@ -138,7 +140,7 @@
                     </span>
                 </div>
                 <div class="card-body p-0">
-                    <table class="table table-sm mb-0">
+                    <table class="table table-sm mb-0 etat-table">
                         <thead><tr><th>Membre</th><th class="text-center">Mains</th><th class="text-right">Payé</th>
                             <th class="text-right">En retard</th><th class="text-right">{{ 'Tour ' ~ contrib.turn if cycle.status == 'EN_COURS' else '' }}</th>
                             <th class="text-right">Avance</th>{% if can_manage %}<th></th>{% endif %}</tr></thead>

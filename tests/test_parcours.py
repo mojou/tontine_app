@@ -123,6 +123,22 @@ check('Procès-verbaux' in h and 'menu-section' in h, 'le menu du membre est aus
 t = visible(pres.get('/audit-logs'))
 check('Ajout transaction : Fonds de caisse 5 000 FCFA' in t and 'Président' in t, "journal d'audit lisible (type et rôle en français)")
 
+# ---------------------------------------------------------------- pages publiques : tarifs, FAQ, guide illustré
+visitor = app.test_client()
+t = visible(visitor.get('/'))
+check('Gratuit pour démarrer' in t and '200 FCFA / membre / mois' in t and 'Jusqu\'à 10 membres actifs' in t,
+      "page d'accueil : tarifs (gratuit jusqu'à 10, 200 FCFA / membre / mois)")
+check('15 membres 3 000 FCFA' in t and '10 membres Gratuit' in t, 'exemples de prix calculés avec les vraies règles')
+h = visitor.get('/').get_data(as_text=True)
+check(h.count('class="faq-item"') >= 10 and 'href="/guide"' in h, 'FAQ (au moins 10 questions) et lien vers le guide')
+r = visitor.get('/guide')
+h = r.get_data(as_text=True)
+imgs = re.findall(r'<img src="/static/docs/([^"]+)"', h)
+missing = [i for i in imgs if not os.path.exists(os.path.join(P, 'app', 'static', 'docs', i))]
+check(r.status_code == 200 and len(imgs) >= 15 and not missing, f'guide illustré : {len(imgs)} captures, toutes présentes {missing}')
+check('Créer sa tontine' in visible(r) and 'Abonnement' in visible(r), 'le guide couvre de la création à l\'abonnement')
+check(pres.get('/guide').status_code == 200, 'le guide reste accessible une fois connecté')
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

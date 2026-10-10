@@ -36,6 +36,7 @@ class Config:
     # ============================================================
     SECRET_KEY = os.environ.get('SECRET_KEY') or _persistent_secret_key()
     REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true'   # en ligne (https)
     REMEMBER_COOKIE_SAMESITE = 'Lax'
     REMEMBER_COOKIE_DURATION = timedelta(days=14)
     
@@ -168,9 +169,11 @@ class Config:
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+    # Adresse d'envoi de la plateforme. Le mot de passe d'application Gmail (16 lettres) n'est
+    # JAMAIS écrit ici : il se règle sur l'hébergeur (variable d'environnement MAIL_PASSWORD).
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'ghelia.finance@gmail.com')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
-    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@tontine.com')
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'Ghelia Finance <ghelia.finance@gmail.com>')
     
     # ============================================================
     # DEBUG

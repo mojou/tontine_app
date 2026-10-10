@@ -21,7 +21,9 @@
         /* Navigation */
         .hl-nav { position: fixed; inset: 0 0 auto 0; z-index: 1000; padding: 16px 0; transition: all .3s; }
         .hl-nav.scrolled { background: var(--hl-green-900); box-shadow: 0 4px 20px rgba(0,0,0,.18); padding: 10px 0; }
-        .hl-nav .nav-link { color: rgba(255,255,255,.88); font-weight: 500; }
+        .hl-nav .nav-link { color: rgba(255,255,255,.88); font-weight: 500; white-space: nowrap; }
+        @media (min-width: 992px) { .hl-nav .navbar-nav .nav-link { padding-left: .55rem; padding-right: .55rem; } }
+        .hl-nav .btn { white-space: nowrap; }
         .hl-nav .nav-link:hover { color: #fff; }
         .hl-nav .navbar-toggler { color: #fff; border-color: rgba(255,255,255,.4); }
         @media (max-width: 991px) { .hl-nav .navbar-collapse { background: var(--hl-green-900); border-radius: 12px; padding: 12px; margin-top: 10px; } }
@@ -74,6 +76,26 @@
         /* Appel final */
         .cta { background: linear-gradient(135deg, var(--hl-gold) 0%, #d8b545 100%); border-radius: 24px; padding: 54px 30px; text-align: center; color: var(--hl-ink); }
         .cta h2 { font-weight: 800; color: var(--hl-green-900); }
+        /* Tarifs */
+        .price-card { background: #fff; border-radius: 20px; padding: 34px 30px; height: 100%; border: 1px solid #ece9dd; position: relative; }
+        .price-card.featured { border: 2px solid var(--hl-gold); box-shadow: 0 20px 44px rgba(20,83,45,.12); }
+        .price-card .ribbon { position: absolute; top: -14px; left: 30px; background: var(--hl-gold); color: var(--hl-ink); font-weight: 700; font-size: .78rem; padding: 5px 14px; border-radius: 20px; }
+        .price-card h4 { font-weight: 800; color: var(--hl-green); }
+        .price-card .price { font-size: 2.6rem; font-weight: 800; color: var(--hl-green-900); line-height: 1; }
+        .price-card .price small { font-size: .95rem; font-weight: 600; color: var(--hl-muted); }
+        .price-card ul { list-style: none; padding: 0; margin: 22px 0 0; }
+        .price-card li { margin-bottom: 10px; color: var(--hl-ink); }
+        .price-card li i { color: var(--hl-green); width: 22px; }
+        .calc { background: var(--hl-green-900); color: #fff; border-radius: 20px; padding: 30px; height: 100%; }
+        .calc .result { font-size: 2.2rem; font-weight: 800; color: var(--hl-gold); }
+        .calc input[type=range] { width: 100%; accent-color: var(--hl-gold); }
+        /* FAQ */
+        .faq-item { background: #fff; border: 1px solid #ece9dd; border-radius: 14px; margin-bottom: 12px; }
+        .faq-item .q { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; background: none; border: 0;
+                       padding: 18px 22px; font-weight: 700; color: var(--hl-green); }
+        .faq-item .q i { transition: transform .2s; color: var(--hl-gold-dark); }
+        .faq-item .q.collapsed i { transform: rotate(-90deg); }
+        .faq-item .a { padding: 0 22px 18px; color: var(--hl-muted); }
         footer { background: var(--hl-green-900); color: rgba(255,255,255,.7); padding: 50px 0 24px; }
         footer a { color: rgba(255,255,255,.85); }
         .flash-wrap { position: fixed; top: 84px; right: 16px; z-index: 1100; max-width: 380px; }
@@ -90,7 +112,10 @@
             <ul class="navbar-nav ml-auto align-items-lg-center">
                 <li class="nav-item"><a class="nav-link" href="#comment">Comment ça marche</a></li>
                 <li class="nav-item"><a class="nav-link" href="#fonctionnalites">Fonctionnalités</a></li>
-                <li class="nav-item"><a class="nav-link" href="#rejoindre">Rejoindre une tontine</a></li>
+                <li class="nav-item"><a class="nav-link" href="#tarifs">Tarifs</a></li>
+                <li class="nav-item"><a class="nav-link" href="#faq">FAQ</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ url_for('guide') }}">Guide</a></li>
+                <li class="nav-item"><a class="nav-link" href="#rejoindre">Rejoindre</a></li>
                 <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Se connecter</a></li>
                 {% if allow_signup %}
                 <li class="nav-item ml-lg-2"><a class="btn btn-gold btn-sm px-4" style="border-radius: 30px" href="{{ url_for('signup') }}">Créer ma tontine</a></li>
@@ -201,6 +226,100 @@
     </div>
 </section>
 
+<!-- Tarifs -->
+<section class="section" id="tarifs">
+    <div class="container">
+        <div class="text-center">
+            <div class="eyebrow">Tarifs</div>
+            <h2 class="section-title">Gratuit pour démarrer, simple ensuite</h2>
+            <p class="section-lead">Toutes les fonctionnalités sont incluses dans les deux formules. Vous ne payez que lorsque votre groupe grandit.</p>
+        </div>
+        <div class="row">
+            <div class="col-lg-4 mb-4">
+                <div class="price-card">
+                    <h4>Gratuit</h4>
+                    <div class="price">0 <small>FCFA / mois</small></div>
+                    <p class="text-muted mt-2 mb-0">Jusqu'à <strong>{{ pricing.free }} membres</strong> actifs.</p>
+                    <ul>
+                        <li><i class="fas fa-check"></i> Cotisations, séances et cycles</li>
+                        <li><i class="fas fa-check"></i> Tirage au sort et enchères</li>
+                        <li><i class="fas fa-check"></i> Emprunts, avals, aides, sanctions</li>
+                        <li><i class="fas fa-check"></i> Rapports PDF, Excel et CSV</li>
+                        <li><i class="fas fa-check"></i> Sans limite de durée</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="price-card featured">
+                    <span class="ribbon">Groupes de plus de {{ pricing.free }}</span>
+                    <h4>Croissance</h4>
+                    <div class="price">{{ pricing.price }} <small>FCFA / membre / mois</small></div>
+                    <p class="text-muted mt-2 mb-0">Dès <strong>{{ pricing.free + 1 }} membres</strong>, pour <strong>tous</strong> les membres actifs.</p>
+                    <ul>
+                        <li><i class="fas fa-check"></i> Tout ce qui est dans « Gratuit »</li>
+                        <li><i class="fas fa-check"></i> Membres illimités</li>
+                        <li><i class="fas fa-check"></i> Paiement Mobile Money via SasPay</li>
+                        <li><i class="fas fa-check"></i> De 1 à 12 mois d'avance</li>
+                        <li><i class="fas fa-check"></i> {{ pricing.grace }} jours de délai si vous oubliez</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="calc" id="priceCalc">
+                    <h5 class="font-weight-bold">Combien vais-je payer ?</h5>
+                    <label for="calcMembers" class="small mb-1">Nombre de membres : <strong id="calcCount">15</strong></label>
+                    <input type="range" id="calcMembers" min="1" max="100" value="15">
+                    <div class="result mt-3" id="calcResult">3 000 FCFA</div>
+                    <div class="small" style="opacity:.8" id="calcDetail">par mois · 15 × {{ pricing.price }} FCFA</div>
+                    <hr style="border-color: rgba(255,255,255,.15)">
+                    <table class="table table-sm table-borderless text-white small mb-0">
+                        {% for n, price in pricing.examples %}
+                        <tr><td>{{ n }} membres</td><td class="text-right font-weight-bold">{{ 'Gratuit' if price == 0 else (price|fcfa) ~ ' FCFA' }}</td></tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+        </div>
+        <p class="text-center text-muted small mb-0">Aucune donnée n'est jamais supprimée : si l'abonnement n'est pas réglé, la tontine reste consultable (lecture seule) jusqu'au paiement.</p>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="section bg-soft" id="faq">
+    <div class="container" style="max-width: 860px">
+        <div class="text-center">
+            <div class="eyebrow">Questions fréquentes</div>
+            <h2 class="section-title">FAQ</h2>
+            <p class="section-lead">Les réponses aux questions que se posent les présidents et les membres.</p>
+        </div>
+        {% set faqs = [
+            ("C'est vraiment gratuit ?", "Oui, sans limite de durée, tant que votre tontine compte " ~ pricing.free ~ " membres actifs ou moins. Toutes les fonctionnalités sont incluses."),
+            ("Comment est calculé le prix au-delà de " ~ pricing.free ~ " membres ?", pricing.price ~ " FCFA par membre actif et par mois, pour tous les membres. Exemple : 15 membres = 15 × " ~ pricing.price ~ " = " ~ ((15 * pricing.price)|fcfa|replace(' ', ' ')) ~ " FCFA par mois. Si vous redescendez à " ~ pricing.free ~ " membres ou moins, la tontine redevient gratuite."),
+            ("Comment payer l'abonnement ?", "Le président ou le trésorier paie par Mobile Money avec SasPay, puis recopie la référence de la transaction dans la page « Abonnement ». Le paiement est validé par l'administrateur de la plateforme. On peut payer de 1 à 12 mois d'avance."),
+            ("Que se passe-t-il si on oublie de payer ?", "Vous avez " ~ pricing.grace ~ " jours de délai. Ensuite la tontine passe en lecture seule : tout reste consultable, rien n'est supprimé, et tout se débloque dès que le paiement est validé."),
+            ("Pourquoi dois-je confirmer mon adresse e-mail ?", "Pour protéger la plateforme contre les fausses inscriptions. Après la création de votre tontine, cliquez sur le lien reçu par e-mail dans les 3 heures ; sans confirmation, l'inscription est supprimée et il faut la refaire."),
+            ("Mes données sont-elles visibles par d'autres tontines ?", "Non. Chaque tontine est totalement séparée : seuls ses membres y ont accès, et chacun ne voit que ce que son rôle lui permet (le bureau gère, les membres consultent)."),
+            ("Faut-il installer une application ?", "Non. Tout fonctionne dans le navigateur, sur téléphone comme sur ordinateur. Il suffit d'une connexion internet."),
+            ("Comment se passe le tirage au sort ?", "Le président lance le tirage depuis le cycle : l'ordre de passage est tiré au hasard, affiché à tous et conservé dans l'historique. Les enchères sont aussi possibles."),
+            ("Peut-on gérer plusieurs montants de cotisation (1 000, 10 000…) ?", "Oui. Chaque niveau de cotisation a son propre cycle, et un membre peut prendre plusieurs mains dans un même cycle."),
+            ("Que se passe-t-il si un membre est en retard ?", "La feuille de séance montre qui doit payer. Une amende de retard (montant fixé par cotisation) peut être infligée automatiquement à la clôture de la séance, et la cagnotte n'est pas versée tant que les cotisations du tour manquent."),
+            ("Qui peut se porter avaliste d'un emprunt ?", "Un membre à jour en réunion, sans dette d'emprunt, et dont l'épargne atteint au moins le tiers de la somme demandée."),
+            ("Où trouver de l'aide pour bien démarrer ?", "Le guide illustré explique chaque écran pas à pas. Votre tableau de bord affiche aussi les « premiers pas » à suivre après la création de la tontine."),
+        ] %}
+        <div id="faqList">
+            {% for q, a in faqs %}
+            <div class="faq-item">
+                <button class="q collapsed" type="button" data-toggle="collapse" data-target="#faq{{ loop.index }}" aria-expanded="false">
+                    <span>{{ q }}</span><i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="faq{{ loop.index }}" class="collapse" data-parent="#faqList"><div class="a">{{ a }}</div></div>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="text-center mt-4"><a href="{{ url_for('guide') }}" class="btn btn-outline-primary"><i class="fas fa-book-open"></i> Lire le guide illustré</a></p>
+    </div>
+</section>
+
 <!-- Rejoindre -->
 <section class="section" id="rejoindre">
     <div class="container">
@@ -257,6 +376,9 @@
             </div>
             <div class="col-md-6 text-md-right small">
                 <a href="#comment" class="mr-3">Comment ça marche</a>
+                <a href="#tarifs" class="mr-3">Tarifs</a>
+                <a href="#faq" class="mr-3">FAQ</a>
+                <a href="{{ url_for('guide') }}" class="mr-3">Guide</a>
                 <a href="#rejoindre" class="mr-3">Rejoindre</a>
                 <a href="{{ url_for('login') }}">Se connecter</a>
             </div>
@@ -284,6 +406,17 @@ $(function() {
         $('#noResult').toggle(visible === 0);
     });
     setTimeout(function() { $('.flash-wrap .alert').alert('close'); }, 6000);
+
+    // Calculateur de prix (mêmes règles que la facturation)
+    var FREE = {{ pricing.free }}, PRICE = {{ pricing.price }};
+    function fcfa(n) { return n.toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '); }
+    function calc() {
+        var n = parseInt($('#calcMembers').val(), 10), total = n <= FREE ? 0 : n * PRICE;
+        $('#calcCount').text(n);
+        $('#calcResult').text(total ? fcfa(total) + ' FCFA' : 'Gratuit');
+        $('#calcDetail').text(total ? 'par mois · ' + n + ' × ' + PRICE + ' FCFA' : 'jusqu\'à ' + FREE + ' membres');
+    }
+    $('#calcMembers').on('input', calc); calc();
 });
 </script>
 </body>

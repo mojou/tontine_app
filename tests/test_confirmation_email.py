@@ -142,6 +142,46 @@ with app.app_context(), tenant_bypass():
     check(jsb is None or not jsb.pending_confirmation, 'les tontines existantes ne sont pas concernées')
 check(len([o for o in outbox if 'Confirmez' in o['subject']]) >= 3, "chaque inscription envoie bien son e-mail")
 
+# ---------------------------------------------------------------- envoi réel via Gmail (serveur simulé)
+import smtplib  # noqa: E402
+from config import Config  # noqa: E402
+
+check(Config.MAIL_USERNAME == 'ghelia.finance@gmail.com' and Config.MAIL_DEFAULT_SENDER == 'Ghelia Finance <ghelia.finance@gmail.com>'
+      and Config.MAIL_SERVER == 'smtp.gmail.com' and Config.MAIL_PORT == 587, 'adresse d\'envoi : Ghelia Finance <ghelia.finance@gmail.com> via Gmail')
+sent = {}
+
+
+class FakeSMTP:
+    def __init__(self, host, port, timeout=None):
+        sent.update(host=host, port=port)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def starttls(self):
+        sent['tls'] = True
+
+    def login(self, user, pwd):
+        sent.update(user=user, pwd=pwd)
+
+    def send_message(self, msg):
+        sent.update(sender=msg['From'], to=msg['To'], subject=msg['Subject'])
+
+
+real_smtp = smtplib.SMTP
+smtplib.SMTP = FakeSMTP
+app.config.update(MAIL_USERNAME=Config.MAIL_USERNAME, MAIL_PASSWORD='abcdabcdabcdabcd', MAIL_DEFAULT_SENDER=Config.MAIL_DEFAULT_SENDER)
+with app.test_request_context():
+    ok = m.send_email('fondateur@exemple.cm', 'Confirmez votre tontine', 'corps')
+smtplib.SMTP = real_smtp
+app.config.update(MAIL_USERNAME='', MAIL_PASSWORD='')
+check(ok and sent.get('host') == 'smtp.gmail.com' and sent.get('tls') and sent.get('user') == 'ghelia.finance@gmail.com'
+      and sent.get('sender') == 'Ghelia Finance <ghelia.finance@gmail.com>' and sent.get('to') == 'fondateur@exemple.cm',
+      f'avec le mot de passe : connexion sécurisée à Gmail, expéditeur « Ghelia Finance » {sent}')
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

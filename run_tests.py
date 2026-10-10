@@ -48,6 +48,7 @@ SUITES = [
     ('test_ecarts_cycle.py', 'ec.db', 'Écarts de cycle et régularisation'),
     ('test_confirmation_email.py', 'ce.db', "Confirmation e-mail à l'inscription"),
     ('test_abonnement.py', 'ab.db', 'Abonnement, paiements, offres, suppression'),
+    ('test_production.py', 'pr.db', 'Réglages de mise en ligne (https, IP)'),
 ]
 EXHAUSTIVE = [
     ('verif_routes.py', 'crawl.db', 'Exploration de toutes les routes'),
