@@ -182,6 +182,49 @@ check(ok and sent.get('host') == 'smtp.gmail.com' and sent.get('tls') and sent.g
       and sent.get('sender') == 'Ghelia Finance <ghelia.finance@gmail.com>' and sent.get('to') == 'fondateur@exemple.cm',
       f'avec le mot de passe : connexion sécurisée à Gmail, expéditeur « Ghelia Finance » {sent}')
 
+# ---------------------------------------------------------------- envoi par l'API Brevo (serveur simulé)
+import json  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+calls = []
+
+
+class FakeResp:
+    status = 201
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def fake_urlopen(req, timeout=None):
+    calls.append(req)
+    if req.headers.get('Api-key') == 'mauvaise-cle':
+        raise urllib.error.HTTPError(req.full_url, 401, 'Unauthorized', {}, __import__('io').BytesIO(b'{"message":"Key not found"}'))
+    return FakeResp()
+
+
+real_urlopen = urllib.request.urlopen
+urllib.request.urlopen = fake_urlopen
+app.config.update(BREVO_API_KEY='xkeysib-test', MAIL_DEFAULT_SENDER=Config.MAIL_DEFAULT_SENDER, MAIL_USERNAME='', MAIL_PASSWORD='')
+with app.test_request_context():
+    ok = m.send_email('fondateur@exemple.cm', 'Confirmez votre tontine « Akwa »', 'Bonjour, lien : https://exemple/confirmer')
+payload = json.loads(calls[-1].data.decode('utf-8')) if calls else {}
+check(ok and calls and calls[-1].full_url == 'https://api.brevo.com/v3/smtp/email' and calls[-1].get_method() == 'POST'
+      and calls[-1].headers.get('Api-key') == 'xkeysib-test', 'Brevo : appel de l\'API avec la clé (sans SMTP)')
+check(payload.get('sender') == {'name': 'Ghelia Finance', 'email': 'ghelia.finance@gmail.com'}
+      and payload.get('to') == [{'email': 'fondateur@exemple.cm'}] and '« Akwa »' in payload.get('subject', '')
+      and 'confirmer' in payload.get('textContent', ''), f'Brevo : expéditeur Ghelia Finance, destinataire, sujet et texte {payload.get("sender")}')
+app.config['BREVO_API_KEY'] = 'mauvaise-cle'
+with app.test_request_context():
+    ok = m.send_email('fondateur@exemple.cm', 'Sujet', 'corps')
+check(ok is False, 'Brevo refuse (clé invalide) : échec signalé sans plantage')
+urllib.request.urlopen = real_urlopen
+app.config['BREVO_API_KEY'] = ''
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

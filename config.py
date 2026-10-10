@@ -174,6 +174,9 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'ghelia.finance@gmail.com')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'Ghelia Finance <ghelia.finance@gmail.com>')
+    # Envoi par l'API web de Brevo (hébergement gratuit PythonAnywhere : le SMTP y est bloqué).
+    # Clé API réglée UNIQUEMENT sur l'hébergeur ; si elle est présente, elle remplace le SMTP.
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
     
     # ============================================================
     # DEBUG

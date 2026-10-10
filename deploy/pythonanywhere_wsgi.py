@@ -4,9 +4,9 @@
 # À COPIER dans l'onglet « Web » de PythonAnywhere -> lien « WSGI configuration file »
 # (remplacer tout le contenu existant), puis cliquer sur « Reload ».
 #
-# Seule la ligne MAIL_PASSWORD est à compléter : le mot de passe d'application Gmail
-# (16 lettres) de ghelia.finance@gmail.com. Ce fichier reste privé sur votre compte
-# PythonAnywhere : ne le recopiez JAMAIS dans GitHub ni dans un message.
+# Seule la ligne BREVO_API_KEY est à compléter : la clé API Brevo (commence par « xkeysib- »).
+# Ce fichier reste privé sur votre compte PythonAnywhere : ne le recopiez JAMAIS dans GitHub
+# ni dans un message.
 
 import os
 import sys
@@ -21,8 +21,9 @@ os.environ.setdefault('TRUST_PROXY', '1')
 # Cookies de connexion envoyés uniquement en https
 os.environ.setdefault('SESSION_COOKIE_SECURE', 'True')
 
-# E-mails de confirmation (Gmail) : collez ici le mot de passe d'application, sans espaces
-os.environ['MAIL_PASSWORD'] = 'COLLEZ_ICI_LES_16_LETTRES'
+# E-mails de confirmation : PythonAnywhere gratuit bloque le SMTP (Gmail), on passe par l'API Brevo.
+# Collez ici la clé API Brevo (expéditeur ghelia.finance@gmail.com validé dans Brevo)
+os.environ['BREVO_API_KEY'] = 'COLLEZ_ICI_LA_CLE_BREVO'
 
 # Lien de paiement SasPay (facultatif ; {montant} et {reference} sont remplacés automatiquement)
 os.environ.setdefault('SASPAY_PAYMENT_URL', '')

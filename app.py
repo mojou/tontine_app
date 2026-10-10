@@ -4738,14 +4738,40 @@ def _is_local_request():
     return (request.host or '').split(':')[0] in ('127.0.0.1', 'localhost')
 
 
+def _send_via_brevo(to, subject, body):
+    """Envoi par l'API web de Brevo (permise sur l'hébergement gratuit PythonAnywhere, où le SMTP est bloqué)"""
+    import json
+    import urllib.error
+    import urllib.request
+    from email.utils import parseaddr
+    name, sender = parseaddr(app.config.get('MAIL_DEFAULT_SENDER') or app.config.get('MAIL_USERNAME') or '')
+    payload = {'sender': {'name': name or app.config['APP_NAME'], 'email': sender},
+               'to': [{'email': to}], 'subject': subject, 'textContent': body}
+    req = urllib.request.Request('https://api.brevo.com/v3/smtp/email', data=json.dumps(payload).encode('utf-8'),
+                                 method='POST', headers={'api-key': app.config['BREVO_API_KEY'],
+                                                         'content-type': 'application/json', 'accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return 200 <= resp.status < 300
+    except urllib.error.HTTPError as exc:   # message d'erreur de Brevo (clé invalide, expéditeur non validé…)
+        detail = exc.read().decode('utf-8', 'replace')[:300]
+        app.logger.error("Échec d'envoi d'e-mail à %s (Brevo %s) : %s", to, exc.code, detail)
+    except (urllib.error.URLError, OSError) as exc:
+        app.logger.error("Échec d'envoi d'e-mail à %s (Brevo) : %s", to, exc)
+    return False
+
+
 def send_email(to, subject, body):
-    """Envoie un e-mail texte via le serveur SMTP configuré (variables MAIL_*). Sans configuration
-    (poste local, tests), le message est gardé dans app.extensions['outbox'] et noté dans le journal."""
+    """Envoie un e-mail texte : par l'API Brevo si BREVO_API_KEY est réglée, sinon par le serveur SMTP
+    (variables MAIL_*). Sans configuration (poste local, tests), le message est gardé dans
+    app.extensions['outbox'] et noté dans le journal."""
     import smtplib
     from email.message import EmailMessage
     cfg = app.config
     if not to:
         return False
+    if not cfg.get('MAIL_SUPPRESS_SEND') and cfg.get('BREVO_API_KEY'):
+        return _send_via_brevo(to, subject, body)
     if cfg.get('MAIL_SUPPRESS_SEND') or not (cfg.get('MAIL_USERNAME') and cfg.get('MAIL_PASSWORD')):
         app.extensions.setdefault('outbox', []).append({'to': to, 'subject': subject, 'body': body})
         app.logger.warning("E-mail non envoyé (serveur d'envoi non configuré) à %s : %s", to, subject)

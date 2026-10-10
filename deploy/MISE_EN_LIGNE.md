@@ -46,12 +46,23 @@ Un **mot de passe super-admin** s'affiche **une seule fois** : notez-le tout de 
    (`/var/www/germainbob_pythonanywhere_com_wsgi.py`).
 2. **Effacez tout** son contenu.
 3. Copiez-collez le contenu du fichier `deploy/pythonanywhere_wsgi.py` du projet.
-4. Sur la ligne `MAIL_PASSWORD`, remplacez `COLLEZ_ICI_LES_16_LETTRES` par le mot de passe
-   d'application Gmail de ghelia.finance@gmail.com (16 lettres, sans espaces).
+4. Sur la ligne `BREVO_API_KEY`, remplacez `COLLEZ_ICI_LA_CLE_BREVO` par votre clé API Brevo
+   (voir « E-mails : compte Brevo » ci-dessous).
 5. **Save**.
 
-> Ce mot de passe ne doit apparaître que dans ce fichier, sur votre compte PythonAnywhere.
-> Ne le mettez jamais dans GitHub ni dans un message.
+> Cette clé ne doit apparaître que dans ce fichier, sur votre compte PythonAnywhere.
+> Ne la mettez jamais dans GitHub ni dans un message.
+
+### E-mails : compte Brevo
+
+Le compte gratuit PythonAnywhere **bloque l'envoi par SMTP** (Gmail compris). Les e-mails passent donc
+par **Brevo** (gratuit, environ 300 e-mails par jour), autorisé par PythonAnywhere.
+
+1. Créez un compte sur https://www.brevo.com avec **ghelia.finance@gmail.com**.
+2. **Expéditeurs** (Senders, Domains & Dedicated IPs → Senders) : ajoutez
+   « Ghelia Finance » / ghelia.finance@gmail.com et validez le code reçu dans cette boîte.
+3. **Clés API** (SMTP & API → API Keys) : « Generate a new API key », nommez-la « Ghelia Finance »,
+   copiez la clé (elle commence par `xkeysib-`).
 
 ## Étape 5 : démarrer et vérifier
 
