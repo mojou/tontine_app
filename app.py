@@ -120,12 +120,13 @@ from models import (
     Aide, TontineCycleDetail, CycleBeneficiary, MeetingAttendanceDetail,
     ContributionPlanning, CycleReport, CaisseBalance,
     Poll, PollOption, PollVote, TontineDraw, TontineDrawResult, GalleryPhoto, Tontine,
-    ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest, BillingPayment,
+    ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest, BillingPayment, SasPayEvent,
     LoginAttempt, AidType
 )
 import finance
 import report_export
 import billing
+import saspay
 import re
 import time
 
@@ -144,6 +145,7 @@ def flash(message, category='message'):   # noqa: F811 - remplace flask.flash da
     _flask_flash(french_numbers(message), category)
 
 import secrets
+import json
 import uuid
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from tenancy import set_current_tenant, tenant_bypass
@@ -202,7 +204,8 @@ def resolve_current_tenant():
 
 BILLING_MANAGERS = ['PRESIDENT', 'TRESORIER']
 # Toujours permis en lecture seule : payer, se déconnecter, changer son mot de passe
-BILLING_ALLOWED_ENDPOINTS = {'abonnement', 'logout', 'login', 'change_password', 'profile'}
+BILLING_ALLOWED_ENDPOINTS = {'abonnement', 'abonnement_payer', 'abonnement_retour', 'logout', 'login',
+                             'change_password', 'profile'}
 
 
 def active_members_count(tontine_id):
@@ -4951,22 +4954,188 @@ def abonnement():
             flash("Cette référence a déjà été déclarée.", 'warning')
         else:
             amount = Decimal(info['monthly']) * months
-            db.session.add(BillingPayment(months=months, members_count=info['members'],
-                                          monthly_amount=Decimal(info['monthly']), amount=amount, provider='SASPAY',
-                                          reference=reference, status='EN_ATTENTE', declared_by=current_user.id))
+            payment = BillingPayment(months=months, members_count=info['members'],
+                                     monthly_amount=Decimal(info['monthly']), amount=amount, provider='SASPAY',
+                                     reference=reference, status='EN_ATTENTE', declared_by=current_user.id)
+            db.session.add(payment)
             db.session.commit()
             log_activity(current_user.id, current_user.role,
                          f"Paiement d'abonnement déclaré : {_fmt(amount)} FCFA ({months} mois), réf. {reference}",
                          request.remote_addr)
-            flash(f"Paiement de {_fmt(amount)} FCFA déclaré. Il sera validé après vérification par l'administrateur "
-                  "de la plateforme.", 'success')
+            # SasPay a peut-être déjà confirmé ce paiement (notification arrivée avant la saisie)
+            event = _find_saspay_event(reference)
+            ok, why = _apply_saspay_event(payment, event) if event else (False, None)
+            if ok:
+                flash(f"Paiement confirmé par SasPay : abonnement réglé jusqu'au {payment.period_end:%d/%m/%Y}. Merci !", 'success')
+            elif why:
+                flash(why, 'danger')
+            else:
+                flash(f"Paiement de {_fmt(amount)} FCFA enregistré. Il est validé automatiquement dès que SasPay le "
+                      "confirme (en général quelques secondes) : actualisez la page.", 'info')
         return redirect(url_for('abonnement'))
     payments = BillingPayment.query.order_by(BillingPayment.id.desc()).all()
     pay_url = app.config.get('SASPAY_PAYMENT_URL') or ''
     if pay_url:
         pay_url = pay_url.replace('{montant}', str(int(info['monthly']))).replace('{reference}', tontine.slug)
     return render_template('abonnement.html', info=info, payments=payments, pay_url=pay_url, max_months=billing.MAX_MONTHS,
-                           can_pay=current_user.role in BILLING_MANAGERS)
+                           can_pay=current_user.role in BILLING_MANAGERS, checkout_enabled=bool(app.config.get('SASPAY_SECRET_KEY')))
+
+
+# ------------------------------------------------------------
+# SASPAY : validation automatique des paiements d'abonnement
+# ------------------------------------------------------------
+def validate_billing_payment(payment, auto=False, note=None):
+    """Valide un paiement d'abonnement : la période payée s'ajoute à la suite de la précédente"""
+    with tenant_bypass():
+        tontine = db.session.get(Tontine, payment.tontine_id)
+        start, end = billing.next_period(tontine, payment.months)
+        payment.status, payment.period_start, payment.period_end = 'VALIDE', start, end
+        payment.validated_at = utcnow()
+        payment.auto_validated = auto
+        if note:
+            payment.note = note[:255]
+        tontine.paid_until = end
+        db.session.commit()
+    return end
+
+
+def _find_saspay_event(reference):
+    ref = (reference or '').strip().lower()
+    if not ref:
+        return None
+    return SasPayEvent.query.filter(db.or_(db.func.lower(SasPayEvent.reference) == ref,
+                                           db.func.lower(SasPayEvent.external_reference) == ref,
+                                           db.func.lower(SasPayEvent.transaction_id) == ref)).first()
+
+
+def _apply_saspay_event(payment, event):
+    """Rapproche une confirmation SasPay d'un paiement déclaré. Retourne (validé ?, motif du refus)"""
+    if payment.status != 'EN_ATTENTE':
+        return False, None
+    if event.used_by_payment_id and event.used_by_payment_id != payment.id:
+        return False, "Ce paiement SasPay a déjà servi à régler un autre abonnement."
+    if (event.status or '').upper() != 'SUCCESS':
+        return False, None
+    if event.currency and event.currency.upper() != app.config['SASPAY_CURRENCY'].upper():
+        return False, f"Paiement SasPay en {event.currency} : la devise attendue est {app.config['SASPAY_CURRENCY']}."
+    if event.amount is None or Decimal(str(event.amount)) < Decimal(str(payment.amount)):
+        return False, (f"Montant reçu par SasPay ({_fmt(event.amount or 0)} FCFA) inférieur au montant dû "
+                       f"({_fmt(payment.amount)} FCFA) : paiement non validé.")
+    event.used_by_payment_id = payment.id
+    validate_billing_payment(payment, auto=True, note=f"Confirmé par SasPay ({event.transaction_id})")
+    return True, None
+
+
+@app.route('/webhooks/saspay', methods=['POST'])
+@csrf.exempt
+def saspay_webhook():
+    """Notifications SasPay signées : un paiement réussi valide l'abonnement correspondant"""
+    secret = app.config.get('SASPAY_WEBHOOK_SECRET')
+    if not secret:   # notifications pas encore configurées sur l'hébergeur : l'adresse n'existe pas
+        abort(404)
+    raw = request.get_data()
+    if not saspay.verify_signature(secret, request.headers.get('X-Webhook-Timestamp'), raw,
+                                   request.headers.get('X-Webhook-Signature')):
+        app.logger.warning("Notification SasPay refusée : signature invalide (%s)", request.remote_addr)
+        return jsonify({'ok': False, 'error': 'signature invalide'}), 401
+    try:
+        body = json.loads(raw.decode('utf-8'))
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'JSON invalide'}), 400
+    event_type = body.get('event') or request.headers.get('X-Webhook-Event')
+    data = body.get('data') or {}
+    if event_type != 'transaction.success' or not data.get('id'):
+        return jsonify({'ok': True, 'ignored': event_type})
+    with tenant_bypass():
+        event = SasPayEvent.query.filter_by(transaction_id=str(data['id'])).first()
+        if event is None:   # SasPay renvoie la même notification jusqu'à 5 fois : enregistrée une seule fois
+            event = SasPayEvent(transaction_id=str(data['id'])[:80], reference=(data.get('reference') or '')[:80],
+                                external_reference=(data.get('external_reference') or '')[:80],
+                                amount=saspay.received_amount(data), currency=(data.get('currency') or '')[:3],
+                                status=(data.get('status') or 'SUCCESS')[:20], msisdn=(data.get('msisdn') or '')[:30],
+                                payload=raw.decode('utf-8')[:4000])
+            db.session.add(event)
+            db.session.commit()
+        # Paiement en un clic : la session porte l'identifiant du paiement d'abonnement
+        meta = data.get('metadata') or {}
+        payment = None
+        if meta.get('billing_payment_id'):
+            payment = db.session.get(BillingPayment, int(meta['billing_payment_id'])) if str(meta['billing_payment_id']).isdigit() else None
+        if payment is None:   # lien de paiement : référence collée par le président
+            refs = {r.lower() for r in (event.reference, event.external_reference, event.transaction_id) if r}
+            payment = BillingPayment.query.filter(BillingPayment.status == 'EN_ATTENTE',
+                                                  db.func.lower(BillingPayment.reference).in_(refs)).first() if refs else None
+        validated = False
+        if payment is not None:
+            validated, why = _apply_saspay_event(payment, event)
+            if why:
+                app.logger.warning("Paiement SasPay %s non validé : %s", event.transaction_id, why)
+    return jsonify({'ok': True, 'validated': validated})
+
+
+@app.route('/abonnement/payer', methods=['POST'])
+@login_required
+@role_required(BILLING_MANAGERS)
+def abonnement_payer():
+    """Paiement en un clic : crée une session de paiement SasPay et y envoie le président"""
+    tontine = current_tontine()
+    info = g.get('billing') or tontine_billing(tontine)
+    months = request.form.get('months', type=int) or 0
+    if not app.config.get('SASPAY_SECRET_KEY'):
+        flash("Le paiement en un clic n'est pas encore activé : utilisez le lien de paiement SasPay.", 'warning')
+        return redirect(url_for('abonnement'))
+    if not 1 <= months <= billing.MAX_MONTHS or not info['monthly']:
+        flash(f"Choisissez entre 1 et {billing.MAX_MONTHS} mois.", 'danger')
+        return redirect(url_for('abonnement'))
+    amount = Decimal(info['monthly']) * months
+    payment = BillingPayment(months=months, members_count=info['members'], monthly_amount=Decimal(info['monthly']),
+                             amount=amount, provider='SASPAY_CHECKOUT', reference=f"GF-{tontine.id}-{uuid.uuid4().hex[:10]}",
+                             status='EN_ATTENTE', declared_by=current_user.id)
+    db.session.add(payment)
+    db.session.commit()
+    member = current_user.member
+    try:
+        session_ = saspay.create_checkout_session(
+            app.config['SASPAY_API_BASE'], app.config['SASPAY_SECRET_KEY'],
+            amount=f"{amount:.2f}", currency=app.config['SASPAY_CURRENCY'], country=app.config['SASPAY_COUNTRY'],
+            description=f"Abonnement {app.config['APP_NAME']} - {tontine.name} - {months} mois",
+            customer_email=(member.email if member and member.email else current_user.email) or tontine.contact_email,
+            customer_name=member.full_name if member else current_user.username,
+            customer_phone=(member.phone if member else '') or '',
+            return_url=url_for('abonnement_retour', payment_id=payment.id, _external=True),
+            metadata={'billing_payment_id': payment.id, 'tontine': tontine.slug})
+    except saspay.SasPayError as exc:
+        app.logger.error("Session de paiement SasPay impossible : %s", exc)
+        payment.status, payment.note = 'REFUSE', 'Paiement en ligne indisponible'
+        db.session.commit()
+        flash("Le paiement en ligne est momentanément indisponible. Utilisez le lien de paiement SasPay ci-dessous.", 'warning')
+        return redirect(url_for('abonnement'))
+    payment.checkout_session_id = str(session_.get('id') or '')[:80]
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, f"Paiement en ligne SasPay lancé : {_fmt(amount)} FCFA ({months} mois)",
+                 request.remote_addr)
+    return redirect(session_.get('checkout_url') or url_for('abonnement'))
+
+
+@app.route('/abonnement/retour/<int:payment_id>')
+@login_required
+@role_required(BILLING_MANAGERS + ['SECRETAIRE'])
+def abonnement_retour(payment_id):
+    """Retour de la page SasPay : on vérifie auprès de SasPay (jamais sur la seule foi du retour)"""
+    payment = db.get_or_404(BillingPayment, payment_id)
+    if payment.status == 'EN_ATTENTE' and payment.checkout_session_id and app.config.get('SASPAY_SECRET_KEY'):
+        try:
+            detail = saspay.checkout_session(app.config['SASPAY_API_BASE'], app.config['SASPAY_SECRET_KEY'],
+                                             payment.checkout_session_id)
+            if saspay.session_is_paid(detail):
+                validate_billing_payment(payment, auto=True, note='Confirmé par SasPay (paiement en ligne)')
+        except saspay.SasPayError as exc:
+            app.logger.warning("Vérification SasPay impossible : %s", exc)
+    if payment.status == 'VALIDE':
+        flash(f"Paiement confirmé : abonnement réglé jusqu'au {payment.period_end:%d/%m/%Y}. Merci !", 'success')
+    else:
+        flash("Paiement en cours de confirmation par SasPay : actualisez la page dans quelques instants.", 'info')
+    return redirect(url_for('abonnement'))
 
 
 # ------------------------------------------------------------
@@ -4984,10 +5153,7 @@ def superadmin_billing_payment(payment_id):
             return redirect(url_for('superadmin'))
         action = request.form.get('action')
         if action == 'valider':
-            start, end = billing.next_period(tontine, payment.months)
-            payment.status, payment.period_start, payment.period_end = 'VALIDE', start, end
-            payment.validated_at = utcnow()
-            tontine.paid_until = end
+            end = validate_billing_payment(payment)
             message = f"Paiement validé : « {tontine.name} » payée jusqu'au {end:%d/%m/%Y}."
         elif action == 'refuser':
             payment.status = 'REFUSE'

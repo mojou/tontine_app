@@ -84,6 +84,14 @@ class Config:
     EMAIL_CONFIRMATION_HOURS = int(os.environ.get('EMAIL_CONFIRMATION_HOURS', '3'))
     # Abonnement : lien de paiement SasPay (facultatif). {montant} et {reference} sont remplacés.
     SASPAY_PAYMENT_URL = os.environ.get('SASPAY_PAYMENT_URL', '')
+    # Notifications SasPay (webhooks) : secret de signature, réglé UNIQUEMENT sur l'hébergeur
+    SASPAY_WEBHOOK_SECRET = os.environ.get('SASPAY_WEBHOOK_SECRET', '')
+    # Paiement en un clic (API) : clé secrète sk_live_…, réglée UNIQUEMENT sur l'hébergeur.
+    # Sans elle, seul le mode « lien de paiement + notification » est proposé.
+    SASPAY_SECRET_KEY = os.environ.get('SASPAY_SECRET_KEY', '')
+    SASPAY_API_BASE = os.environ.get('SASPAY_API_BASE', 'https://api.saspay.me/api/v1')
+    SASPAY_CURRENCY = os.environ.get('SASPAY_CURRENCY', 'XAF')
+    SASPAY_COUNTRY = os.environ.get('SASPAY_COUNTRY', 'CM')
 
     # ============================================================
     # PARAMÈTRES DE LA TONTINE

@@ -101,7 +101,7 @@ with app.app_context(), tenant_bypass():
           'paiement déclaré en lecture seule : 2 mois x 2 200 = 4 400, en attente de validation')
 r = pres.post('/abonnement', data={'months': '1', 'reference': 'sp-2026-104582'}, follow_redirects=True)
 check('déjà été déclarée' in text(r), 'même référence refusée (doublon)')
-check('SP-2026-104582' in text(pres.get('/abonnement')) and 'En attente de validation' in text(pres.get('/abonnement')),
+check('SP-2026-104582' in text(pres.get('/abonnement')) and 'En attente de confirmation SasPay' in text(pres.get('/abonnement')),
       "l'historique montre le paiement en attente")
 
 # ---------------------------------------------------------------- super-admin : valider

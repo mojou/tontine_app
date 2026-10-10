@@ -90,4 +90,12 @@ cd ~/tontine_app && source venv/bin/activate && git pull && pip install -r requi
   puis **Reload** dans l'onglet Web.
 - **Sauvegarde quotidienne** (recommandé) : onglet **Tasks** → une tâche par jour :
   `cd ~/tontine_app && venv/bin/python backup.py`
-- **Lien SasPay** : dans le fichier WSGI, ligne `SASPAY_PAYMENT_URL`, puis **Reload**.
+- **SasPay (paiement de l'abonnement, validé automatiquement)** — dans https://app.saspay.me :
+  1. **Liens de paiement** : créez un lien à **montant libre**, devise **XAF**, nommé « Abonnement Ghelia Finance ».
+     Collez son adresse dans le fichier WSGI, ligne `SASPAY_PAYMENT_URL`.
+  2. **Webhooks** : créez un webhook, environnement **live**, adresse
+     `https://germainbob.pythonanywhere.com/webhooks/saspay`, abonné à **transaction.success**.
+     Copiez le **signing secret** (affiché une seule fois) dans la ligne `SASPAY_WEBHOOK_SECRET`.
+  3. **Save** puis **Reload**. Testez avec le bouton « tester » du webhook dans SasPay.
+  4. Plus tard, quand PythonAnywhere aura autorisé `api.saspay.me` : mettez votre clé `sk_live_…`
+     (régénérée) dans `SASPAY_SECRET_KEY` → le bouton « Payer maintenant » en un clic s'active.

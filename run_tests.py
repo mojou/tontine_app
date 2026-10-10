@@ -49,6 +49,7 @@ SUITES = [
     ('test_confirmation_email.py', 'ce.db', "Confirmation e-mail à l'inscription"),
     ('test_abonnement.py', 'ab.db', 'Abonnement, paiements, offres, suppression'),
     ('test_production.py', 'pr.db', 'Réglages de mise en ligne (https, IP)'),
+    ('test_saspay.py', 'sp.db', 'SasPay : paiement validé automatiquement'),
 ]
 EXHAUSTIVE = [
     ('verif_routes.py', 'crawl.db', 'Exploration de toutes les routes'),

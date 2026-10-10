@@ -25,7 +25,12 @@ os.environ.setdefault('SESSION_COOKIE_SECURE', 'True')
 # Collez ici la clé API Brevo (expéditeur ghelia.finance@gmail.com validé dans Brevo)
 os.environ['BREVO_API_KEY'] = 'COLLEZ_ICI_LA_CLE_BREVO'
 
-# Lien de paiement SasPay (facultatif ; {montant} et {reference} sont remplacés automatiquement)
-os.environ.setdefault('SASPAY_PAYMENT_URL', '')
+# ---- SasPay : abonnements payés et validés automatiquement (sans intervention de l'administrateur)
+# Lien de paiement SasPay (public, montant libre, devise XAF)
+os.environ.setdefault('SASPAY_PAYMENT_URL', 'COLLEZ_ICI_LE_LIEN_DE_PAIEMENT')
+# Secret de signature du webhook SasPay (adresse : https://germainbob.pythonanywhere.com/webhooks/saspay)
+os.environ['SASPAY_WEBHOOK_SECRET'] = 'COLLEZ_ICI_LE_SIGNING_SECRET'
+# Paiement en un clic : clé secrète sk_live_… — à remplir SEULEMENT quand PythonAnywhere aura autorisé api.saspay.me
+os.environ['SASPAY_SECRET_KEY'] = ''
 
 from app import app as application  # noqa: E402

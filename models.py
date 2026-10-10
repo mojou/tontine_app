@@ -1269,6 +1269,8 @@ class BillingPayment(TenantMixin, db.Model):
     period_start = db.Column(db.Date, nullable=True)
     period_end = db.Column(db.Date, nullable=True)
     note = db.Column(db.String(255), nullable=True)
+    auto_validated = db.Column(db.Boolean, nullable=True, default=False)   # validé par SasPay (sans l'admin)
+    checkout_session_id = db.Column(db.String(80), nullable=True)          # paiement en un clic
 
     tontine = db.relationship('Tontine', foreign_keys='BillingPayment.tontine_id')
     declarer = db.relationship('User', foreign_keys=[declared_by])
@@ -1280,6 +1282,26 @@ class BillingPayment(TenantMixin, db.Model):
     @property
     def status_color(self):
         return self.STATUSES.get(self.status, (self.status, 'secondary'))[1]
+
+
+# ============================================================
+# NOTIFICATIONS SASPAY REÇUES (paiements confirmés par SasPay)
+# ============================================================
+class SasPayEvent(db.Model):
+    """Une notification signée « transaction.success » ; sert une seule fois"""
+    __tablename__ = 'saspay_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_id = db.Column(db.String(80), unique=True, nullable=False)
+    reference = db.Column(db.String(80), index=True)
+    external_reference = db.Column(db.String(80), index=True)
+    amount = db.Column(db.Numeric(12, 2))
+    currency = db.Column(db.String(3))
+    status = db.Column(db.String(20))
+    msisdn = db.Column(db.String(30))
+    payload = db.Column(db.Text)
+    received_at = db.Column(db.DateTime, default=utcnow)
+    used_by_payment_id = db.Column(db.Integer, nullable=True)
 
 
 # ============================================================
