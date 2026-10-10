@@ -44,6 +44,23 @@ with app.app_context():
     keys = [a.ip_address for a in LoginAttempt.query.all()]
 check(any('41.202.219.75' in (k or '') for k in keys), f"tentatives comptées par la vraie IP du visiteur, pas celle du serveur ({keys[:2]})")
 
+# ---------------------------------------------------------------- super-admin : connexion quand une seule tontine existe
+from models import User, Tontine  # noqa: E402
+from tenancy import tenant_bypass  # noqa: E402
+with app.app_context(), tenant_bypass():
+    public = Tontine.query.filter(Tontine.is_active == True, Tontine.pending_confirmation.isnot(True)).count()  # noqa: E712
+    sa = User.query.filter_by(role='SUPERADMIN').first()
+    sa.set_password('Super2026x')
+    sa_name = sa.username
+    db.session.commit()
+check(public == 1, f'situation reproduite : une seule tontine publique ({public})')
+v = app.test_client()
+h = v.get('/login', headers=PROXY).get_data(as_text=True)
+check('<select name="tontine"' in h and 'Administration de la plateforme</option>' in h,
+      'page de connexion : la liste reste visible avec « Administration de la plateforme »')
+r = v.post('/login', headers=PROXY, data={'tontine': m.PLATFORM_LOGIN, 'username': sa_name, 'password': 'Super2026x'})
+check(r.status_code == 302 and r.headers['Location'].endswith('/superadmin'), 'le super-admin se connecte depuis la page de connexion')
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

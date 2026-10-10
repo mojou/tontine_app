@@ -15,9 +15,8 @@
         <form method="POST">
             {{ form.hidden_tag() }}
 
-            {% if selected_tontine and tontines|length == 1 %}
-            <input type="hidden" name="tontine" value="{{ selected_tontine.slug }}">
-            {% else %}
+            {# Liste toujours visible : l'administrateur de la plateforme doit pouvoir la choisir
+               même quand une seule tontine existe (la tontine reste présélectionnée) #}
             <div class="form-group">
                 <label for="tontine">Tontine</label>
                 <select name="tontine" id="tontine" class="form-control" required>
@@ -28,7 +27,6 @@
                     <option value="{{ platform_value }}" {% if selected == platform_value %}selected{% endif %}>Administration de la plateforme</option>
                 </select>
             </div>
-            {% endif %}
 
             <div class="form-group">
                 <label for="username">Nom d'utilisateur</label>
@@ -53,9 +51,6 @@
         {% if selected_tontine %}
         <div class="text-center mt-3 small">
             <a href="{{ url_for('tontine_home', slug=selected_tontine.slug) }}"><i class="fas fa-arrow-left"></i> Retour à l'accueil de {{ selected_tontine.name }}</a>
-            {% if tontines|length == 1 %}
-            <br><a href="{{ url_for('login', t=platform_value) }}" class="text-muted">Administration de la plateforme</a>
-            {% endif %}
         </div>
         {% endif %}
     </div>
