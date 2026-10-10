@@ -3,7 +3,7 @@
 {% block title %}Avals - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-handshake"></i> Avals{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block content %}
 <div class="fade-in">
@@ -12,15 +12,30 @@
         le bureau peut lui demander de payer à sa place. Accordez votre aval uniquement à des personnes de confiance.
     </p>
 
-    {% if me %}
-    <div class="row">
-        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-piggy-bank" style="color: var(--hl-green)"></i>
-            <div class="stat-value">{{ fcfa(me.assets) }}</div><div class="stat-label">Mes avoirs dans la tontine (FCFA)</div></div></div>
-        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-shield-alt" style="color: var(--hl-gold)"></i>
-            <div class="stat-value">{{ fcfa(me.guarantee_exposure) }}</div><div class="stat-label">Montant que je garantis encore</div></div></div>
-        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-balance-scale" style="color: var(--hl-green-700)"></i>
-            <div class="stat-value {{ 'text-danger' if me.guarantee_capacity < 0 }}">{{ fcfa(me.guarantee_capacity) }}</div><div class="stat-label">Capacité d'aval restante (indicative)</div></div></div>
+    <div class="alert alert-light border small">
+        <strong>Règles pour avaliser :</strong> être à jour en réunion (amendes, fonds de caisse, cotisations de tontine),
+        ne pas avoir de dette d'emprunt, et avoir une épargne au moins égale au <strong>tiers de la somme demandée</strong>
+        par l'emprunteur. L'épargne qui garantit déjà un emprunt reste bloquée jusqu'à son remboursement.
     </div>
+
+    {% if me and my_aval %}
+    <div class="row" id="myAvalCapacity">
+        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-piggy-bank" style="color: var(--hl-green)"></i>
+            <div class="stat-value">{{ fcfa(me.savings_balance) }}</div><div class="stat-label">Mon épargne (FCFA)</div></div></div>
+        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-lock" style="color: var(--hl-gold)"></i>
+            <div class="stat-value">{{ fcfa(my_aval.engaged) }}</div><div class="stat-label">Épargne bloquée par mes avals en cours</div></div></div>
+        <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-handshake" style="color: var(--hl-green-700)"></i>
+            {% if my_aval.problems %}
+            <div class="stat-value text-danger">0</div><div class="stat-label">Je ne peux pas avaliser pour le moment</div>
+            {% else %}
+            <div class="stat-value">{{ fcfa(my_aval.max_loan) }}</div><div class="stat-label">Je peux avaliser un emprunt jusqu'à (FCFA)</div>
+            {% endif %}
+        </div></div>
+    </div>
+    {% if my_aval.problems %}
+    <div class="alert alert-warning small"><i class="fas fa-info-circle"></i> Pour pouvoir avaliser, il faut régler ceci : vous
+        {{ my_aval.problems | join(' ; ') }}.</div>
+    {% endif %}
     {% endif %}
 
     {# ---------- Demandes reçues ---------- #}
@@ -86,8 +101,14 @@
                     <input type="hidden" name="back" value="avals">
                     <select name="guarantor_id" class="form-control form-control-sm mr-2" required>
                         <option value="">-- Demander un autre avaliste --</option>
-                        {% for c in candidates if c.id not in loan.guarantors|map(attribute='member_id')|list %}
-                        <option value="{{ c.id }}">{{ c.full_name }}</option>
+                        {% for c in candidates if c.member.id not in loan.guarantors|map(attribute='member_id')|list %}
+                        {% if c.problems %}
+                        <option value="{{ c.member.id }}" disabled>{{ c.member.full_name }} : ne peut pas avaliser ({{ c.problems[0] }})</option>
+                        {% elif c.max_loan < loan.amount %}
+                        <option value="{{ c.member.id }}" disabled>{{ c.member.full_name }} : épargne insuffisante pour cet emprunt</option>
+                        {% else %}
+                        <option value="{{ c.member.id }}">{{ c.member.full_name }}</option>
+                        {% endif %}
                         {% endfor %}
                     </select>
                     <button type="submit" class="btn btn-sm btn-gold"><i class="fas fa-paper-plane"></i> Envoyer la demande</button>

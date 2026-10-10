@@ -11,6 +11,18 @@
         <input type="text" name="payment_reference" class="form-control form-control-sm" maxlength="60" placeholder="Ex : MP241008.1234.A56789">
     </div>
 </div>
+{% if payout_missing and payout_missing > 0 %}
+<div class="alert alert-danger small py-2 mb-2">
+    <i class="fas fa-exclamation-triangle"></i>
+    <strong>{{ (payout_missing|float)|fcfa }} FCFA de cotisations n'ont pas été enregistrées</strong>
+    pour ce cycle{% if payout_late %} :
+    {% for r in payout_late %}{{ r.member.full_name }} ({{ ((-r.gap)|float)|fcfa }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}.
+    <div class="custom-control custom-checkbox mt-1">
+        <input type="checkbox" class="custom-control-input" id="offline{{ cycle.id }}" name="confirm_offline">
+        <label class="custom-control-label" for="offline{{ cycle.id }}">Ces cotisations ont été encaissées hors application : les enregistrer maintenant</label>
+    </div>
+</div>
+{% endif %}
 <div class="custom-control custom-checkbox mb-3">
     <input type="checkbox" class="custom-control-input" id="deduct{{ cycle.id }}" name="deduct_sanctions" checked>
     <label class="custom-control-label small" for="deduct{{ cycle.id }}">Retenir les amendes impayées du bénéficiaire sur la cagnotte</label>

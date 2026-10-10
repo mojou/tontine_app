@@ -102,8 +102,8 @@ with app.app_context():
     cid = TontineCycleDetail.query.filter_by(tontine_id=tid).one().id
 h = body(c.get(f'/tontine-cycles/{cid}'))
 check('name="expected_turn" value="1"' in h, 'le formulaire de versement porte le numéro du tour')
-c.post(f'/tontine-cycles/{cid}/register-benefit', data={'expected_turn': '1', 'payment_mode': 'ESPECE'})
-c.post(f'/tontine-cycles/{cid}/register-benefit', data={'expected_turn': '1', 'payment_mode': 'ESPECE'})
+c.post(f'/tontine-cycles/{cid}/register-benefit', data={'confirm_offline': 'on', 'expected_turn': '1', 'payment_mode': 'ESPECE'})
+c.post(f'/tontine-cycles/{cid}/register-benefit', data={'confirm_offline': 'on', 'expected_turn': '1', 'payment_mode': 'ESPECE'})
 with app.app_context():
     check(CycleBeneficiary.query.filter_by(cycle_id=cid).count() == 1, 'double clic sur « Verser la cagnotte » : un seul versement')
 

@@ -46,6 +46,7 @@ TRANSACTION_TYPES = OrderedDict([
     ('BENEFICE_TONTINE', ('Cagnotte versée au bénéficiaire', OUT, 'TONTINE')),
     ('AIDE', ('Aide sociale versée', OUT, 'SECOURS')),
     ('RETRAIT_EPARGNE', ("Restitution d'épargne", OUT, 'EPARGNE')),
+    ('RESTITUTION_TONTINE', ("Avance de tontine rendue", OUT, 'TONTINE')),
     ('PARTAGE', ('Part des bénéfices (fin d\'exercice)', OUT, 'CAISSE')),
     ('DEPENSE', ('Dépense de fonctionnement', OUT, 'CAISSE')),
 ])
@@ -111,6 +112,7 @@ TYPE_HINTS = {
     'BENEFICE_TONTINE': "Cagnotte du cycle versée au membre (sortie).",
     'AIDE': "Aide sociale versée au membre par la caisse de secours (sortie).",
     'RETRAIT_EPARGNE': "Épargne rendue au membre (sortie).",
+    'RESTITUTION_TONTINE': "Cotisation de tontine payée en trop, rendue au membre ou versée dans son épargne (sortie).",
     'PARTAGE': "Part des bénéfices de fin d'exercice versée au membre (sortie).",
     'DEPENSE': "Dépense de fonctionnement de la tontine (sortie).",
 }
@@ -130,6 +132,16 @@ def is_outflow(code):
 
 def fund_of(code):
     return TRANSACTION_TYPES.get(code, (code, IN, 'CAISSE'))[2]
+
+
+def fund_balances(type_totals):
+    """Solde de chaque fonds à partir des totaux par type : {type: montant} -> {fonds: solde}"""
+    balances = OrderedDict((code, Decimal('0')) for code in FUNDS)
+    for code, amount in type_totals.items():
+        amount = Decimal(str(amount or 0))
+        fund = fund_of(code)
+        balances[fund] = balances.get(fund, Decimal('0')) + (-amount if is_outflow(code) else amount)
+    return balances
 
 
 def default_contribution_types(tontine):

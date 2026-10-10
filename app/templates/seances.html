@@ -3,7 +3,7 @@
 {% block title %}Séances - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-clipboard-check"></i> Séances de cotisation{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block content %}
 <div class="fade-in">

@@ -101,7 +101,7 @@ with app.app_context():
     db.session.add(Sanction(tontine_id=jsb_id, member_id=first_member, type_sanction='RETARD_REUNION', amount=Decimal('500'),
                             description='Retard', sanction_date=m.date.today(), status='PENDING'))
     db.session.commit()
-r = c.post(f'/tontine-cycles/{cid}/register-benefit', data={'payment_mode': 'ORANGE_MONEY', 'payment_reference': 'OM123',
+r = c.post(f'/tontine-cycles/{cid}/register-benefit', data={'confirm_offline': 'on', 'payment_mode': 'ORANGE_MONEY', 'payment_reference': 'OM123',
                                                             'deduct_sanctions': 'on'})
 with app.app_context():
     b = CycleBeneficiary.query.filter_by(cycle_id=cid).one()
@@ -110,7 +110,8 @@ with app.app_context():
     check(Sanction.query.filter_by(member_id=first_member, status='PENDING').count() == 0, "l'amende retenue est soldée")
     txs = Transaction.query.filter_by(cycle_id=cid).all()
     kinds = sorted((t.type, float(t.amount)) for t in txs)
-    check(kinds == [('BENEFICE_TONTINE', 4000.0), ('SANCTION', 500.0)], f'écritures : {kinds}')
+    check(kinds == [('BENEFICE_TONTINE', 4000.0), ('SANCTION', 500.0), ('TONTINE', 1000.0), ('TONTINE', 1000.0), ('TONTINE', 2000.0)],
+          f'écritures : cagnotte, amende et cotisations régularisées (4 000) {kinds}')
     check(b.transaction_id == 'OM123', 'référence Orange Money conservée')
 
 # ---------------------------------------------------------------- enchère
@@ -120,7 +121,7 @@ with app.app_context():
 check(c.post(f'/tontine-cycles/{aid}/register-benefit', data={'participant_id': wid, 'bid_amount': str(int(pot))}).status_code == 302, 'mise >= cagnotte refusée')
 with app.app_context():
     check(CycleBeneficiary.query.filter_by(cycle_id=aid).count() == 0, '... rien enregistré')
-c.post(f'/tontine-cycles/{aid}/register-benefit', data={'participant_id': wid, 'bid_amount': '7000', 'payment_mode': 'ESPECE'})
+c.post(f'/tontine-cycles/{aid}/register-benefit', data={'confirm_offline': 'on', 'participant_id': wid, 'bid_amount': '7000', 'payment_mode': 'ESPECE'})
 with app.app_context():
     b = CycleBeneficiary.query.filter_by(cycle_id=aid).one()
     check(float(b.net_amount) == pot - 7000 and float(b.bid_amount) == 7000 and b.position == 1, f'enchère : net {b.net_amount}, mise 7000, tour 1')
@@ -130,7 +131,7 @@ check('Enchère du tour 2' in body(c.get(f'/tontine-cycles/{aid}')), 'tour suiva
 
 # ---------------------------------------------------------------- fin de cycle
 for _ in range(3):
-    c.post(f'/tontine-cycles/{cid}/register-benefit', data={'payment_mode': 'ESPECE'})
+    c.post(f'/tontine-cycles/{cid}/register-benefit', data={'confirm_offline': 'on', 'payment_mode': 'ESPECE'})
 with app.app_context():
     cy = TontineCycleDetail.query.get(cid)
     check(cy.status == 'TERMINE' and cy.beneficiaries_count == 4, 'cycle terminé après 4 tours (2 pour le membre à 2 mains)')

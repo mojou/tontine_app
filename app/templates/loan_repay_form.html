@@ -3,7 +3,7 @@
 {% block title %}Remboursement - emprunt #{{ loan.id }}{% endblock %}
 {% block page_title %}<i class="fas fa-money-bill-wave"></i> Remboursement de l'emprunt #{{ loan.id }}{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block content %}
 <div class="row fade-in">

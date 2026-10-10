@@ -3,7 +3,7 @@
 {% block title %}{{ seance.display_name }} - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-clipboard-check"></i> {{ seance.display_name }}{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block extra_css %}
 <style>
@@ -27,7 +27,8 @@
             {% if current_user.role in ['PRESIDENT', 'TRESORIER'] %}
             <form method="POST" action="{{ url_for('close_seance', seance_id=seance.id) }}" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm {{ 'btn-outline-success' if seance.is_closed else 'btn-outline-secondary' }}">
+                <button type="submit" class="btn btn-sm {{ 'btn-outline-success' if seance.is_closed else 'btn-outline-secondary' }}"
+                        {% if not seance.is_closed and late_fines %}onclick="return confirm('Clôturer la séance ? {{ late_fines|length }} amende(s) de retard vont être infligées (voir la liste en bas de la feuille).');"{% endif %}>
                     <i class="fas {{ 'fa-lock-open' if seance.is_closed else 'fa-lock' }}"></i> {{ 'Rouvrir' if seance.is_closed else 'Clôturer la séance' }}
                 </button>
             </form>
@@ -53,7 +54,11 @@
                     <thead>
                         <tr>
                             <th>Membre</th>
-                            {% for col in columns %}<th>{{ col.label }}<br><small class="text-muted">{{ col.fund }}</small></th>{% endfor %}
+                            {% for col in columns %}
+                            {% set col_rub = col.rubrique or (col.cycle.contribution_type if col.cycle else none) %}
+                            <th>{{ col.label }}<br><small class="text-muted">{{ col.fund }}</small>
+                                {% if col_rub and col_rub.late_fine and col_rub.late_fine > 0 %}<br><small class="text-danger">amende si retard : {{ fcfa(col_rub.late_fine) }}</small>{% endif %}
+                            </th>{% endfor %}
                             {% if can_manage %}<th>Réf. mobile</th>{% endif %}
                         </tr>
                     </thead>
@@ -101,6 +106,38 @@
         </div>
     </form>
 
+    {# ---------- Amendes de retard de cotisation ---------- #}
+    {% if late_fines or seance_fines %}
+    <div class="card mt-4" id="amendesRetard">
+        <div class="card-header"><i class="fas fa-gavel"></i> Amendes de retard de cotisation</div>
+        <div class="card-body">
+            {% if late_fines %}
+            <p class="small text-muted mb-2">À la <strong>clôture</strong> de la séance, ces amendes seront infligées
+                (montants fixés dans Cotisations, colonne « Amende si retard »). Encaissez d'abord les paiements reçus :
+                un membre qui paie avant la clôture n'a pas d'amende.</p>
+            <table class="table table-sm mb-2">
+                <thead><tr><th>Membre</th><th>Cotisation</th><th>Motif</th><th class="text-right">Amende</th></tr></thead>
+                <tbody>
+                {% for f in late_fines %}
+                <tr><td>{{ f.member.full_name }}</td><td>{{ f.label }}</td><td class="small text-muted">{{ f.reason }}</td>
+                    <td class="text-right text-danger font-weight-bold">{{ fcfa(f.amount) }} FCFA</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            {% if seance_fines %}
+            <p class="small mb-1"><strong>Amendes infligées à la clôture :</strong></p>
+            <ul class="small mb-0">
+                {% for s in seance_fines %}
+                <li>{{ s.member_name }} : {{ fcfa(s.amount) }} FCFA · {{ s.description }}
+                    {% if s.status == 'PAID' %}<span class="badge badge-success">payée</span>{% else %}<span class="badge badge-warning">à payer</span>{% endif %}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     {% if payouts %}
     <div class="card mt-4" id="cagnottes">
         <div class="card-header"><i class="fas fa-hand-holding-usd"></i> Cagnottes du jour</div>
@@ -130,10 +167,8 @@
                     <div class="small text-warning"><i class="fas fa-random"></i> L'ordre de passage n'est pas encore tiré.
                         <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}">Faire le tirage</a></div>
                     {% elif can_pay_out %}
-                    {% if p.collected < cycle.total_amount %}
-                    <div class="small text-danger mb-2"><i class="fas fa-exclamation-triangle"></i>
-                        Il manque {{ fcfa(cycle.total_amount - p.collected) }} FCFA d'encaissement aujourd'hui sur ce cycle.</div>
-                    {% endif %}
+                    {% set payout_missing = p.missing %}
+                    {% set payout_late = p.late %}
                     <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="expected_turn" value="{{ p.turn }}">
@@ -166,6 +201,10 @@
                         </button>
                     </form>
                     {% elif not seance.is_closed %}
+                    {% if p.missing > 0 %}
+                    <div class="small text-danger mb-1"><i class="fas fa-exclamation-triangle"></i>
+                        {{ fcfa(p.missing) }} FCFA de cotisations non enregistrées sur ce cycle.</div>
+                    {% endif %}
                     <div class="small text-muted">Prochain bénéficiaire :
                         {{ p.next.label if p.next else 'enchère en séance' }}</div>
                     {% endif %}

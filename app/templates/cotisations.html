@@ -3,7 +3,7 @@
 {% block title %}Cotisations - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-coins"></i> Cotisations{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block extra_css %}
 <style>
@@ -70,7 +70,7 @@
         <div class="table-container">
             <table class="table mb-0">
                 <thead>
-                    <tr><th>Rubrique</th><th>Fonds</th><th>Montant</th><th>Périodicité</th><th>Obligatoire</th><th class="text-right">Encaissé {{ year }}</th>{% if can_manage %}<th></th>{% endif %}</tr>
+                    <tr><th>Rubrique</th><th>Fonds</th><th>Montant</th><th>Périodicité</th><th>Obligatoire</th><th>Amende si retard</th><th class="text-right">Encaissé {{ year }}</th>{% if can_manage %}<th></th>{% endif %}</tr>
                 </thead>
                 <tbody>
                 {% for r in rubriques %}
@@ -83,6 +83,7 @@
                     <td>{% if r.amount and r.amount > 0 %}{{ fcfa(r.amount) }} FCFA{% else %}<em class="text-muted">libre</em>{% endif %}</td>
                     <td>{{ r.frequency_display }}</td>
                     <td>{% if r.is_mandatory %}<i class="fas fa-check text-success"></i>{% else %}<span class="text-muted">facultative</span>{% endif %}</td>
+                    <td>{% if r.late_fine and r.late_fine > 0 %}{{ fcfa(r.late_fine) }} FCFA{% else %}<span class="text-muted">aucune</span>{% endif %}</td>
                     <td class="text-right font-weight-bold">{{ fcfa(by_rubrique.get(r.id, 0) or 0) }}</td>
                     {% if can_manage %}
                     <td class="text-right">
@@ -98,7 +99,7 @@
                     {% endif %}
                 </tr>
                 {% if can_manage %}
-                <tr class="collapse" id="edit{{ r.id }}"><td colspan="7" style="background: var(--hl-cream)">
+                <tr class="collapse" id="edit{{ r.id }}"><td colspan="8" style="background: var(--hl-cream)">
                     {% with action=url_for('update_rubrique', rubrique_id=r.id), submit='Enregistrer' %}{% include "_rubrique_form.html" %}{% endwith %}
                 </td></tr>
                 {% endif %}

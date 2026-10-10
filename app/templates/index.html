@@ -164,7 +164,7 @@
     <div class="container">
         <div class="row text-center">
             <div class="col-6 col-md-3 mb-4 mb-md-0"><div class="stat-number" data-count="{{ stats.total_members }}">{{ stats.total_members }}</div><div class="stat-label">Membres actifs</div></div>
-            <div class="col-6 col-md-3 mb-4 mb-md-0"><div class="stat-number" data-count="{{ stats.total_collected|round(0)|int }}" data-format="money">{{ '{:,.0f}'.format(stats.total_collected).replace(',', ' ') }}</div><div class="stat-label">FCFA cotisés</div></div>
+            <div class="col-6 col-md-3 mb-4 mb-md-0"><div class="stat-number" data-count="{{ stats.total_collected|round(0)|int }}" data-format="money">{{ (stats.total_collected)|fcfa }}</div><div class="stat-label">FCFA cotisés</div></div>
             <div class="col-6 col-md-3"><div class="stat-number" data-count="{{ stats.active_loans }}">{{ stats.active_loans }}</div><div class="stat-label">Emprunts en cours</div></div>
             <div class="col-6 col-md-3"><div class="stat-number" data-count="{{ stats.completed_cycles }}">{{ stats.completed_cycles }}</div><div class="stat-label">Cycles terminés</div></div>
         </div>

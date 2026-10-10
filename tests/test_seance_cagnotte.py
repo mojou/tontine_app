@@ -71,7 +71,14 @@ with app.app_context():
 h = body(c.get(f'/seances/{sid}'))
 check('id="cagnottes"' in h and 'Cagnottes du jour' in h, 'la feuille de séance affiche les cagnottes du jour')
 check(f'Tour 1 : {first_label}' in h, f'le bénéficiaire prévu du tirage est proposé ({first_label})')
-check('Il manque 40 000 FCFA' in h, "alerte tant que les parts du jour ne couvrent pas la cagnotte")
+check("40 000 FCFA de cotisations n'ont pas été enregistrées" in h and 'name="confirm_offline"' in h,
+      "alerte tant que les cotisations du tour ne sont pas enregistrées")
+
+# ---------------------------------------------------------------- versement refusé sans les cotisations
+r = c.post(f'/tontine-cycles/{tirage}/register-benefit', data={'expected_turn': 1, 'seance_id': sid, 'payment_mode': 'ESPECE'})
+with app.app_context():
+    check(CycleBeneficiary.query.filter_by(cycle_id=tirage).count() == 0,
+          'cagnotte refusée tant que les cotisations du tour ne sont pas enregistrées')
 check('Amendes impayées : 500 FCFA' in h, "les amendes du bénéficiaire sont signalées")
 check('Enchère du tour 1' in h and 'name="bid_amount"' in h, "le cycle par enchère propose gagnant et mise")
 
@@ -82,7 +89,7 @@ for mid in mem.values():
     form[f'amt_{mid}_c{tirage}'] = '10000'
 c.post(f'/seances/{sid}', data=form)
 h = body(c.get(f'/seances/{sid}'))
-check('Il manque' not in h.split(f'data-cycle="{tirage}"')[1].split('data-cycle=')[0], 'plus d\'alerte une fois les 4 parts encaissées')
+check("n'ont pas été enregistrées" not in h.split(f'data-cycle="{tirage}"')[1].split('data-cycle=')[0], 'plus d\'alerte une fois les 4 parts encaissées')
 
 # ---------------------------------------------------------------- droits
 censeur = app.test_client()
@@ -121,11 +128,17 @@ with app.app_context():
     from models import CycleParticipant
     rose_part = CycleParticipant.query.filter_by(cycle_id=enchere, member_id=mem['Rose']).one().id
 c.post(f'/tontine-cycles/{enchere}/register-benefit', data={'expected_turn': 1, 'seance_id': sid, 'participant_id': rose_part,
-                                                            'bid_amount': '1000', 'payment_mode': 'ESPECE'})
+                                                            'bid_amount': '1000', 'payment_mode': 'ESPECE', 'confirm_offline': 'on'})
 with app.app_context():
     b = CycleBeneficiary.query.filter_by(cycle_id=enchere).one()
     check(b.member_id == mem['Rose'] and b.net_amount == Decimal('9000'), f'enchère depuis la séance : 10 000 − mise 1 000 = {b.net_amount}')
     check(Transaction.query.filter_by(seance_id=sid, type='ENCHERE').count() == 1, 'la mise est rattachée à la séance')
+    reg = Transaction.query.filter(Transaction.cycle_id == enchere, Transaction.type == 'TONTINE',
+                                   Transaction.description.like('Régularisation%')).all()
+    check(len(reg) == 2 and sum(t.amount for t in reg) == Decimal('10000'),
+          "« encaissées hors application » : les 2 cotisations manquantes sont enregistrées (10 000)")
+    st = m.cycle_contribution_status(db.session.get(TontineCycleDetail, enchere), through_turn=1)
+    check(st['missing'] == 0, 'après régularisation, le cycle par enchère est à jour')
 
 # ---------------------------------------------------------------- garde-fous
 c.post('/seances/add', data={'date': m.date.today().isoformat(), 'title': 'Autre', 'columns': [f'r{rub["PRESENCE"]}']})
@@ -142,7 +155,7 @@ check('Verser la cagnotte' not in body(c.get(f'/seances/{sid}')), 'séance clôt
 check(c.post(f'/tontine-cycles/{tirage}/register-benefit', data={'expected_turn': 2, 'seance_id': 99999}).status_code == 404,
       'séance inconnue : 404')
 # le versement classique depuis la page du cycle fonctionne toujours
-r = c.post(f'/tontine-cycles/{tirage}/register-benefit', data={'expected_turn': 2, 'payment_mode': 'ESPECE'})
+r = c.post(f'/tontine-cycles/{tirage}/register-benefit', data={'expected_turn': 2, 'payment_mode': 'ESPECE', 'confirm_offline': 'on'})
 with app.app_context():
     check(CycleBeneficiary.query.filter_by(cycle_id=tirage).count() == 2
           and Transaction.query.filter_by(cycle_id=tirage, type='BENEFICE_TONTINE', seance_id=None).count() == 1,

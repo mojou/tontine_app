@@ -7,7 +7,7 @@
     <h1><i class="fas fa-chart-line"></i> Rapports et statistiques</h1>
     
     <div class="alert alert-info">
-        <i class="fas fa-calendar"></i> Rapport généré le {{ current_date if current_date else now.strftime('%d/%m/%Y') }}
+        <i class="fas fa-calendar"></i> Situation au {{ now.strftime('%d/%m/%Y') }}
     </div>
     
     <div class="row" style="margin-bottom: 20px;">
@@ -54,7 +54,7 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Total contributions</h6>
-                    <h3 class="text-success">{{ "{:,.0f}".format(total_contributions | default(0)) }} FCFA</h3>
+                    <h3 class="text-success">{{ (total_contributions | default(0))|fcfa }} FCFA</h3>
                 </div>
             </div>
         </div>
@@ -62,7 +62,7 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Total sanctions</h6>
-                    <h3 class="text-warning">{{ "{:,.0f}".format(total_sanctions | default(0)) }} FCFA</h3>
+                    <h3 class="text-warning">{{ (total_sanctions | default(0))|fcfa }} FCFA</h3>
                 </div>
             </div>
         </div>
@@ -70,7 +70,7 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Prêts accordés</h6>
-                    <h3 class="text-primary">{{ "{:,.0f}".format(total_loans_given | default(0)) }} FCFA</h3>
+                    <h3 class="text-primary">{{ (total_loans_given | default(0))|fcfa }} FCFA</h3>
                 </div>
             </div>
         </div>
@@ -78,7 +78,7 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Remboursements</h6>
-                    <h3 class="text-info">{{ "{:,.0f}".format(total_loans_repaid | default(0)) }} FCFA</h3>
+                    <h3 class="text-info">{{ (total_loans_repaid | default(0))|fcfa }} FCFA</h3>
                 </div>
             </div>
         </div>
@@ -164,22 +164,10 @@
                         {% for transaction_type in transactions_by_type %}
                         <tr>
                             <td>
-                                {% if transaction_type[0] == 'TONTINE' %}
-                                    Tontine
-                                {% elif transaction_type[0] == 'PRESENCE' %}
-                                    Cotisation
-                                {% elif transaction_type[0] == 'SANCTION' %}
-                                    Sanction
-                                {% elif transaction_type[0] == 'REMBOURSEMENT' %}
-                                    Remboursement
-                                {% elif transaction_type[0] == 'AIDE' %}
-                                    Aide
-                                {% else %}
-                                    {{ transaction_type[0] }}
-                                {% endif %}
+                                {{ transaction_types[transaction_type[0]][0] if transaction_type[0] in transaction_types else transaction_type[0] }}
                             </td>
                             <td class="text-center">{{ transaction_type[2] }}</td>
-                            <td class="text-right">{{ "{:,.0f}".format(transaction_type[1] | default(0)) }} FCFA</td>
+                            <td class="text-right">{{ (transaction_type[1] | default(0))|fcfa }} FCFA</td>
                         </tr>
                         {% else %}
                         <tr>
@@ -211,7 +199,7 @@
                         <tr>
                             <td class="text-center">{{ loop.index }}</td>
                             <td>{{ contributor.first_name }} {{ contributor.last_name }}</td>
-                            <td class="text-right">{{ "{:,.0f}".format(contributor.total | default(0)) }} FCFA</td>
+                            <td class="text-right">{{ (contributor.total | default(0))|fcfa }} FCFA</td>
                         </tr>
                         {% else %}
                         <tr>
@@ -242,10 +230,10 @@
                     <tbody>
                         {% for transaction in recent_transactions %}
                         <tr>
-                            <td>{{ transaction.date.strftime('%d/%m/%Y') if transaction.date else 'N/A' }}</td>
+                            <td>{{ transaction.date.strftime('%d/%m/%Y') if transaction.date else '—' }}</td>
                             <td>{{ transaction.member.first_name }} {{ transaction.member.last_name }}</td>
                             <td>{{ transaction.get_type_display() if transaction.get_type_display is defined else transaction.type }}</td>
-                            <td class="text-right">{{ "{:,.0f}".format(transaction.amount | default(0)) }} FCFA</td>
+                            <td class="text-right">{{ (transaction.amount | default(0))|fcfa }} FCFA</td>
                         </tr>
                         {% else %}
                         <tr>

@@ -30,7 +30,7 @@
                             <tr>
                                 <td class="text-secondary font-weight-bold">{{ log.formatted_date }}</td>
                                 <td><strong>{{ log.user_name }}</strong></td>
-                                <td><span class="badge badge-light border">{{ log.user_role or 'N/A' }}</span></td>
+                                <td><span class="badge badge-light border">{{ {'SECRETAIRE': 'Secrétaire', 'PRESIDENT': 'Président', 'TRESORIER': 'Trésorier', 'CENSEUR': 'Censeur', 'COMMUNICATION': 'Communication', 'MEMBRE': 'Membre', 'SUPERADMIN': 'Super-admin', 'PUBLIC': 'Visiteur'}.get(log.user_role, log.user_role or '—') }}</span></td>
                                 <td><code class="text-dark font-weight-bold">{{ log.action }}</code></td>
                                 <td><span class="text-muted"><i class="fas fa-network-wired small mr-1"></i> {{ log.ip_address or '127.0.0.1' }}</span></td>
                                 <td>

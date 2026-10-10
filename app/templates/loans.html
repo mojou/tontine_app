@@ -10,9 +10,6 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h1><i class="fas fa-hand-holding-usd"></i> Gestion des prêts</h1>
         <div>
-            <a href="{{ url_for('add_member') }}" class="btn btn-info" style="margin-right: 10px;">
-                <i class="fas fa-user-plus"></i> Ajouter un membre
-            </a>
             <button type="button" class="btn btn-success" data-toggle="modal" data-target="#loanRequestModal" id="openLoanModalBtn">
                 <i class="fas fa-plus"></i> Demander un prêt
             </button>
@@ -122,9 +119,9 @@
                                     <span class="text-muted">Membre supprimé</span>
                                 {% endif %}
                             </td>
-                            <td><strong>{{ "%.0f"|format(loan.amount) }}</strong> <small>FCFA</small></td>
-                            <td class="text-secondary">{{ "%.0f"|format(loan.interest) }} <small>FCFA</small></td>
-                            <td class="text-primary font-weight-bold">{{ "%.0f"|format(loan.remaining_amount ) }} <small>FCFA</small></td>
+                            <td><strong>{{ (loan.amount)|fcfa }}</strong> <small>FCFA</small></td>
+                            <td class="text-secondary">{{ (loan.interest)|fcfa }} <small>FCFA</small></td>
+                            <td class="text-primary font-weight-bold">{{ (loan.remaining_amount)|fcfa }} <small>FCFA</small></td>
                             <td>
                                 <small class="d-block"><b>Du:</b> {{ loan.start_date.strftime('%d/%m/%Y') if loan.start_date else '-' }}</small>
                                 <small class="d-block"><b>Au:</b> {{ loan.end_date.strftime('%d/%m/%Y') if loan.end_date else '-' }}</small>
@@ -164,7 +161,7 @@
                                         <i class="fas fa-clock"></i> +{{ loan.overdue_days }} jours
                                     </span>
                                     <small class="text-muted d-block" style="font-size: 75%;">
-                                        Pénalité cumulée: {{ "%.0f"|format(loan.overdue_days * 500) }} FCFA
+                                        Pénalité cumulée: {{ (loan.overdue_days * 500)|fcfa }} FCFA
                                     </small>
                                 {% else %}
                                     <span class="text-muted">-</span>
@@ -204,7 +201,7 @@
                                         <span class="text-muted" style="font-size: 85%;">Aucune action</span>
                                     {% endif %}
                                 {% else %}
-                                    <span class="text-muted" style="font-size: 85%;"><i class="fas fa-lock"></i> Restreint</span>
+                                    <span class="text-muted" style="font-size: 85%;">—</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -294,13 +291,13 @@
                     <div class="modal-body text-left">
                         <div class="alert alert-info">
                             <strong>Emprunteur :</strong> {{ loan.member.first_name }} {{ loan.member.last_name }} <br>
-                            <strong>Montant total requis :</strong> {{ "%.0f"|format(loan.remaining_amount ) }} FCFA
+                            <strong>Montant total requis :</strong> {{ (loan.remaining_amount)|fcfa }} FCFA
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label d-block font-weight-bold text-danger">Reste à rembourser :</label>
                             {% set reste_a_payer = loan.remaining_to_pay if loan.remaining_to_pay is defined else loan.total_to_pay %}
-                            <h3 class="text-danger font-weight-bold">{{ "%.0f"|format(reste_a_payer) }} FCFA</h3>
+                            <h3 class="text-danger font-weight-bold">{{ (reste_a_payer)|fcfa }} FCFA</h3>
                         </div>
 
                         <div class="form-group">
@@ -345,11 +342,12 @@
                                 <option value="">-- Sélectionnez le membre demandeur --</option>
                                 {% for member in members %}
                                 <option value="{{ member.id }}" 
-                                        data-has-active-loan="{{ 'True' if member.has_active_loan else 'False' }}" 
-                                        data-active-loan-count="{{ member.active_loans_count or 0 }}" 
-                                        data-tontine-balance="{{ member.tontine_balance or 0 }}">
-                                    {{ member.first_name }} {{ member.last_name }} 
-                                    (Solde Épargne: {{ "%.0f"|format(member.tontine_balance or 0) }} FCFA)
+                                        {% set open_loans = member.loans | selectattr('status', 'in', ['PENDING', 'ACTIF', 'OVERDUE']) | list %}
+                                        data-has-active-loan="{{ 'True' if open_loans else 'False' }}"
+                                        data-active-loan-count="{{ open_loans | length }}"
+                                        data-tontine-balance="{{ member.savings_balance|int }}">
+                                    {{ member.first_name }} {{ member.last_name }}
+                                    (épargne : {{ member.savings_balance|fcfa }} FCFA)
                                 </option>
                                 {% endfor %}
                             </select>
@@ -383,21 +381,27 @@
                             </label>
                             <select class="form-control" id="guarantor_ids" name="guarantor_ids" multiple size="5">
                                 {% for c in guarantor_candidates %}
-                                <option value="{{ c.id }}">{{ c.full_name }}</option>
+                                {% if c.problems %}
+                                <option value="{{ c.member.id }}" disabled>{{ c.member.full_name }} : ne peut pas avaliser ({{ c.problems[0] }})</option>
+                                {% else %}
+                                <option value="{{ c.member.id }}" data-max="{{ c.max_loan|int }}">{{ c.member.full_name }} : peut avaliser jusqu'à {{ (c.max_loan|float)|fcfa }} FCFA</option>
+                                {% endif %}
                                 {% endfor %}
                             </select>
                             <small class="form-text text-muted">
                                 {% if required_guarantors %}
-                                    {{ required_guarantors }} avaliste(s) exigé(s){% if guarantee_threshold > 0 %} au-delà de {{ '{:,.0f}'.format(guarantee_threshold).replace(',', ' ') }} FCFA{% endif %}.
+                                    {{ required_guarantors }} avaliste(s) exigé(s){% if guarantee_threshold > 0 %} au-delà de {{ (guarantee_threshold)|fcfa }} FCFA{% endif %}.
                                 {% else %}
                                     Facultatif dans cette tontine.
                                 {% endif %}
-                                Maintenez <kbd>Ctrl</kbd> pour en choisir plusieurs. Chacun devra accepter avant l'approbation du prêt.
+                                Maintenez <kbd>Ctrl</kbd> pour en choisir plusieurs. Chacun devra accepter avant l'approbation du prêt.<br>
+                                Pour avaliser, un membre doit être à jour en réunion, ne pas avoir de dette d'emprunt et avoir une
+                                épargne au moins égale au tiers de la somme demandée.
                             </small>
                         </div>
                         
                         <div class="alert alert-info shadow-sm" id="modalPreview">
-                            <i class="fas fa-calculator"></i> Veuillez renseigner le montant pour générer la simulation de traite.
+                            <i class="fas fa-calculator"></i> Saisissez le montant et la durée pour voir le calcul des remboursements.
                         </div>
                         
                         <div id="errorMessage" class="alert alert-danger" style="display: none;">
@@ -418,7 +422,7 @@
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
                     {% if members and members|length > 0 %}
                     <button type="submit" class="btn btn-success" id="submitLoanBtn">
-                        <i class="fas fa-paper-plane"></i> Enregistrer le Prêt
+                        <i class="fas fa-paper-plane"></i> Envoyer la demande
                     </button>
                     {% endif %}
                 </div>
@@ -448,7 +452,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
     let isBlockedByPolicy = false;
-    const defaultPreviewText = `<i class="fas fa-calculator"></i> Veuillez renseigner le montant pour générer la simulation de traite.`;
+    const defaultPreviewText = `<i class="fas fa-calculator"></i> Saisissez le montant et la durée pour voir le calcul des remboursements.`;
     
     $(document).ready(function() {
         $('#loanRequestModal').on('shown.bs.modal', function () {
@@ -539,10 +543,10 @@ document.addEventListener('DOMContentLoaded', function() {
             preview.innerHTML = `
                 <i class="fas fa-calculator text-success"></i> <strong>Simulation de l'échéancier :</strong>
                 <hr style="margin: 8px 0; border-top: 1px solid rgba(0,0,0,0.1);">
-                <div class="d-flex justify-content-between"><span>Capital net :</span> <b>${Math.round(amount).toLocaleString()} FCFA</b></div>
-                <div class="d-flex justify-content-between"><span>Intérêts cumulés (${interestRate}%) :</span> <b>${Math.round(interest).toLocaleString()} FCFA</b></div>
-                <div class="d-flex justify-content-between text-primary"><span>Montant dû total :</span> <b>${Math.round(total).toLocaleString()} FCFA</b></div>
-                <div class="d-flex justify-content-between text-success font-weight-bold" style="font-size: 105%;"><span>Mensualité (${months} mois) :</span> <span>${Math.round(monthly).toLocaleString()} FCFA / mois</span></div>
+                <div class="d-flex justify-content-between"><span>Capital net :</span> <b>${Math.round(amount).toLocaleString('fr-FR')} FCFA</b></div>
+                <div class="d-flex justify-content-between"><span>Intérêts cumulés (${interestRate}%) :</span> <b>${Math.round(interest).toLocaleString('fr-FR')} FCFA</b></div>
+                <div class="d-flex justify-content-between text-primary"><span>Montant dû total :</span> <b>${Math.round(total).toLocaleString('fr-FR')} FCFA</b></div>
+                <div class="d-flex justify-content-between text-success font-weight-bold" style="font-size: 105%;"><span>Mensualité (${months} mois) :</span> <span>${Math.round(monthly).toLocaleString('fr-FR')} FCFA / mois</span></div>
             `;
         } else if (preview) {
             preview.innerHTML = defaultPreviewText;

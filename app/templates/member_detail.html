@@ -46,7 +46,7 @@
             <div class="member-detail mt-2">
                 <strong>Statut du compte :</strong>
                 <span class="badge badge-{{ member.get_status_color() }}" style="font-size: 0.9rem;">
-                    {{ member.status }}
+                    {{ {'ACTIF': 'Actif', 'SUSPENDU': 'Suspendu', 'EXCLU': 'Exclu', 'PENDING': 'En attente de validation', 'INACTIF': 'Inactif'}.get(member.status, member.status) }}
                 </span>
             </div>
             <div class="member-detail">
@@ -69,17 +69,17 @@
         
         <div class="member-actions">
             <!-- CORRECTION JINJA DIRECTE SUR LES COMPTEURS -->
-            <div class="stat-value">{{ "{:,.0f}".format(total_contributions | default(0)).replace(',', ' ') }} FCFA</div>
+            <div class="stat-value">{{ (total_contributions | default(0))|fcfa }} FCFA</div>
             <div class="stat-label">Cotisations totales</div>
             <hr class="my-2">
             
             <div class="stat-value text-warning">
-                {{ "{:,.0f}".format(member.total_active_debt | default(0)).replace(',', ' ') }} FCFA
+                {{ (member.total_active_debt | default(0))|fcfa }} FCFA
             </div>
             <div class="stat-label">Dette (Prêts en cours)</div>
             <hr class="my-2">
             
-            <div class="stat-value text-danger">{{ "{:,.0f}".format(member.total_sanctions_pending | default(0)).replace(',', ' ') }} FCFA</div>
+            <div class="stat-value text-danger">{{ (member.total_sanctions_pending | default(0))|fcfa }} FCFA</div>
             <div class="stat-label">Sanctions impayées</div>
             {% if fund_summary %}
             <hr class="my-2">
@@ -87,7 +87,7 @@
                 {% for label, amount, hint in fund_summary %}
                 <div class="d-flex justify-content-between" title="{{ hint }}">
                     <span>{{ label }} <i class="fas fa-info-circle text-muted"></i></span>
-                    <strong class="ml-2">{{ "{:,.0f}".format(amount | default(0)).replace(',', ' ') }} FCFA</strong>
+                    <strong class="ml-2">{{ (amount | default(0))|fcfa }} FCFA</strong>
                 </div>
                 {% endfor %}
             </div>
@@ -172,7 +172,7 @@
                                 </td>
                                 <td class="text-right {% if trans.is_outflow %}text-danger{% else %}text-success{% endif %}">
                                     {% if trans.is_outflow %}-{% else %}+{% endif %}
-                                    {{ "{:,.0f}".format(trans.amount | default(0)).replace(',', ' ') }} FCFA
+                                    {{ (trans.amount | default(0))|fcfa }} FCFA
                                 </td>
                             </tr>
                             {% else %}
@@ -209,8 +209,8 @@
                         <tbody>
                             {% for loan in loans %}
                             <tr>
-                                <td>{{ "{:,.0f}".format(loan.amount | default(0)).replace(',', ' ') }} FCFA</td>
-                                <td>{{ "{:,.0f}".format(loan.interest | default(0)).replace(',', ' ') }} FCFA</td>
+                                <td>{{ (loan.amount | default(0))|fcfa }} FCFA</td>
+                                <td>{{ (loan.interest | default(0))|fcfa }} FCFA</td>
                                 <td>
                                     {% if loan.status == 'COMPLETED' %}
                                         <span class="badge badge-success">Remboursé</span>
@@ -259,7 +259,7 @@
                         <tr>
                             <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
                             <td>{{ sanction.type_display }}</td>
-                            <td class="text-right">{{ "{:,.0f}".format(sanction.amount | default(0)).replace(',', ' ') }} FCFA</td>
+                            <td class="text-right">{{ (sanction.amount | default(0))|fcfa }} FCFA</td>
                             <td>{{ sanction.description[:50] }}{% if sanction.description|length > 50 %}...{% endif %}</td>
                             <td>
                                 {% if sanction.status == 'PENDING' %}
@@ -308,7 +308,7 @@
                         <tr>
                             <td>{{ aide.request_date.strftime('%d/%m/%Y') }}</td>
                             <td>{{ aide.type_display }}</td>
-                            <td class="text-right">{{ "{:,.0f}".format(aide.amount | default(0)).replace(',', ' ') }} FCFA</td>
+                            <td class="text-right">{{ (aide.amount | default(0))|fcfa }} FCFA</td>
                             <td>
                                 {% if aide.status == 'APPROVED' and not aide.is_paid %}
                                     <span class="badge badge-warning">Approuvée</span>

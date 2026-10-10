@@ -24,7 +24,12 @@
         </div>
     </div>
     <div class="form-row align-items-end">
-        <div class="form-group col-md-7">
+        <div class="form-group col-md-2">
+            <label class="small font-weight-bold" title="Infligée à la clôture de la séance au membre qui n'a pas payé">Amende si retard</label>
+            <input type="number" name="late_fine" class="form-control form-control-sm" min="0" step="1"
+                   value="{{ (r.late_fine|int) if r and r.late_fine else 0 }}" placeholder="0 = aucune">
+        </div>
+        <div class="form-group col-md-5">
             <label class="small font-weight-bold">Description</label>
             <input type="text" name="description" class="form-control form-control-sm" maxlength="255" value="{{ r.description if r and r.description else '' }}">
         </div>

@@ -81,7 +81,7 @@ MENU_ITEMS = {
         {'name': 'Cycles Tontine', 'icon': 'fas fa-random', 'url': 'tontine_cycles'},
         {'name': 'Sanctions', 'icon': 'fas fa-gavel', 'url': 'sanctions'},
         {'name': 'Aides sociales', 'icon': 'fas fa-heart', 'url': 'aides'},
-        {'name': 'Réunions', 'icon': 'fas fa-calendar-alt', 'url': 'meetings'},
+        {'name': 'Procès-verbaux', 'icon': 'fas fa-file-signature', 'url': 'meetings'},
         {'name': 'Annonces', 'icon': 'fas fa-bullhorn', 'url': 'annonces'},
         {'name': 'Rapports', 'icon': 'fas fa-chart-line', 'url': 'reports'},
         {'name': 'Journal d\'audit', 'icon': 'fas fa-history', 'url': 'audit_logs'},
@@ -105,7 +105,7 @@ MENU_ITEMS = {
         {'name': 'Cycles Tontine', 'icon': 'fas fa-random', 'url': 'tontine_cycles'},
         {'name': 'Sanctions', 'icon': 'fas fa-gavel', 'url': 'sanctions'},
         {'name': 'Aides sociales', 'icon': 'fas fa-heart', 'url': 'aides'},
-        {'name': 'Réunions', 'icon': 'fas fa-calendar-alt', 'url': 'meetings'},
+        {'name': 'Procès-verbaux', 'icon': 'fas fa-file-signature', 'url': 'meetings'},
         {'name': 'Annonces', 'icon': 'fas fa-bullhorn', 'url': 'annonces'},
         {'name': 'Rapports', 'icon': 'fas fa-chart-line', 'url': 'reports'},
         {'name': 'Journal d\'audit', 'icon': 'fas fa-history', 'url': 'audit_logs'},
@@ -153,7 +153,7 @@ MENU_ITEMS = {
     
     'COMMUNICATION': [
         {'name': 'Tableau de bord', 'icon': 'fas fa-tachometer-alt', 'url': 'dashboard'},
-        {'name': 'Réunions', 'icon': 'fas fa-calendar-alt', 'url': 'meetings'},
+        {'name': 'Procès-verbaux', 'icon': 'fas fa-file-signature', 'url': 'meetings'},
         {'name': 'Annonces', 'icon': 'fas fa-bullhorn', 'url': 'annonces'},
         {'name': 'Cotisations', 'icon': 'fas fa-coins', 'url': 'cotisations'},
         {'name': 'Cycles Tontine', 'icon': 'fas fa-sync-alt', 'url': 'tontine_cycles'},
@@ -171,7 +171,7 @@ MENU_ITEMS = {
         {'name': 'Mes sanctions', 'icon': 'fas fa-gavel', 'url': 'sanctions'},
         {'name': 'Mes aides', 'icon': 'fas fa-heart', 'url': 'aides'},
         {'name': 'Annonces', 'icon': 'fas fa-bullhorn', 'url': 'annonces'},
-        {'name': 'Réunions', 'icon': 'fas fa-calendar-alt', 'url': 'meetings'},
+        {'name': 'Procès-verbaux', 'icon': 'fas fa-file-signature', 'url': 'meetings'},
         {'name': 'Cotisations', 'icon': 'fas fa-coins', 'url': 'cotisations'},
         {'name': 'Cycles Tontine', 'icon': 'fas fa-sync-alt', 'url': 'tontine_cycles'},
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
@@ -186,18 +186,29 @@ MENU_ITEMS = {
 # FONCTION POUR RÉCUPÉRER LE MENU DYNAMIQUE
 # ============================================================
 
+# Rubriques du menu, dans l'ordre d'affichage : chaque page est rangée avec celles qui lui ressemblent
+MENU_SECTIONS = [
+    ('', ['dashboard']),
+    ('Argent', ['seances', 'cotisations', 'transactions', 'loans', 'avals', 'exercise']),
+    ('Tontine', ['tontine_cycles', 'tirages']),
+    ('Vie du groupe', ['members', 'sanctions', 'aides', 'meetings', 'annonces', 'votes']),
+    ('Administration', ['reports', 'tontine_settings', 'password_requests', 'audit_logs', 'gallery_admin', 'superadmin']),
+    ('', ['profile']),
+]
+_SECTION_OF = {url: (rank, title, pos) for rank, (title, urls) in enumerate(MENU_SECTIONS) for pos, url in enumerate(urls)}
+
+
 def get_user_menu():
-    """
-    Retourne le menu adapté au rôle de l'utilisateur connecté
-    À utiliser dans base.html
-    """
+    """Menu du rôle connecté, rangé par rubriques (chaque entrée porte 'section' : titre à afficher ou '')"""
     if not current_user.is_authenticated:
         return []
-    
-    role = current_user.role
-    # Récupérer le menu selon le rôle, sinon menu membre par défaut
-    menu = MENU_ITEMS.get(role, MENU_ITEMS['MEMBRE'])
-    
+    items = MENU_ITEMS.get(current_user.role, MENU_ITEMS['MEMBRE'])
+    ordered = sorted(items, key=lambda it: _SECTION_OF.get(it['url'], (len(MENU_SECTIONS) - 1, '', 99))[::2])
+    menu, last = [], None
+    for item in ordered:
+        rank, title, _ = _SECTION_OF.get(item['url'], (len(MENU_SECTIONS) - 1, '', 99))
+        menu.append(dict(item, section=title if rank != last and title else ''))
+        last = rank
     return menu
 
 

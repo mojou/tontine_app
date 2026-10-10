@@ -41,7 +41,7 @@ c.post('/tontine-cycles/add', data={'contribution_type_id': '', 'custom_amount':
 with app.app_context():
     cid = TontineCycleDetail.query.filter_by(tontine_id=tid).one().id
 for turn in (1, 2):
-    c.post(f'/tontine-cycles/{cid}/register-benefit', data={'expected_turn': str(turn), 'payment_mode': 'ESPECE'})
+    c.post(f'/tontine-cycles/{cid}/register-benefit', data={'confirm_offline': 'on', 'expected_turn': str(turn), 'payment_mode': 'ESPECE'})
 with app.app_context():
     served = [b.member_id for b in CycleBeneficiary.query.filter_by(cycle_id=cid).all()]
     check(len(served) == 2, '2 tours versés avant l\'arrivée du nouveau')
@@ -88,7 +88,7 @@ with app.app_context():
 
 # Le cycle va jusqu'au bout avec les nouvelles mains
 for turn in (3, 4, 5, 6):
-    c.post(f'/tontine-cycles/{cid}/register-benefit', data={'expected_turn': str(turn), 'payment_mode': 'ESPECE'})
+    c.post(f'/tontine-cycles/{cid}/register-benefit', data={'confirm_offline': 'on', 'expected_turn': str(turn), 'payment_mode': 'ESPECE'})
 with app.app_context():
     cyc = db.session.get(TontineCycleDetail, cid)
     jean_served = CycleBeneficiary.query.filter_by(cycle_id=cid, member_id=mem['Jean']).count()

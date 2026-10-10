@@ -80,7 +80,8 @@
                             <th>Téléphone</th>
                             <th>Ville</th>
                             <th>Inscription</th>
-                            <th>Épargne</th>
+                            <th title="Cotisations versées aux cycles de tontine">Tontine cotisée</th>
+                            <th title="Épargne personnelle, rendue en fin d'exercice">Épargne</th>
                             <th>Statut</th>
                             <th>Actions</th>
                         </tr>
@@ -112,13 +113,14 @@
                                     </div>
                                 </td>
                                 <td><a href="tel:{{ m.phone }}" class="text-secondary"><i class="fas fa-phone-alt mr-1 small"></i> {{ m.phone }}</a></td>
-                                <td><small>{{ m.city or 'N/A' }}</small></td>
+                                <td><small>{{ m.city or '—' }}</small></td>
                                 <td><small>{{ m.registration_date.strftime('%d/%m/%y') }}</small></td>
-                                <td class="font-weight-bold text-success">{{ "{:,.0f}".format(m.total_savings).replace(',', ' ') }} F</td>
+                                <td class="font-weight-bold text-success">{{ (m.total_tontine_paid)|fcfa }} F</td>
+                                <td class="font-weight-bold" style="color: var(--hl-green-700)">{{ (m.savings_balance)|fcfa }} F</td>
                                 <td>
                                     <div class="d-flex flex-column">
                                         <span class="badge badge-{{ m.get_status_color() }} mb-1">
-                                            {{ m.status }}
+                                            {{ {'ACTIF': 'Actif', 'SUSPENDU': 'Suspendu', 'EXCLU': 'Exclu', 'PENDING': 'En attente de validation', 'INACTIF': 'Inactif'}.get(m.status, m.status) }}
                                         </span>
                                         {% if m.tontine_status == 'ROUGE' %}
                                         <span class="badge badge-danger">🔴 En rouge</span>
@@ -169,7 +171,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="8" class="text-center py-5 text-muted">
+                                <td colspan="9" class="text-center py-5 text-muted">
                                     <i class="fas fa-users fa-3x mb-3 d-block"></i>
                                     <p>Aucun membre trouvé avec les filtres sélectionnés.</p>
                                     {% if current_user.is_admin() %}

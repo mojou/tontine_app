@@ -375,10 +375,10 @@ select.form-control:focus {
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i> <strong>Informations :</strong>
                         <ul class="mb-0 mt-2">
-                            <li>✅ Droit de présence : <strong>{{ '{:,.0f}'.format((tontine.presence_amount or 0)|float).replace(',', ' ') }} FCFA</strong> par séance</li>
+                            <li>✅ Droit de présence : <strong>{{ ((tontine.presence_amount or 0)|float)|fcfa }} FCFA</strong> par séance</li>
                             {% if levels %}
                             <li>✅ Niveaux de cotisation tontine :
-                                <strong>{% for l in levels %}{{ '{:,.0f}'.format(l.amount|float).replace(',', ' ') }}{{ ', ' if not loop.last }}{% endfor %} FCFA</strong>
+                                <strong>{% for l in levels %}{{ (l.amount|float)|fcfa }}{{ ', ' if not loop.last }}{% endfor %} FCFA</strong>
                                 (vous pouvez prendre plusieurs niveaux et plusieurs mains)</li>
                             {% endif %}
                             <li>✅ Votre place dans chaque cycle est tirée au sort (ou attribuée aux enchères) après validation de votre dossier</li>

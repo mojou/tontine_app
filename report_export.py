@@ -20,6 +20,20 @@ REPORT_TYPES = {
     'financial': 'Rapport financier (entrées / sorties)',
 }
 
+# Nom court en français (onglet Excel, nom du fichier) : jamais de code interne ni d'anglais
+REPORT_SHORT_NAMES = {
+    'cotisations': 'Cotisations',
+    'loans': 'Emprunts',
+    'sanctions': 'Sanctions',
+    'financial': 'Financier',
+}
+
+
+def report_filename(kind, start, end):
+    """Ex. « Rapport Emprunts du 01-01-2026 au 31-12-2026 » (sans extension)"""
+    return f"Rapport {REPORT_SHORT_NAMES.get(kind, 'Ghelia')} du {start:%d-%m-%Y} au {end:%d-%m-%Y}"
+
+
 # Couleurs Ghelia Finance
 GREEN = '#14532d'
 GREEN_LIGHT = '#e6f1e9'
@@ -168,7 +182,7 @@ def to_excel(report, tontine_name):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = report.kind[:30]
+    ws.title = REPORT_SHORT_NAMES.get(report.kind, 'Rapport')[:30]
     ws.append([f"{tontine_name} - {report.title}"])
     ws['A1'].font = Font(bold=True, size=14, color='14532D')
     ws.append([f"Période {report.period}"])

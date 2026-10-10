@@ -39,7 +39,7 @@ with app.app_context():
     paul = Member.query.filter_by(tontine_id=tid, first_name='Paul').one().id
 for t, amount in [('FONDS_CAISSE', 5000), ('EPARGNE', 25000), ('PRESENCE', 1050)]:
     c.post('/transactions/add', data={'member_id': paul, 'type': t, 'amount': amount, 'payment_mode': 'ORANGE_MONEY',
-                                      'payment_reference': f'OM-{t}', 'description': ''})
+                                      'payment_reference': f"OM-{t.replace('_', '-')}", 'description': ''})
 c.post('/loan/request', data={'member_id': paul, 'amount': 20000, 'duration_months': 2, 'purpose': 'Commerce & stock'})
 with app.app_context():
     db.session.add(Sanction(tontine_id=tid, member_id=paul, type_sanction='RETARD_REUNION', amount=500,
@@ -69,6 +69,17 @@ for kind in ('cotisations', 'loans', 'sanctions', 'financial'):
     # Excel
     r = c.post('/reports', data=dict(period, report_type=kind, format='EXCEL'), follow_redirects=True)
     check(r.status_code == 200 and r.data[:2] == b'PK', f'{kind} : Excel généré')
+    # Ni « _ » ni anglais : nom du fichier, onglet Excel, contenu
+    import re
+    import openpyxl
+    disposition = r.headers.get('Content-Disposition', '')
+    name = re.search(r'filename="?([^";]+)', disposition).group(1)
+    check('_' not in name and not re.search(r'(?i)loans|financial|report', name) and name.startswith('Rapport '),
+          f'{kind} : nom de fichier en français, sans « _ » ({name})')
+    sheet = openpyxl.load_workbook(io.BytesIO(r.data)).active.title
+    check('_' not in sheet and sheet not in ('loans', 'financial'), f'{kind} : onglet Excel en français ({sheet})')
+    codes = re.findall(r'\b[A-Z]+_[A-Z_]+\b|\b(?:PENDING|PAID|OVERDUE|None|True|False)\b', text)
+    check(not codes, f'{kind} : aucun code interne ni mot anglais dans le contenu {codes[:5]}')
 
 # Contenu des rapports
 r = c.post('/reports', data=dict(period, report_type='cotisations', format='CSV'), follow_redirects=True)

@@ -97,7 +97,7 @@ class User(UserMixin, db.Model):
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
 
 # ============================================================
@@ -159,7 +159,8 @@ class Member(TenantMixin, db.Model):
         return bool(self.user_account and self.user_account.is_admin())
 
     @property
-    def total_savings(self):
+    def total_tontine_paid(self):
+        """Cotisations versées aux cycles de tontine (ce n'est PAS l'épargne : voir savings_balance)"""
         result = db.session.query(db.func.sum(Transaction.amount)).filter(
             Transaction.member_id == self.id,
             Transaction.type == 'TONTINE'
@@ -229,7 +230,7 @@ class Member(TenantMixin, db.Model):
     @property
     def assets(self):
         """Avoirs dans la tontine : cotisations tontine + épargne nette + fonds de caisse"""
-        return self.total_savings + self.savings_balance + self._sum_types(['FONDS_CAISSE'])
+        return self.total_tontine_paid + self.savings_balance + self._sum_types(['FONDS_CAISSE'])
 
     @property
     def guarantee_exposure(self):
@@ -339,7 +340,7 @@ class Transaction(TenantMixin, db.Model):
     @property
     def source_module(self):
         return {
-            'SORTIE_LOAN': 'Emprunts', 'REMBOURSEMENT': 'Emprunts / Avals', 'BENEFICE_TONTINE': 'Cycles de tontine',
+            'SORTIE_LOAN': 'Emprunts', 'REMBOURSEMENT': 'Emprunts / Avals', 'BENEFICE_TONTINE': 'Cycles de tontine', 'RESTITUTION_TONTINE': 'Cycles de tontine',
             'ENCHERE': 'Cycles de tontine', 'SANCTION': 'Sanctions', 'AIDE': 'Aides sociales', 'PARTAGE': "Fin d'exercice",
         }.get(self.type, 'Transactions')
 
@@ -349,7 +350,7 @@ class Transaction(TenantMixin, db.Model):
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
     @property
     def creator_name(self):
@@ -357,7 +358,7 @@ class Transaction(TenantMixin, db.Model):
 
     @property
     def validator_name(self):
-        return "N/A"
+        return "—"
 
     def get_type_display(self):
         if self.contribution_type:
@@ -415,7 +416,7 @@ class Loan(TenantMixin, db.Model):
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
     @property
     def remaining_amount(self):
@@ -479,10 +480,12 @@ class Sanction(TenantMixin, db.Model):
     sanction_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(20), default='PENDING')
     created_at = db.Column(db.DateTime, default=utcnow)
+    # Amende infligée automatiquement (retard de cotisation) : « seance<id>:<colonne> », évite les doublons
+    origin_key = db.Column(db.String(60), nullable=True)
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
     @property
     def is_paid(self):
@@ -497,6 +500,7 @@ class Sanction(TenantMixin, db.Model):
         ('RETARD_REUNION', 'Retard à la réunion'),
         ('RETARD_EMPRUNT', 'Retard de remboursement'),
         ('ECHEC_COTISATION', 'Échec de cotisation'),
+        ('RETARD_COTISATION', 'Retard de cotisation'),
         ('COMPORTEMENT', 'Mauvais comportement'),
         ('AUTRE', 'Autre'),
     ]
@@ -563,7 +567,7 @@ class TontinePosition(TenantMixin, db.Model):
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
 
 # ============================================================
@@ -691,7 +695,7 @@ class CycleBeneficiary(TenantMixin, db.Model):
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
 
 # ============================================================
@@ -727,7 +731,7 @@ class Aide(TenantMixin, db.Model):
 
     @property
     def member_name(self):
-        return self.member.full_name if self.member else "N/A"
+        return self.member.full_name if self.member else "—"
 
     LEGACY_TYPES = {'MALADIE': 'Maladie', 'DECES': 'Décès', 'MARIAGE': 'Mariage', 'NAISSANCE': 'Naissance', 'AUTRE': 'Autre'}
 
@@ -1078,6 +1082,7 @@ class ContributionType(TenantMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     description = db.Column(db.String(255), nullable=True)
     display_order = db.Column(db.Integer, default=0)
+    late_fine = db.Column(db.Numeric(10, 2), nullable=True, default=Decimal('0.00'))  # amende si retard (0 = aucune)
     created_at = db.Column(db.DateTime, default=utcnow)
 
     @property
@@ -1156,7 +1161,7 @@ class CycleParticipant(TenantMixin, db.Model):
     @property
     def label(self):
         hands = len([p for p in self.cycle.participants if p.member_id == self.member_id]) if self.cycle else 1
-        name = self.member.full_name if self.member else 'N/A'
+        name = self.member.full_name if self.member else '—'
         return f"{name} (main {self.hand_number})" if hands > 1 else name
 
 

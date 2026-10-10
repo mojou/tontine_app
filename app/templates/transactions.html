@@ -69,7 +69,7 @@
         <div class="card {{ css }} shadow-sm h-100" title="{{ hint }}">
             <div class="card-body py-3">
                 <small class="font-weight-bold" style="opacity: .85">{{ label }} <i class="fas fa-info-circle"></i></small>
-                <h5 class="mb-0">{{ "{:,.0f}".format((amount or 0)|int).replace(',', ' ') }} FCFA</h5>
+                <h5 class="mb-0">{{ ((amount or 0)|int)|fcfa }} FCFA</h5>
             </div>
         </div>
     </div>
@@ -128,7 +128,7 @@
                             <td><span class="small text-muted">{{ tx.description or '-' }}</span></td>
                             <td class="text-right font-weight-bold {% if tx.is_outflow %}text-danger{% else %}text-success{% endif %}">
                                 {% if tx.is_outflow %}-{% else %}+{% endif %}
-                                {{ "{:,.0f}".format(tx.amount).replace(',', ' ') }} F
+                                {{ (tx.amount)|fcfa }} F
                             </td>
                             {% if current_user.is_admin() %}
                             <td class="text-center">
@@ -221,7 +221,7 @@
                     <p class="text-muted small">
                         <strong>ID:</strong> #{{ tx.id }}<br>
                         <strong>Membre:</strong> {{ tx.member_name }}<br>
-                        <strong>Montant:</strong> {{ "{:,.0f}".format(tx.amount).replace(',', ' ') }} FCFA
+                        <strong>Montant:</strong> {{ (tx.amount)|fcfa }} FCFA
                     </p>
                     <p class="text-danger mb-0">⚠️ Cette action est irréversible !</p>
                 </div>

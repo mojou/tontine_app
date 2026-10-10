@@ -73,6 +73,15 @@
             width: 100%;
         }
         
+        .sidebar .menu-section {
+            padding: 14px 20px 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.45);
+        }
+
         .sidebar .nav-link {
             padding: 12px 20px;
             color: rgba(255,255,255,0.8);
@@ -384,6 +393,9 @@
             <ul class="nav flex-column">
                 {% if current_user.is_authenticated %}
                     {% for item in get_user_menu() %}
+                    {% if item.section %}
+                    <li class="nav-item menu-section">{{ item.section }}</li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == item.url %}active{% endif %}" 
                            href="{{ url_for(item.url) }}">

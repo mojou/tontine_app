@@ -108,7 +108,7 @@ check('3 000' in h, 'cotisations rattachées au cycle affichées (3 000)')
 with app.app_context():
     from models import CycleParticipant
     p_paul = CycleParticipant.query.filter_by(cycle_id=cyc[20000], member_id=mem['Paul']).one().id
-c.post(f'/tontine-cycles/{cyc[20000]}/register-benefit', data={'participant_id': p_paul, 'bid_amount': '4000', 'payment_mode': 'ESPECE'})
+c.post(f'/tontine-cycles/{cyc[20000]}/register-benefit', data={'confirm_offline': 'on', 'participant_id': p_paul, 'bid_amount': '4000', 'payment_mode': 'ESPECE'})
 with app.app_context():
     check(Transaction.query.filter_by(tontine_id=tid, type='ENCHERE').count() == 1, 'mise de 4 000 en caisse')
 

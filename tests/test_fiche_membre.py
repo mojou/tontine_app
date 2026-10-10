@@ -73,6 +73,13 @@ check('Épargne des membres (restituable)' in summary and '5 000 FCFA' in summar
 check('Total des sorties' in summary and 'Prêts + Aides' not in h, 'carte « Total des sorties » correctement nommée')
 check('>Wave</span>' in h, 'la colonne Mode affiche Wave (et non « Espèce »)')
 
+# ---------------------------------------------------------------- registre des membres
+h = body(pres.get('/members'))
+row = h[h.index('Paul Ndongo'):]
+row = row[:row.index('</tr>')]
+check('Tontine cotisée' in h and 'Épargne' in h, 'liste des membres : colonnes « Tontine cotisée » et « Épargne » séparées')
+check('12 000 F' in row and '5 000 F' in row, "Paul : tontine 12 000 et épargne 5 000 (l'épargne n'affiche plus la tontine)")
+
 membre = app.test_client()
 membre.post('/login', data={'tontine': 'fiche', 'username': 'paul', 'password': 'Passw0rd1'})
 check(membre.get(f'/members/{paul}').status_code == 200, 'le membre voit sa propre fiche')

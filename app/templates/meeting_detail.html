@@ -174,7 +174,7 @@
                     <div class="alert alert-success mb-2">
                         <strong>{{ beneficiary.member.full_name }}</strong><br>
                         Type: {{ beneficiary.benefit_type }}<br>
-                        Montant: {{ "{:,.0f}".format(beneficiary.amount) }} FCFA
+                        Montant: {{ (beneficiary.amount)|fcfa }} FCFA
                     </div>
                     {% endfor %}
                 </div>

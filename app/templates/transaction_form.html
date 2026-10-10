@@ -53,7 +53,7 @@
                                 {% for r in rubriques %}
                                 <option value="{{ r.id }}" data-type="{{ r.category }}" data-amount="{{ r.amount|int if r.amount else 0 }}"
                                         {% if transaction and transaction.contribution_type_id == r.id %}selected{% endif %}>
-                                    {{ r.name }}{% if r.amount and r.amount > 0 %} · {{ '{:,.0f}'.format(r.amount|float).replace(',', ' ') }} FCFA{% endif %} ({{ r.frequency_display|lower }})
+                                    {{ r.name }}{% if r.amount and r.amount > 0 %} · {{ (r.amount|float)|fcfa }} FCFA{% endif %} ({{ r.frequency_display|lower }})
                                 </option>
                                 {% endfor %}
                             </select>

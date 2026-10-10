@@ -14,7 +14,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5>Cycle #{{ cycle.cycle_number }} <span class="badge badge-success">En cours</span></h5>
-                    <p class="small text-muted mb-2">{{ cycle.beneficiaries_count }}/{{ cycle.total_members }} bénéficiaires · {{ '{:,.0f}'.format(cycle.total_amount|float).replace(',', ' ') }} FCFA par tour</p>
+                    <p class="small text-muted mb-2">{{ cycle.beneficiaries_count }}/{{ cycle.total_members }} bénéficiaires · {{ (cycle.total_amount|float)|fcfa }} FCFA par tour</p>
                     <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}" class="btn btn-sm btn-primary">
                         <i class="fas fa-dice"></i> {{ 'Lancer / voir le tirage' if can_draw else "Voir l'ordre de passage" }}
                     </a>

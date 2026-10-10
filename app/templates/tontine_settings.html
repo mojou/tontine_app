@@ -103,7 +103,7 @@
                     {% for l in levels %}
                     <li class="list-group-item d-flex justify-content-between align-items-center {{ 'text-muted' if not l.is_active }}">
                         <span>
-                            <strong style="color: var(--hl-green)">{{ '{:,.0f}'.format(l.amount|float).replace(',', ' ') }} FCFA</strong>
+                            <strong style="color: var(--hl-green)">{{ (l.amount|float)|fcfa }} FCFA</strong>
                             <span class="small">· {{ l.name }} · {{ l.frequency_display|lower }}</span>
                             {% if not l.is_active %}<span class="badge badge-secondary">désactivé</span>{% endif %}
                         </span>
@@ -128,7 +128,7 @@
                         <input type="hidden" name="amount" value="{{ amount }}">
                         <input type="hidden" name="frequency" value="BIMENSUEL">
                         <input type="hidden" name="next" value="{{ url_for('tontine_settings') }}#niveaux">
-                        <button type="submit" class="btn btn-sm btn-outline-primary mb-1">+ {{ '{:,.0f}'.format(amount).replace(',', ' ') }}</button>
+                        <button type="submit" class="btn btn-sm btn-outline-primary mb-1">+ {{ (amount)|fcfa }}</button>
                     </form>
                     {% endfor %}
                 </div>

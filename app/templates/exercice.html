@@ -3,7 +3,7 @@
 {% block title %}Fin d'exercice {{ year }} - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-calendar-check"></i> Fin d'exercice {{ year }}{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block content %}
 <div class="fade-in">

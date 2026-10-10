@@ -54,7 +54,7 @@
                 <span class="wave">👋</span>
             </h2>
             <p class="text-muted mb-0">
-                <i class="fas fa-calendar-alt mr-1"></i> {{ now.strftime('%A %d %B %Y') | capitalize }}
+                <i class="fas fa-calendar-alt mr-1"></i> {{ now | date_longue }}
                 | Rôle : <strong>{{ current_user.get_role_display() }}</strong>
             </p>
         </div>
@@ -76,7 +76,7 @@
     <div class="col-xl-3 col-md-6 mb-4">
         <div class="stat-card">
             <i class="fas fa-chart-line" style="color: #2ecc71;"></i>
-            <div class="stat-value">{{ "{:,.0f}".format(stats.total_cotisations|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-value">{{ (stats.total_cotisations|default(0))|fcfa }}</div>
             <div class="stat-label">FCFA collectés</div>
         </div>
     </div>
@@ -92,25 +92,62 @@
     <div class="col-xl-3 col-md-6 mb-4">
         <div class="stat-card">
             <i class="fas fa-money-bill-wave" style="color: #f1c40f;"></i>
-            <div class="stat-value">{{ "{:,.0f}".format(stats.fonds_caisse|default(0)).replace(',', ' ') }}</div>
-            <div class="stat-label">Fonds de caisse</div>
+            <div class="stat-value">{{ (stats.fonds_caisse|default(0))|fcfa }}</div>
+            <div class="stat-label">Fonds de caisse <small>(caisse générale)</small></div>
         </div>
     </div>
-    
+
+    {% if stats.fund_balances %}
+    <div class="col-12 mb-4" id="fundBalances">
+        <div class="card">
+            <div class="card-header"><i class="fas fa-wallet"></i> Soldes par fonds</div>
+            <div class="card-body">
+                {% for code, label, balance in stats.fund_balances %}
+                {% if code == 'TONTINE' and balance < 0 %}
+                <div class="alert alert-danger small mb-3">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Fonds tontine négatif ({{ (balance)|fcfa }} FCFA)</strong> :
+                    des cagnottes ont été versées sans que toutes les cotisations soient enregistrées.
+                    Ouvrez chaque cycle (« État des cotisations ») pour voir qui n'a pas été saisi.
+                    <a href="{{ url_for('tontine_cycles') }}">Voir les cycles</a>
+                </div>
+                {% endif %}
+                {% endfor %}
+                <div class="row text-center">
+                    {% for code, label, balance in stats.fund_balances %}
+                    <div class="col-6 col-md mb-2">
+                        <div class="small text-muted">{{ label }}</div>
+                        <div class="h5 mb-0 font-weight-bold {{ 'text-danger' if balance < 0 else '' }}">{{ (balance)|fcfa }}</div>
+                        <div class="small text-muted">
+                            {% if code == 'CAISSE' %}prêts, fonctionnement{% elif code == 'TONTINE' %}cotisations pas encore reversées{% elif code == 'EPARGNE' %}appartient aux membres{% elif code == 'SECOURS' %}aides sociales{% else %}projet commun{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <div class="col-6 col-md mb-2 border-left">
+                        <div class="small text-muted">Trésorerie totale</div>
+                        <div class="h5 mb-0 font-weight-bold {{ 'text-danger' if stats.treasury < 0 else '' }}">{{ (stats.treasury)|fcfa }}</div>
+                        <div class="small text-muted">tous fonds confondus</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% else %}
     <!-- Vue Membre Simple -->
     <div class="col-xl-3 col-md-6 mb-4">
         <div class="stat-card">
             <i class="fas fa-piggy-bank" style="color: var(--hl-green-700);"></i>
-            <div class="stat-value">{{ "{:,.0f}".format(stats.my_cotisations|default(0)).replace(',', ' ') }}</div>
-            <div class="stat-label">Mes cotisations</div>
+            <div class="stat-value">{{ (stats.my_cotisations|default(0))|fcfa }}</div>
+            <div class="stat-label">Total de mes versements</div>
         </div>
     </div>
     
     <div class="col-xl-3 col-md-6 mb-4">
         <div class="stat-card">
             <i class="fas fa-hand-holding-usd" style="color: #e74c3c;"></i>
-            <div class="stat-value">{{ "{:,.0f}".format(stats.my_loans|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-value">{{ (stats.my_loans|default(0))|fcfa }}</div>
             <div class="stat-label">Mes emprunts</div>
         </div>
     </div>
@@ -118,7 +155,7 @@
     <div class="col-xl-3 col-md-6 mb-4">
         <div class="stat-card">
             <i class="fas fa-gavel" style="color: #f39c12;"></i>
-            <div class="stat-value">{{ "{:,.0f}".format(stats.my_sanctions|default(0)).replace(',', ' ') }}</div>
+            <div class="stat-value">{{ (stats.my_sanctions|default(0))|fcfa }}</div>
             <div class="stat-label">Sanctions impayées</div>
         </div>
     </div>
@@ -200,7 +237,7 @@
                                 </td>
                                 <td class="font-weight-bold {% if tx.is_outflow %}text-danger{% else %}text-success{% endif %}">
                                     {% if tx.is_outflow %}-{% else %}+{% endif %}
-                                    {{ "{:,.0f}".format(tx.amount).replace(',', ' ') }}
+                                    {{ (tx.amount)|fcfa }}
                                 </td>
                             </tr>
                             {% else %}
@@ -272,7 +309,7 @@
                             <i class="fas fa-exclamation-triangle mr-1"></i> Sanctions en attente
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
-                            {{ stats.pending_sanctions }} sanction(s) - {{ "{:,.0f}".format(stats.total_sanctions_amount|default(0)).replace(',', ' ') }} FCFA
+                            {{ stats.pending_sanctions }} sanction(s) - {{ (stats.total_sanctions_amount|default(0))|fcfa }} FCFA
                         </div>
                     </div>
                     <div class="col-auto">
@@ -295,18 +332,18 @@
             </div>
             <div class="card-body">
                 <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Statut tontine :</span>
+                    <span class="text-muted">Ma situation :</span>
                     <span class="badge badge-{{ 'success' if stats.my_status == 'VERT' else 'warning' if stats.my_status == 'ORANGE' else 'danger' }}">
-                        {{ stats.my_status }}
+                        {{ {'VERT': '🟢 En règle', 'ORANGE': '🟠 Avertissement', 'ROUGE': '🔴 Suspendu'}.get(stats.my_status, stats.my_status) }}
                     </span>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Crédit (cotisations) :</span>
-                    <span class="font-weight-bold text-success">{{ "{:,.0f}".format(stats.my_credit|default(0)).replace(',', ' ') }} FCFA</span>
+                    <span class="text-muted">Mon épargne (rendue en fin d'exercice) :</span>
+                    <span class="font-weight-bold text-success">{{ (stats.my_savings|default(0))|fcfa }} FCFA</span>
                 </div>
                 <div class="d-flex justify-content-between">
-                    <span class="text-muted">Débit (dettes) :</span>
-                    <span class="font-weight-bold text-danger">{{ "{:,.0f}".format(stats.my_debit|default(0)).replace(',', ' ') }} FCFA</span>
+                    <span class="text-muted">Ce que je dois (prêts + amendes) :</span>
+                    <span class="font-weight-bold text-danger">{{ ((stats.my_loans|default(0)) + (stats.my_sanctions|default(0)))|fcfa }} FCFA</span>
                 </div>
                 <hr class="my-3">
                 <div class="text-center">
@@ -327,11 +364,13 @@
             </div>
             <div class="card-body">
                 <div class="row">
+                    {% if current_user.role in ['SECRETAIRE', 'PRESIDENT', 'TRESORIER'] %}
                     <div class="col-6 mb-2">
                         <a href="{{ url_for('add_transaction') }}" class="btn btn-outline-primary btn-block text-left btn-sm">
                             <i class="fas fa-plus-circle mr-1"></i> Nouvelle transaction
                         </a>
                     </div>
+                    {% endif %}
                     {% if current_user.is_admin() %}
                     <div class="col-6 mb-2">
                         <a href="{{ url_for('add_member') }}" class="btn btn-outline-success btn-block text-left btn-sm">
@@ -389,7 +428,7 @@
                 <td>{{ sanction.member_name }}</td>
                 <td>{{ sanction.type_display }}</td>
                 <td class="text-danger font-weight-bold">
-                    {{ "{:,.0f}".format(sanction.amount).replace(',', ' ') }} FCFA
+                    {{ (sanction.amount)|fcfa }} FCFA
                 </td>
                 <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
                 <td>

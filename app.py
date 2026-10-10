@@ -120,6 +120,21 @@ from models import (
 import finance
 import report_export
 import re
+
+_THOUSANDS_COMMA = re.compile(r'(?<=\d),(?=\d{3}\b)')
+
+
+def french_numbers(text):
+    """« 60,000 FCFA » -> « 60 000 FCFA » (séparateur de milliers français)"""
+    return _THOUSANDS_COMMA.sub(' ', str(text))
+
+
+_flask_flash = flash
+
+
+def flash(message, category='message'):   # noqa: F811 - remplace flask.flash dans ce module
+    _flask_flash(french_numbers(message), category)
+
 import secrets
 import uuid
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -565,11 +580,18 @@ def dashboard():
         next_cycle = TontineCycleDetail.query.filter_by(status='EN_COURS').first()
         next_beneficiary = next_cycle.get_next_beneficiary() if next_cycle else None
         
+        # Chaque fonds a son propre solde : la caisse générale ne se mélange pas avec
+        # l'argent de la tontine (à reverser) ni avec l'épargne (qui appartient aux membres)
+        balances = finance.fund_balances(dict(
+            db.session.query(Transaction.type, db.func.sum(Transaction.amount)).group_by(Transaction.type).all()))
         stats = {
             'total_members': total_members,
             'active_members': active_members,
             'total_cotisations': float(entrees),
-            'fonds_caisse': float(entrees - sorties),
+            'fonds_caisse': float(balances['CAISSE']),
+            'fund_balances': [(code, finance.FUNDS[code], balances[code]) for code in finance.FUNDS
+                              if code in ('CAISSE', 'TONTINE', 'EPARGNE', 'SECOURS') or balances[code]],
+            'treasury': float(entrees - sorties),
             'total_active_loans': int(total_active_loans or 0),
             'total_loan_amount': float(total_loan_amount or 0),
             'pending_sanctions': int(pending_sanctions or 0),
@@ -587,7 +609,9 @@ def dashboard():
         ).scalar() or 0
         
         stats = {
-            'my_cotisations': float(member.total_savings or 0),
+            # Tout ce que le membre a versé (tontine, présence, fonds de caisse, épargne, secours...)
+            'my_cotisations': float(member._sum_types(finance.CONTRIBUTION_CATEGORIES)),
+            'my_savings': float(member.savings_balance),
             'my_presence': float(member.total_presence_paid or 0),
             'my_loans': float(my_loans_total or 0),
             'my_sanctions': float(member.total_sanctions_pending or 0),
@@ -1171,6 +1195,18 @@ def add_transaction():
         )
         db.session.add(transaction)
 
+        if transaction.type == 'TONTINE' and rubrique and not transaction.cycle_id:
+            # Rattachement automatique au cycle en cours de ce niveau, si le membre y participe :
+            # sinon la cotisation ne compterait pas dans l'état des cotisations du cycle
+            cycles = [cy for cy in TontineCycleDetail.query.filter_by(contribution_type_id=rubrique.id, status='EN_COURS').all()
+                      if any(p.member_id == form.member_id.data for p in cy.participants)]
+            if len(cycles) == 1:
+                transaction.cycle_id = cycles[0].id
+                flash(f"Cotisation rattachée au {cycles[0].display_name}.", 'info')
+            else:
+                flash("Cette cotisation n'est rattachée à aucun cycle : pour un cycle, utilisez la feuille de séance "
+                      "ou « Régulariser » sur la page du cycle.", 'warning')
+
         if transaction.type == 'TONTINE':
             member = db.session.get(Member, form.member_id.data)
             if member and not member.has_paid_fonds_caisse:
@@ -1187,7 +1223,8 @@ def add_transaction():
                 flash('Fonds de caisse obligatoire enregistré !', 'info')
         
         db.session.commit()
-        log_activity(current_user.id, current_user.role, f"Ajout transaction: {transaction.type}", request.remote_addr)
+        log_activity(current_user.id, current_user.role, f"Ajout transaction : {finance.type_label(transaction.type)} "
+                     f"{transaction.amount:,.0f} FCFA", request.remote_addr)
         flash('Transaction enregistrée avec succès !', 'success')
         return redirect(url_for('transactions'))
 
@@ -1342,7 +1379,7 @@ def loans():
             members_list = [current_user.member]
 
     # Candidats avalistes : membres actifs (l'emprunteur est exclu côté formulaire et serveur)
-    guarantor_candidates = Member.query.filter_by(is_active=True, status='ACTIF').order_by(Member.last_name).all()
+    guarantor_candidates = guarantor_choices(exclude_member_id=current_user.member_id)
 
     return render_template(
         'loans.html',
@@ -1400,7 +1437,7 @@ def loan_request():
             continue
         if gid and gid not in guarantor_ids:
             guarantor_ids.append(gid)
-    guarantors, problems = _validate_guarantors(member, guarantor_ids)
+    guarantors, problems = _validate_guarantors(member, guarantor_ids, amount)
     if problems:
         for msg in problems:
             flash(msg, 'danger')
@@ -1762,6 +1799,28 @@ def delete_sanction(sanction_id):
 # ============================================================
 # GESTION DES RÉUNIONS (CRUD COMPLET AVEC VALIDATION)
 # ============================================================
+
+@app.template_filter('fcfa')
+def fcfa_filter(value):
+    """30000 -> « 30 000 » (montants affichés à la française)"""
+    try:
+        return f"{Decimal(str(value or 0)):,.0f}".replace(',', ' ')
+    except (ArithmeticError, ValueError, TypeError):
+        return '0'
+
+
+_JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre',
+         'novembre', 'décembre']
+
+
+@app.template_filter('date_longue')
+def date_longue_filter(value):
+    """Date en toutes lettres, en français, quelle que soit la langue du serveur : « Vendredi 9 octobre 2026 »"""
+    if not value:
+        return ''
+    return f"{_JOURS[value.weekday()].capitalize()} {value.day} {_MOIS[value.month - 1]} {value.year}"
+
 
 @app.template_filter('nl2br')
 def nl2br_filter(text):
@@ -2230,6 +2289,126 @@ def add_tontine_cycle():
     return redirect(url_for('tontine_cycle_detail', cycle_id=cycle.id))
 
 
+def cycle_contribution_status(cycle, through_turn=None):
+    """État des cotisations d'un cycle, membre par membre, jusqu'au tour `through_turn`
+    (par défaut : le tour en cours, ou le dernier tour si le cycle est terminé).
+    Chaque main doit avoir versé `amount_per_member` à chaque tour, rappel d'entrée compris."""
+    if through_turn is None:
+        through_turn = cycle.beneficiaries_count + (1 if cycle.status == 'EN_COURS' else 0)
+    amount = Decimal(str(cycle.amount_per_member))
+    hands = {}
+    for p in cycle.participants:
+        hands[p.member_id] = hands.get(p.member_id, 0) + 1
+    # Payé = cotisations du cycle - avances déjà rendues (ou versées en épargne)
+    paid = {}
+    for member_id, typ, total in db.session.query(Transaction.member_id, Transaction.type, db.func.sum(Transaction.amount)).filter(
+            Transaction.cycle_id == cycle.id, Transaction.type.in_(['TONTINE', 'RESTITUTION_TONTINE'])
+    ).group_by(Transaction.member_id, Transaction.type).all():
+        sign = -1 if typ == 'RESTITUTION_TONTINE' else 1
+        paid[member_id] = paid.get(member_id, Decimal('0')) + sign * Decimal(str(total or 0))
+    served = cycle.beneficiaries_count   # tours dont la cagnotte est déjà versée
+    rows = []
+    for member_id, n in hands.items():
+        member = db.session.get(Member, member_id)
+        expected = amount * n * through_turn
+        got = paid.get(member_id, Decimal('0'))
+        late = max(amount * n * min(served, through_turn) - got, Decimal('0'))   # tours déjà versés non payés
+        rows.append({'member': member, 'hands': n, 'expected': expected, 'paid': got, 'gap': got - expected,
+                     'late': late,                                                    # vrai retard
+                     'current_due': max(expected - got, Decimal('0')) - late,         # reste du tour en cours
+                     'advance': max(got - expected, Decimal('0'))})                   # payé en trop
+    rows.sort(key=lambda r: (r['gap'] >= 0, r['member'].last_name.lower() if r['member'] else ''))
+    missing = sum((-r['gap'] for r in rows if r['gap'] < 0), Decimal('0'))
+    return {'turn': through_turn, 'rows': rows, 'missing': missing, 'served': served,
+            'late_total': sum((r['late'] for r in rows), Decimal('0')),
+            'current_total': sum((r['current_due'] for r in rows), Decimal('0')),
+            'advance_total': sum((r['advance'] for r in rows), Decimal('0'))}
+
+
+@app.route('/tontine-cycles/<int:cycle_id>/regulariser', methods=['POST'])
+@login_required
+@role_required(CYCLE_MANAGERS)
+def regularize_cycle(cycle_id):
+    """Régulariser l'écart d'un membre sur un cycle (en cours ou terminé) :
+    - encaisser : rattrapage de cotisations en retard / du tour en cours ;
+    - rendre : l'avance (payé en trop) est rendue au membre ;
+    - epargne : l'avance est versée dans l'épargne du membre."""
+    cycle = db.get_or_404(TontineCycleDetail, cycle_id)
+    back = redirect(url_for('tontine_cycle_detail', cycle_id=cycle.id) + '#etatCotisations')
+    member_id = request.form.get('member_id', type=int)
+    row = next((r for r in cycle_contribution_status(cycle)['rows'] if r['member'] and r['member'].id == member_id), None)
+    if row is None:
+        flash("Ce membre ne participe pas à ce cycle.", 'danger')
+        return back
+    action = request.form.get('action')
+    amount = _parse_decimal(request.form.get('amount') or '', 1, 100_000_000)
+    limit = -row['gap'] if action == 'encaisser' else row['advance']
+    if amount is None or limit <= 0 or amount > limit:
+        flash(f"Montant invalide : il doit être compris entre 1 et {_fmt(max(limit, 0))} FCFA.", 'danger')
+        return back
+    payment_mode = _payment_mode_from_form()
+    reference = _payment_reference_from_form()
+    member = row['member']
+    if action == 'encaisser':
+        db.session.add(Transaction(member_id=member.id, type='TONTINE', amount=amount, date=date.today(), cycle_id=cycle.id,
+                                   contribution_type_id=cycle.contribution_type_id, payment_mode=payment_mode,
+                                   payment_reference=reference, created_by=current_user.id,
+                                   description=f"Rattrapage de cotisations - {cycle.display_name}"))
+        message = f"{_fmt(amount)} FCFA de cotisations encaissés pour {member.full_name}."
+    elif action in ('rendre', 'epargne'):
+        db.session.add(Transaction(member_id=member.id, type='RESTITUTION_TONTINE', amount=amount, date=date.today(),
+                                   cycle_id=cycle.id, payment_mode=payment_mode, created_by=current_user.id,
+                                   description=(f"Avance rendue - {cycle.display_name}" if action == 'rendre'
+                                                else f"Avance versée en épargne - {cycle.display_name}")))
+        if action == 'epargne':
+            db.session.add(Transaction(member_id=member.id, type='EPARGNE', amount=amount, date=date.today(),
+                                       payment_mode=payment_mode, created_by=current_user.id,
+                                       description=f"Avance de tontine versée en épargne ({cycle.display_name})"))
+            message = f"{_fmt(amount)} FCFA d'avance versés dans l'épargne de {member.full_name}."
+        else:
+            message = f"{_fmt(amount)} FCFA d'avance rendus à {member.full_name}."
+    else:
+        abort(400)
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, f"Régularisation {cycle.display_name} : {message}", request.remote_addr)
+    flash(message, 'success')
+    return back
+
+
+def cycle_next_steps(cycle, contrib):
+    """Cycle terminé : étapes à faire ensuite, cochées automatiquement quand elles sont faites"""
+    def total(types):
+        return Decimal(str(db.session.query(db.func.sum(Transaction.amount)).filter(
+            Transaction.cycle_id == cycle.id, Transaction.type.in_(types)).scalar() or 0))
+    fund = total(['TONTINE']) - total(['RESTITUTION_TONTINE', 'BENEFICE_TONTINE'])
+    member_ids = list({p.member_id for p in cycle.participants})
+    fines = Decimal(str(db.session.query(db.func.sum(Sanction.amount)).filter(
+        Sanction.member_id.in_(member_ids), Sanction.status == 'PENDING').scalar() or 0)) if member_ids else Decimal('0')
+    next_cycle = TontineCycleDetail.query.filter(TontineCycleDetail.contribution_type_id == cycle.contribution_type_id,
+                                                 TontineCycleDetail.cycle_number > cycle.cycle_number).first()
+    late_and_advance = contrib['late_total'] + contrib['advance_total']
+    return [
+        {'done': late_and_advance == 0, 'title': 'Solder les cotisations du cycle',
+         'detail': 'Tout le monde est à jour.' if late_and_advance == 0 else
+         f"{_fmt(contrib['late_total'])} FCFA en retard et {_fmt(contrib['advance_total'])} FCFA d'avance à régulariser "
+         "(bouton « Régulariser » dans l'état des cotisations).",
+         'url': '#etatCotisations', 'link': "Voir l'état des cotisations"},
+        {'done': fund == 0, 'title': 'Vérifier que la caisse du cycle est à 0',
+         'detail': 'Tout ce qui est entré a été reversé aux bénéficiaires.' if fund == 0 else
+         f"Solde de {_fmt(fund)} FCFA : " + ('des cotisations ont été versées sans être encaissées.' if fund < 0
+                                            else "de l'argent reste à reverser ou à rendre."),
+         'url': '#etatCotisations', 'link': 'Régulariser'},
+        {'done': fines == 0, 'title': 'Encaisser les amendes des participants',
+         'detail': 'Aucune amende en attente.' if fines == 0 else f"{_fmt(fines)} FCFA d'amendes encore à payer.",
+         'url': url_for('sanctions'), 'link': 'Voir les sanctions'},
+        {'done': next_cycle is not None, 'title': 'Lancer le cycle suivant',
+         'detail': f"{next_cycle.display_name} a été créé." if next_cycle else
+         'Même niveau ou un autre ; les mains peuvent changer et de nouveaux membres peuvent entrer. Faites ensuite le tirage.',
+         'url': url_for('tontine_cycle_detail', cycle_id=next_cycle.id) if next_cycle else url_for('add_tontine_cycle'),
+         'link': 'Ouvrir le nouveau cycle' if next_cycle else 'Nouveau cycle'},
+    ]
+
+
 @app.route('/tontine-cycles/<int:cycle_id>')
 @login_required
 def tontine_cycle_detail(cycle_id):
@@ -2246,7 +2425,9 @@ def tontine_cycle_detail(cycle_id):
     holders = {}
     for p in cycle.participants:
         holders.setdefault(p.member_id, {'member': p.member, 'parts': []})['parts'].append(p)
+    contrib = cycle_contribution_status(cycle)
     return render_template('tontine_cycle_detail.html', cycle=cycle, beneficiaries=beneficiaries,
+                           next_steps=cycle_next_steps(cycle, contrib) if cycle.status == 'TERMINE' else None,
                            next_participant=next_participant, next_beneficiary=next_participant.member if next_participant else None,
                            pending_sanctions=pending_sanctions, collected=collected,
                            holders=sorted(holders.values(), key=lambda h: h['member'].last_name.lower()),
@@ -2254,7 +2435,7 @@ def tontine_cycle_detail(cycle_id):
                            join_candidates=Member.query.filter_by(is_active=True, status='ACTIF')
                            .order_by(Member.last_name, Member.first_name).all(),
                            hands_by_member={h['member'].id: len(h['parts']) for h in holders.values()},
-                           max_hands=MAX_HANDS)
+                           max_hands=MAX_HANDS, contrib=contrib)
 
 
 @app.route('/tontine-cycles/<int:cycle_id>/register-benefit', methods=['GET', 'POST'])
@@ -2315,6 +2496,25 @@ def register_benefit(cycle_id):
     member = participant.member
     payment_mode = _payment_mode_from_form()
     reference = _payment_reference_from_form()
+
+    # Les cotisations du tour doivent être enregistrées avant de verser la cagnotte
+    status = cycle_contribution_status(cycle)
+    late = [r for r in status['rows'] if r['gap'] < 0]
+    if late:
+        if request.form.get('confirm_offline') != 'on':
+            def fcfa(v):
+                return f"{v:,.0f}".replace(',', ' ')
+            names = ', '.join(f"{r['member'].full_name} : {fcfa(-r['gap'])}" for r in late[:6])
+            flash(f"Cotisations non enregistrées jusqu'au tour {status['turn']} : {fcfa(status['missing'])} FCFA ({names}). "
+                  "Encaissez-les d'abord (séance ou transaction), ou cochez « encaissées hors application ».", 'danger')
+            return back
+        for r in late:   # régularisation : les cotisations déclarées encaissées sont enregistrées
+            db.session.add(Transaction(member_id=r['member'].id, type='TONTINE', amount=-r['gap'], date=date.today(),
+                                       cycle_id=cycle.id, contribution_type_id=cycle.contribution_type_id,
+                                       description=f"Régularisation {cycle.display_name} : cotisations jusqu'au tour "
+                                                   f"{status['turn']} encaissées hors application",
+                                       created_by=current_user.id, payment_mode=payment_mode,
+                                       seance_id=seance.id if seance else None))
 
     # Retenue des amendes impayées (elles sont alors soldées), dans la limite de la cagnotte
     deducted = Decimal('0')
@@ -2514,7 +2714,7 @@ def report_download(token):
     export_format = data.get('f')
     report = report_export.build_report(data['k'], start_date, end_date)
     tontine_name = current_tontine().name
-    filename = f"rapport_{data['k']}_{start_date:%Y%m%d}_{end_date:%Y%m%d}"
+    filename = report_export.report_filename(data['k'], start_date, end_date)
     log_activity(current_user.id, current_user.role,
                  f"Export {export_format} : {report.title} ({report.period})", request.remote_addr)
 
@@ -2569,8 +2769,9 @@ def reports():
     active_loans = Loan.query.filter_by(status='ACTIF').count()
     pending_loans = Loan.query.filter_by(status='PENDING').count()
     
+    # Toutes les cotisations (tontine, présence, fonds de caisse, épargne, secours...)
     total_contributions = db.session.query(db.func.sum(Transaction.amount)).filter(
-        Transaction.type.in_(['TONTINE', 'PRESENCE'])
+        Transaction.type.in_(finance.CONTRIBUTION_CATEGORIES)
     ).scalar() or 0
     total_sanctions = db.session.query(db.func.sum(Sanction.amount)).filter_by(status='PAID').scalar() or 0
     total_loans_given = db.session.query(db.func.sum(Loan.amount)).filter(Loan.status.in_(['ACTIF', 'REMBOURSE'])).scalar() or 0
@@ -2580,7 +2781,7 @@ def reports():
     
     top_contributors = db.session.query(
         Member.first_name, Member.last_name, db.func.sum(Transaction.amount).label('total')
-    ).join(Transaction, Member.id == Transaction.member_id).filter(Transaction.type.in_(['TONTINE', 'PRESENCE'])).group_by(Member.id).order_by(db.text('total DESC')).limit(10).all()
+    ).join(Transaction, Member.id == Transaction.member_id).filter(Transaction.type.in_(finance.CONTRIBUTION_CATEGORIES)).group_by(Member.id).order_by(db.text('total DESC')).limit(10).all()
      
     recent_transactions = Transaction.query.order_by(Transaction.date.desc()).limit(10).all()
 
@@ -2692,7 +2893,8 @@ def secours_situation(member):
 def aid_eligibility(member, tontine):
     """Liste des conditions [(respectée ?, libellé, détail)]"""
     rules = aid_rules(tontine)
-    checks = [(member.is_active and member.status == 'ACTIF', 'Membre actif', member.status)]
+    checks = [(member.is_active and member.status == 'ACTIF', 'Membre actif',
+               'oui' if member.is_active and member.status == 'ACTIF' else 'non')]
     seniority = (date.today() - (member.registration_date or date.today())).days
     checks.append((seniority >= rules['seniority_days'], f"Ancienneté d'au moins {rules['seniority_days']} jours",
                    f"{seniority} jour(s)"))
@@ -2704,7 +2906,8 @@ def aid_eligibility(member, tontine):
     if rules['require_secours']:
         ok, paid, expected = secours_situation(member)
         checks.append((ok, 'À jour de la caisse de secours', f"{paid:,.0f} / {expected:,.0f} FCFA".replace(',', ' ')))
-    checks.append((member.tontine_status != 'ROUGE', 'Pas en statut rouge', member.tontine_status or 'VERT'))
+    checks.append((member.tontine_status != 'ROUGE', 'Pas en statut rouge (suspendu)',
+                   {'VERT': 'en règle', 'ORANGE': 'avertissement', 'ROUGE': 'suspendu'}.get(member.tontine_status, 'en règle')))
     return checks
 
 
@@ -3409,7 +3612,65 @@ def _split_amount(total, divisor, count):
     return shares
 
 
-def _validate_guarantors(borrower, guarantor_ids):
+# Règles pour avaliser (garantir) l'emprunt d'un autre membre :
+#   1. être à jour en réunion : pas d'amende impayée, fonds de caisse payé, aucune
+#      cotisation de tontine en retard sur les tours déjà versés, pas en statut rouge ;
+#   2. avoir une épargne au moins égale au tiers de la somme demandée par l'emprunteur
+#      (l'épargne déjà engagée pour d'autres avals en cours n'est pas comptée deux fois) ;
+#   3. ne pas avoir soi-même de dette d'emprunt (prêt en cours ou demandé, aval appelé non réglé).
+GUARANTEE_SAVINGS_RATIO = Decimal('3')
+_OPEN_LOAN_STATUSES = ('PENDING', 'ACTIF', 'OVERDUE')
+
+
+def _fmt(value):
+    return f"{value:,.0f}".replace(',', ' ')
+
+
+def aval_standing(member, ignore_guarantee_id=None):
+    """Situation d'un membre comme avaliste : (problèmes bloquants, épargne disponible)"""
+    problems = []
+    if not member.is_active or member.status != 'ACTIF':
+        problems.append("n'est pas un membre actif")
+    if member.tontine_status == 'ROUGE':
+        problems.append("est en statut rouge")
+    pending_fines = member.total_sanctions_pending
+    if pending_fines > 0:
+        problems.append(f"n'est pas à jour : {_fmt(pending_fines)} FCFA d'amendes impayées")
+    if not member.has_paid_fonds_caisse:
+        problems.append("n'est pas à jour : fonds de caisse non payé")
+    for cycle in {p.cycle for p in CycleParticipant.query.filter_by(member_id=member.id).all()}:
+        if cycle.beneficiaries_count == 0:   # cycle en cours ou terminé : tours déjà versés
+            continue
+        status = cycle_contribution_status(cycle, through_turn=cycle.beneficiaries_count)
+        late = sum((-r['gap'] for r in status['rows'] if r['member'] and r['member'].id == member.id and r['gap'] < 0),
+                   Decimal('0'))
+        if late > 0:
+            problems.append(f"n'est pas à jour : {_fmt(late)} FCFA de cotisations en retard ({cycle.display_name})")
+    if any(l.status in _OPEN_LOAN_STATUSES for l in member.loans):
+        problems.append("a lui-même un emprunt en cours")
+    if member.unsettled_guarantor_debts:
+        problems.append("doit encore rembourser un avaliste qui a payé pour lui")
+
+    committed = Decimal('0')
+    for g in LoanGuarantor.query.filter(LoanGuarantor.member_id == member.id,
+                                        LoanGuarantor.status.in_(['EN_ATTENTE', 'ACCEPTE', 'APPELE'])).all():
+        if g.id != ignore_guarantee_id and g.loan and g.loan.status in _OPEN_LOAN_STATUSES:
+            committed += Decimal(str(g.loan.amount)) / GUARANTEE_SAVINGS_RATIO
+    available = max(member.savings_balance - committed, Decimal('0'))
+    return problems, available
+
+
+def aval_problems(member, loan_amount, ignore_guarantee_id=None):
+    """Raisons pour lesquelles `member` ne peut pas avaliser un emprunt de `loan_amount` (vide = éligible)"""
+    problems, available = aval_standing(member, ignore_guarantee_id)
+    needed = (Decimal(str(loan_amount)) / GUARANTEE_SAVINGS_RATIO).quantize(Decimal('1'))
+    if available < needed:
+        problems.append(f"n'a pas assez d'épargne : {_fmt(needed)} FCFA exigés (le tiers de la somme demandée), "
+                        f"{_fmt(available)} FCFA disponibles")
+    return problems
+
+
+def _validate_guarantors(borrower, guarantor_ids, loan_amount):
     guarantors, problems = [], []
     if len(guarantor_ids) > MAX_GUARANTORS:
         return [], [f"{MAX_GUARANTORS} avalistes maximum."]
@@ -3419,15 +3680,24 @@ def _validate_guarantors(borrower, guarantor_ids):
             problems.append("Avaliste introuvable.")
         elif candidate.id == borrower.id:
             problems.append("Un membre ne peut pas être son propre avaliste.")
-        elif not candidate.is_active or candidate.status != 'ACTIF':
-            problems.append(f"{candidate.full_name} n'est pas un membre actif.")
-        elif candidate.tontine_status == 'ROUGE':
-            problems.append(f"{candidate.full_name} est en statut rouge et ne peut pas avaliser.")
-        elif any(l.status == 'OVERDUE' or l.is_overdue for l in candidate.loans):
-            problems.append(f"{candidate.full_name} a lui-même un emprunt en retard.")
         else:
-            guarantors.append(candidate)
+            reasons = aval_problems(candidate, loan_amount)
+            if reasons:
+                problems.append(f"{candidate.full_name} ne peut pas avaliser : {' ; '.join(reasons)}.")
+            else:
+                guarantors.append(candidate)
     return guarantors, problems
+
+
+def guarantor_choices(exclude_member_id=None):
+    """Membres proposés comme avalistes, avec leur capacité (3 x épargne disponible) ou la raison du refus"""
+    choices = []
+    for m in Member.query.filter_by(is_active=True, status='ACTIF').order_by(Member.last_name, Member.first_name).all():
+        if m.id == exclude_member_id:
+            continue
+        problems, available = aval_standing(m)
+        choices.append({'member': m, 'problems': problems, 'max_loan': available * GUARANTEE_SAVINGS_RATIO})
+    return choices
 
 
 def _release_guarantors(loan):
@@ -3454,10 +3724,14 @@ def avals():
         if status:
             query = query.filter_by(status=status)
         all_guarantees = query.order_by(LoanGuarantor.id.desc()).all()
-    candidates = Member.query.filter(Member.is_active == True, Member.status == 'ACTIF',
-                                     Member.id != member_id).order_by(Member.last_name).all()
+    candidates = guarantor_choices(exclude_member_id=member_id)
     me = current_user.member
-    return render_template('avals.html', my_requests=my_requests, my_loans=my_loans, is_bureau=is_bureau,
+    my_aval = None
+    if me:
+        problems, available = aval_standing(me)
+        my_aval = {'problems': problems, 'max_loan': available * GUARANTEE_SAVINGS_RATIO,
+                   'engaged': max(me.savings_balance - available, Decimal('0'))}
+    return render_template('avals.html', my_requests=my_requests, my_loans=my_loans, is_bureau=is_bureau, my_aval=my_aval,
                            all_guarantees=all_guarantees, candidates=candidates, me=me,
                            can_manage=current_user.role in AVAL_MANAGERS,
                            statuses=LoanGuarantor.STATUSES, status_filter=request.args.get('status', ''))
@@ -3476,6 +3750,11 @@ def respond_aval(guarantee_id):
     action = request.form.get('action')
     note = (request.form.get('note') or '').strip()[:255] or None
     if action == 'accept':
+        # La situation a pu changer depuis la demande : les règles sont vérifiées à nouveau
+        reasons = aval_problems(guarantee.member, guarantee.loan.amount, ignore_guarantee_id=guarantee.id)
+        if reasons:
+            flash("Vous ne pouvez pas avaliser cet emprunt : vous " + ' ; '.join(reasons) + '.', 'danger')
+            return redirect(url_for('avals'))
         guarantee.status = 'ACCEPTE'
         message = f"Vous avalisez l'emprunt de {guarantee.loan.member_name} à hauteur de {guarantee.amount:,.0f} FCFA."
     elif action == 'refuse':
@@ -3511,7 +3790,7 @@ def add_loan_guarantor(loan_id):
     if len([g for g in loan.guarantors if g.status in ('EN_ATTENTE', 'ACCEPTE')]) >= MAX_GUARANTORS:
         flash(f"{MAX_GUARANTORS} avalistes maximum.", 'warning')
         return back
-    guarantors, problems = _validate_guarantors(loan.member, [gid] if gid else [])
+    guarantors, problems = _validate_guarantors(loan.member, [gid] if gid else [], loan.amount)
     if problems or not guarantors:
         for msg in problems or ['Choisissez un avaliste.']:
             flash(msg, 'danger')
@@ -3690,6 +3969,11 @@ def _rubrique_from_form(rubrique=None):
         errors.append('Périodicité invalide.')
     if amount is None:
         errors.append('Montant invalide.')
+    late_fine = None
+    if 'late_fine' in f:   # les ajouts rapides (niveaux dans Paramètres) n'envoient pas ce champ
+        late_fine = _parse_decimal(f.get('late_fine') or '0', 0, 100_000_000)
+        if late_fine is None:
+            errors.append("Amende de retard invalide.")
     if errors:
         return None, errors
     rubrique = rubrique or ContributionType()
@@ -3700,6 +3984,10 @@ def _rubrique_from_form(rubrique=None):
     rubrique.is_mandatory = f.get('is_mandatory') == 'on'
     rubrique.description = (f.get('description') or '').strip()[:255] or None
     rubrique.display_order = f.get('display_order', type=int) or 0
+    if late_fine is not None:
+        rubrique.late_fine = late_fine
+    elif rubrique.late_fine is None:
+        rubrique.late_fine = Decimal('0')
     return rubrique, []
 
 
@@ -3906,12 +4194,88 @@ def seance_detail(seance_id):
                 Sanction.member_id == nxt.member_id, Sanction.status == 'PENDING').scalar() or 0))
         done = (Transaction.query.filter_by(seance_id=seance.id, cycle_id=cycle.id, type='BENEFICE_TONTINE')
                 .order_by(Transaction.id).all())
+        status = cycle_contribution_status(cycle) if cycle.status == 'EN_COURS' else None
         payouts.append({'cycle': cycle, 'collected': totals[col['key']], 'next': nxt, 'pending_sanctions': pending,
-                        'done': done, 'turn': cycle.beneficiaries_count + 1})
+                        'done': done, 'turn': cycle.beneficiaries_count + 1,
+                        'missing': status['missing'] if status else Decimal('0'),
+                        'late': [r for r in status['rows'] if r['gap'] < 0] if status else []})
     return render_template('seance_detail.html', seance=seance, columns=columns, rows=rows, totals=totals,
                            grand_total=sum(totals.values(), Decimal('0')), payouts=payouts,
+                           late_fines=seance_late_fines(seance) if not seance.is_closed else [],
+                           seance_fines=Sanction.query.filter(Sanction.origin_key.like(f"seance{seance.id}:%"))
+                           .order_by(Sanction.id).all(),
                            can_manage=current_user.role in SEANCE_MANAGERS and not seance.is_closed,
                            can_pay_out=current_user.role in CYCLE_MANAGERS and not seance.is_closed)
+
+
+# ------------------------------------------------------------
+# AMENDES DE RETARD DE COTISATION
+# ------------------------------------------------------------
+# Chaque cotisation (rubrique ou niveau de tontine) a un champ « Amende si retard ».
+# À la clôture d'une séance, chaque membre qui devait payer une cotisation de la
+# feuille et ne l'a pas fait reçoit cette amende (une seule fois par cotisation et
+# par séance). Rouvrir la séance annule les amendes non encore payées ; elles sont
+# recalculées à la clôture suivante.
+_PERIOD_DAYS = {'HEBDOMADAIRE': 7, 'BIMENSUEL': 14}
+
+
+def _rubrique_paid_in_period(member, rubrique, seance):
+    """Le membre a-t-il déjà payé cette rubrique pour la période de la séance ?"""
+    q = Transaction.query.filter(Transaction.member_id == member.id)
+    if rubrique.frequency == 'UNIQUE':   # payée une fois pour toutes (fonds de caisse, adhésion...)
+        return q.filter(db.or_(Transaction.contribution_type_id == rubrique.id,
+                               db.and_(Transaction.contribution_type_id.is_(None),
+                                       Transaction.type == rubrique.category))).first() is not None
+    q = q.filter(Transaction.contribution_type_id == rubrique.id)
+    if rubrique.frequency == 'PAR_SEANCE':
+        return q.filter(Transaction.seance_id == seance.id).first() is not None
+    if rubrique.frequency in _PERIOD_DAYS:
+        start = seance.date - timedelta(days=_PERIOD_DAYS[rubrique.frequency] - 1)
+    elif rubrique.frequency == 'MENSUEL':
+        start = seance.date.replace(day=1)
+    else:   # ANNUEL
+        start = seance.date.replace(month=1, day=1)
+    return q.filter(db.or_(Transaction.seance_id == seance.id,
+                           db.and_(Transaction.date >= start, Transaction.date <= seance.date))).first() is not None
+
+
+def seance_late_fines(seance):
+    """Amendes de retard que la clôture de la séance va infliger : liste de dicts
+    {member, label, amount, key, reason}"""
+    fines = []
+    members = [mb for mb in Member.query.filter_by(is_active=True, status='ACTIF').order_by(Member.last_name).all()
+               if not mb.registration_date or mb.registration_date <= seance.date]
+    for col in _seance_columns(seance):
+        key = f"seance{seance.id}:{col['key']}"
+        cycle = col['cycle']
+        if cycle:
+            rubrique = cycle.contribution_type
+            fine = Decimal(str(rubrique.late_fine or 0)) if rubrique else Decimal('0')
+            if fine <= 0 or cycle.status not in ('EN_COURS', 'TERMINE'):
+                continue
+            paid_out_here = Transaction.query.filter_by(seance_id=seance.id, cycle_id=cycle.id,
+                                                        type='BENEFICE_TONTINE').first() is not None
+            turn = cycle.beneficiaries_count + (0 if paid_out_here or cycle.status == 'TERMINE' else 1)
+            if turn <= 0:
+                continue
+            for row in cycle_contribution_status(cycle, through_turn=turn)['rows']:
+                if row['gap'] < 0 and row['member'] and row['member'].is_active and row['member'].status == 'ACTIF':
+                    fines.append({'member': row['member'], 'label': cycle.display_name, 'amount': fine, 'key': key,
+                                  'reason': f"cotisation du tour {turn} non payée (manque {_fmt(-row['gap'])} FCFA)"})
+            continue
+        rubrique = col['rubrique']
+        fine = Decimal(str(rubrique.late_fine or 0))
+        if (fine <= 0 or not rubrique.is_mandatory or rubrique.frequency == 'LIBRE'
+                or not rubrique.amount or rubrique.amount <= 0):
+            continue
+        for member in members:
+            if not _rubrique_paid_in_period(member, rubrique, seance):
+                fines.append({'member': member, 'label': rubrique.name, 'amount': fine, 'key': key,
+                              'reason': f"{rubrique.name} non payé(e)"})
+    # Une amende déjà infligée (payée ou non) pour la même cotisation et la même séance n'est pas refaite
+    existing = {(s.member_id, s.origin_key) for s in
+                Sanction.query.filter(Sanction.origin_key.like(f"seance{seance.id}:%")).all()}
+    return [f for f in fines if (f['member'].id, f['key']) not in existing]
 
 
 @app.route('/seances/<int:seance_id>/close', methods=['POST'])
@@ -3919,10 +4283,32 @@ def seance_detail(seance_id):
 @role_required(['PRESIDENT', 'TRESORIER'])
 def close_seance(seance_id):
     seance = db.get_or_404(Seance, seance_id)
-    seance.is_closed = not seance.is_closed
+    back = redirect(url_for('seance_detail', seance_id=seance.id))
+    if not seance.is_closed:
+        fines = seance_late_fines(seance)
+        for f in fines:
+            db.session.add(Sanction(member_id=f['member'].id, type_sanction='RETARD_COTISATION', amount=f['amount'],
+                                    sanction_date=seance.date, status='PENDING', origin_key=f['key'],
+                                    description=f"Retard de cotisation : {f['reason']} - {seance.display_name}"))
+        seance.is_closed = True
+        db.session.commit()
+        total = sum((f['amount'] for f in fines), Decimal('0'))
+        log_activity(current_user.id, current_user.role,
+                     f"Clôture {seance.display_name} : {len(fines)} amende(s) de retard, {_fmt(total)} FCFA", request.remote_addr)
+        flash(f"Séance clôturée. {len(fines)} amende(s) de retard infligée(s) pour {_fmt(total)} FCFA."
+              if fines else 'Séance clôturée. Aucun retard de cotisation.', 'success')
+        return back
+    # Réouverture : les amendes automatiques non payées sont annulées (recalculées à la prochaine clôture)
+    cancelled = Sanction.query.filter(Sanction.origin_key.like(f"seance{seance.id}:%"), Sanction.status == 'PENDING').all()
+    for s in cancelled:
+        db.session.delete(s)
+    seance.is_closed = False
     db.session.commit()
-    flash('Séance clôturée.' if seance.is_closed else 'Séance rouverte.', 'success')
-    return redirect(url_for('seance_detail', seance_id=seance.id))
+    log_activity(current_user.id, current_user.role,
+                 f"Réouverture {seance.display_name} : {len(cancelled)} amende(s) de retard annulée(s)", request.remote_addr)
+    flash('Séance rouverte.' + (f" {len(cancelled)} amende(s) de retard non payée(s) annulée(s) : elles seront "
+                                "recalculées à la clôture." if cancelled else ''), 'info')
+    return back
 
 
 # ============================================================

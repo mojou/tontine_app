@@ -46,7 +46,7 @@
                             <td><span class="badge badge-warning text-dark">{{ sanction.get_type_display() }}</span></td>
                             <td><small class="text-muted">{{ sanction.description|truncate(50) }}</small></td>
                             <td>{{ sanction.sanction_date.strftime('%d/%m/%Y') }}</td>
-                            <td class="font-weight-bold text-danger">{{ "{:,.0f}".format(sanction.amount).replace(',', ' ') }} FCFA</td>
+                            <td class="font-weight-bold text-danger">{{ (sanction.amount)|fcfa }} FCFA</td>
                             <td>
                                 {% if sanction.status == 'PAID' %}
                                     <span class="badge badge-success px-3 py-1">

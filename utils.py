@@ -154,6 +154,8 @@ def log_activity(user_id, user_role, action, ip_address=None):
         if ip_address is None:
             ip_address = get_client_ip()
         
+        import re
+        action = re.sub(r'(?<=\d),(?=\d{3}\b)', ' ', str(action))   # 60,000 -> 60 000
         log = AuditLog(
             user_id=user_id,
             user_role=user_role,
@@ -469,8 +471,8 @@ def get_member_summary(member_id):
         return None
     
     return {
-        'total_cotisations': float((member.total_savings or 0) + (member.total_presence_paid or 0)),
-        'total_tontine': float(member.total_savings or 0),
+        'total_cotisations': float((member.total_tontine_paid or 0) + (member.total_presence_paid or 0)),
+        'total_tontine': float(member.total_tontine_paid or 0),
         'total_presence': float(member.total_presence_paid or 0),
         'total_sanctions': float(member.total_sanctions_pending or 0),
         'active_loans': member.loans.filter_by(status='ACTIF').count() if hasattr(member, 'loans') else 0,

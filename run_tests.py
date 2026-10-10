@@ -42,6 +42,10 @@ SUITES = [
     ('test_audit.py', 'au.db', "Défauts corrigés lors de l'audit"),
     ('test_fiche_membre.py', 'fm.db', 'Fiche membre : nature de chaque ligne'),
     ('test_seance_cagnotte.py', 'sc.db', 'Séance : versement des cagnottes'),
+    ('test_avals_regles.py', 'ar.db', 'Règles pour avaliser'),
+    ('test_parcours.py', 'pa.db', 'Parcours utilisateur (tous les rôles)'),
+    ('test_amendes_retard.py', 'am.db', 'Amendes de retard de cotisation'),
+    ('test_ecarts_cycle.py', 'ec.db', 'Écarts de cycle et régularisation'),
 ]
 EXHAUSTIVE = [
     ('verif_routes.py', 'crawl.db', 'Exploration de toutes les routes'),

@@ -3,7 +3,7 @@
 {% block title %}{{ cycle.display_name }} - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-sync-alt"></i> {{ cycle.display_name }}{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block extra_css %}
 <style>
@@ -49,6 +49,39 @@
     <div class="row">
         <div class="col-lg-7">
             {# ---------------- Versement du tour ---------------- #}
+            {% set payout_missing = contrib.missing %}
+            {% set payout_late = contrib.rows | selectattr('gap', 'lt', 0) | list %}
+            {% if next_steps %}
+            {# ---------------- Cycle terminé : prochaines étapes ---------------- #}
+            {% set steps_done = next_steps | selectattr('done') | list | length %}
+            <div class="card" id="prochainesEtapes" style="border-left: 5px solid var(--hl-green)">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-flag-checkered"></i> Cycle terminé : prochaines étapes</span>
+                    <span class="badge {{ 'badge-success' if steps_done == next_steps|length else 'badge-secondary' }}">{{ steps_done }}/{{ next_steps|length }}</span>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for s in next_steps %}
+                    <li class="list-group-item d-flex align-items-start">
+                        <i class="fas {{ 'fa-check-circle text-success' if s.done else 'fa-circle text-muted' }} mt-1 mr-3"></i>
+                        <div class="flex-grow-1">
+                            <strong class="{{ 'text-muted' if s.done }}">{{ loop.index }}. {{ s.title }}</strong>
+                            <div class="small {{ 'text-muted' if s.done else '' }}">{{ s.detail }}</div>
+                        </div>
+                        {% if not s.done and (can_manage or loop.index == 3) %}
+                        <a href="{{ s.url }}" class="btn btn-sm btn-outline-primary ml-2">{{ s.link }}</a>
+                        {% elif s.done and loop.last %}
+                        <a href="{{ s.url }}" class="btn btn-sm btn-outline-success ml-2">{{ s.link }}</a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                    <li class="list-group-item small text-muted">
+                        <i class="fas fa-info-circle mr-1"></i> En fin d'année, indépendamment des cycles :
+                        {% if can_manage %}<a href="{{ url_for('exercise') }}">Fin d'exercice</a>{% else %}la fin d'exercice{% endif %}
+                        (restitution de l'épargne et partage des bénéfices).
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
             {% if cycle.status == 'EN_COURS' and can_manage %}
             <div class="card" style="border-left: 5px solid var(--hl-gold)">
                 <div class="card-body">
@@ -92,6 +125,86 @@
                 </div>
             </div>
             {% endif %}
+
+            {# ---------------- État des cotisations ---------------- #}
+            <div class="card" id="etatCotisations">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                    <span><i class="fas fa-clipboard-list"></i> État des cotisations</span>
+                    <span>
+                        {% if contrib.late_total > 0 %}<span class="badge badge-danger">{{ fcfa(contrib.late_total) }} FCFA en retard</span>{% endif %}
+                        {% if contrib.current_total > 0 %}<span class="badge badge-info">tour {{ contrib.turn }} : {{ fcfa(contrib.current_total) }} FCFA à encaisser</span>{% endif %}
+                        {% if contrib.advance_total > 0 %}<span class="badge badge-warning">{{ fcfa(contrib.advance_total) }} FCFA d'avance</span>{% endif %}
+                        {% if contrib.late_total == 0 and contrib.current_total == 0 and contrib.advance_total == 0 %}<span class="badge badge-success">À jour</span>{% endif %}
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Membre</th><th class="text-center">Mains</th><th class="text-right">Payé</th>
+                            <th class="text-right">En retard</th><th class="text-right">{{ 'Tour ' ~ contrib.turn if cycle.status == 'EN_COURS' else '' }}</th>
+                            <th class="text-right">Avance</th>{% if can_manage %}<th></th>{% endif %}</tr></thead>
+                        <tbody>
+                        {% for r in contrib.rows %}
+                        <tr>
+                            <td>{{ r.member.full_name if r.member else '?' }}</td>
+                            <td class="text-center">{{ r.hands }}</td>
+                            <td class="text-right">{{ fcfa(r.paid) }}</td>
+                            <td class="text-right font-weight-bold {{ 'text-danger' if r.late > 0 else 'text-muted' }}">{{ fcfa(r.late) if r.late > 0 else '—' }}</td>
+                            <td class="text-right {{ 'text-info' if r.current_due > 0 else 'text-muted' }}">{% if cycle.status == 'EN_COURS' %}{{ ('à payer ' ~ fcfa(r.current_due)) if r.current_due > 0 else 'payé' }}{% endif %}</td>
+                            <td class="text-right {{ 'text-warning font-weight-bold' if r.advance > 0 else 'text-muted' }}">{{ fcfa(r.advance) if r.advance > 0 else '—' }}</td>
+                            {% if can_manage %}
+                            <td class="text-right">
+                                {% if r.gap != 0 %}
+                                <button class="btn btn-sm btn-outline-primary" type="button" data-toggle="collapse" data-target="#regul{{ r.member.id }}">Régulariser</button>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% if can_manage and r.gap != 0 %}
+                        <tr class="collapse" id="regul{{ r.member.id }}"><td colspan="7" style="background: var(--hl-cream)">
+                            <form method="POST" action="{{ url_for('regularize_cycle', cycle_id=cycle.id) }}" class="form-row align-items-end">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="member_id" value="{{ r.member.id }}">
+                                <div class="form-group col-md-4 mb-2">
+                                    <label class="small font-weight-bold">Que faire ?</label>
+                                    <select name="action" class="form-control form-control-sm">
+                                        {% if r.gap < 0 %}
+                                        <option value="encaisser">Encaisser ce qu'il doit ({{ fcfa(-r.gap) }} FCFA)</option>
+                                        {% else %}
+                                        <option value="epargne">Verser l'avance dans son épargne</option>
+                                        <option value="rendre">Lui rendre l'avance</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                <div class="form-group col-md-2 mb-2">
+                                    <label class="small font-weight-bold">Montant</label>
+                                    <input type="number" name="amount" class="form-control form-control-sm" min="1" step="1"
+                                           max="{{ (-r.gap if r.gap < 0 else r.advance)|int }}" value="{{ (-r.gap if r.gap < 0 else r.advance)|int }}" required>
+                                </div>
+                                <div class="form-group col-md-3 mb-2">
+                                    <label class="small font-weight-bold">Mode</label>
+                                    <select name="payment_mode" class="form-control form-control-sm">
+                                        {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group col-md-3 mb-2">
+                                    <button type="submit" class="btn btn-sm btn-primary btn-block">Valider</button>
+                                </div>
+                                {% if r.gap > 0 and cycle.status == 'EN_COURS' %}
+                                <div class="col-12 small text-muted mb-2">Vous pouvez aussi laisser l'avance : elle comptera pour le prochain tour.</div>
+                                {% endif %}
+                            </form>
+                        </td></tr>
+                        {% endif %}
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <p class="small text-muted px-3 py-2 mb-0">
+                        <strong>En retard</strong> : cotisations des tours dont la cagnotte est déjà versée, non payées.
+                        {% if cycle.status == 'EN_COURS' %}<strong>Tour {{ contrib.turn }}</strong> : à encaisser avant de verser la cagnotte (normal en début de tour).{% endif %}
+                        <strong>Avance</strong> : payé en trop (souvent une double saisie) — à laisser pour le tour suivant, verser en épargne ou rendre.
+                    </p>
+                </div>
+            </div>
 
             {# ---------------- Tours ---------------- #}
             <div class="card">

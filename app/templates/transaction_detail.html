@@ -3,7 +3,7 @@
 {% block title %}Transaction #{{ transaction.id }} - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-receipt"></i> Transaction #{{ transaction.id }}{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block content %}
 <div class="row fade-in">

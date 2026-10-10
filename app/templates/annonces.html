@@ -99,7 +99,7 @@
                                             <div class="small text-muted">{{ b.benefit_type }}</div>
                                             {% if b.amount and b.amount > 0 %}
                                             <div class="text-success font-weight-bold text-end">
-                                                {{ "{:,.0f}".format(b.amount).replace(',', ' ') }} FCFA
+                                                {{ (b.amount)|fcfa }} FCFA
                                             </div>
                                             {% endif %}
                                         </div>

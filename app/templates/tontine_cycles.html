@@ -3,7 +3,7 @@
 {% block title %}Cycles de tontine - {{ current_tontine.name }}{% endblock %}
 {% block page_title %}<i class="fas fa-sync-alt"></i> Cycles de tontine{% endblock %}
 
-{% macro fcfa(v) %}{{ '{:,.0f}'.format(v|float).replace(',', ' ') }}{% endmacro %}
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block extra_css %}
 <style>
