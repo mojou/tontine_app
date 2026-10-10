@@ -166,7 +166,7 @@ def load_user(user_id):
 # Pages accessibles au super-admin (qui n'appartient à aucune tontine)
 SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine',
                         'superadmin_billing_payment', 'superadmin_billing_offer', 'superadmin_delete_tontine',
-                        'logout', 'static', 'index', 'tontine_home', 'login', 'signup', 'guide',
+                        'logout', 'static', 'index', 'tontine_home', 'login', 'signup', 'guide', 'administration_login',
                         'superadmin_reset_president', 'reset_password'}
 # Pages publiques qui fixent elles-mêmes la tontine (via l'URL ou le formulaire)
 PUBLIC_ENDPOINTS = {'static', 'index', 'tontine_home', 'login', 'register', 'signup', 'forgot_password', 'reset_password'}
@@ -579,6 +579,14 @@ def login():
     selected_tontine = next((t for t in tontines if t.slug == selected), None)
     return render_template('login.html', form=form, tontines=tontines, selected=selected,
                            selected_tontine=selected_tontine, platform_value=PLATFORM_LOGIN)
+
+
+@app.route('/administration')
+def administration_login():
+    """Adresse réservée à l'administrateur de la plateforme (non affichée sur le site)"""
+    if current_user.is_authenticated:
+        return redirect(url_for('superadmin' if current_user.is_superadmin else 'dashboard'))
+    return redirect(url_for('login', t=PLATFORM_LOGIN))
 
 
 @app.route('/logout')

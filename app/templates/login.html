@@ -6,7 +6,9 @@
 <div class="card mx-auto" style="max-width: 420px; margin-top: 40px;">
     <div class="card-body p-4">
         <h2 class="text-center mb-1">Connexion</h2>
-        {% if selected_tontine %}
+        {% if selected == platform_value %}
+        <p class="text-center text-muted mb-4">Administration de la plateforme</p>
+        {% elif selected_tontine %}
         <p class="text-center text-muted mb-4">{{ selected_tontine.name }}</p>
         {% else %}
         <p class="text-center text-muted mb-4">Choisissez votre tontine</p>
@@ -15,8 +17,10 @@
         <form method="POST">
             {{ form.hidden_tag() }}
 
-            {# Liste toujours visible : l'administrateur de la plateforme doit pouvoir la choisir
-               même quand une seule tontine existe (la tontine reste présélectionnée) #}
+            {% if selected == platform_value %}
+            {# Accès réservé (adresse /administration) : l'option n'est jamais proposée aux membres #}
+            <input type="hidden" name="tontine" value="{{ platform_value }}">
+            {% else %}
             <div class="form-group">
                 <label for="tontine">Tontine</label>
                 <select name="tontine" id="tontine" class="form-control" required>
@@ -24,9 +28,9 @@
                     {% for t in tontines %}
                     <option value="{{ t.slug }}" {% if t.slug == selected %}selected{% endif %}>{{ t.name }}</option>
                     {% endfor %}
-                    <option value="{{ platform_value }}" {% if selected == platform_value %}selected{% endif %}>Administration de la plateforme</option>
                 </select>
             </div>
+            {% endif %}
 
             <div class="form-group">
                 <label for="username">Nom d'utilisateur</label>

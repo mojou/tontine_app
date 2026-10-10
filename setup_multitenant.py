@@ -201,7 +201,7 @@ def main():
         print('  COMPTE SUPER-ADMIN CRÉÉ (notez ce mot de passe, il ne sera plus affiché)')
         print(f'  Identifiant  : {args.superadmin}')
         print(f'  Mot de passe : {password}')
-        print("  Connexion    : /login -> choisir « Administration de la plateforme »")
+        print("  Connexion    : adresse réservée /administration")
         print('=' * 60)
     else:
         print('Super-admin déjà présent.')

@@ -56,8 +56,14 @@ with app.app_context(), tenant_bypass():
 check(public == 1, f'situation reproduite : une seule tontine publique ({public})')
 v = app.test_client()
 h = v.get('/login', headers=PROXY).get_data(as_text=True)
-check('<select name="tontine"' in h and 'Administration de la plateforme</option>' in h,
-      'page de connexion : la liste reste visible avec « Administration de la plateforme »')
+check('<select name="tontine"' in h and 'Administration de la plateforme' not in h and '__plateforme__' not in h,
+      'page de connexion des membres : la liste des tontines, sans « Administration de la plateforme »')
+r = v.get('/administration', headers=PROXY)
+check(r.status_code == 302 and '/login?t=__plateforme__' in r.headers['Location'], 'adresse réservée /administration')
+h = v.get(r.headers['Location'], headers=PROXY).get_data(as_text=True)
+check('Administration de la plateforme' in h and 'name="tontine" value="__plateforme__"' in h and '<select name="tontine"' not in h,
+      "/administration : connexion directe à l'administration, sans liste de tontines")
+check('/administration' not in v.get('/', headers=PROXY).get_data(as_text=True), "l'adresse réservée n'apparaît pas sur le site")
 r = v.post('/login', headers=PROXY, data={'tontine': m.PLATFORM_LOGIN, 'username': sa_name, 'password': 'Super2026x'})
 check(r.status_code == 302 and r.headers['Location'].endswith('/superadmin'), 'le super-admin se connecte depuis la page de connexion')
 

@@ -68,7 +68,7 @@ par **Brevo** (gratuit, environ 300 e-mails par jour), autorisé par PythonAnywh
 
 1. Onglet **Web** → bouton vert **Reload**.
 2. Ouvrez https://germainbob.pythonanywhere.com : la page d'accueil, les tarifs, la FAQ et le guide s'affichent.
-3. Connectez-vous en super-admin (« Administration de la plateforme ») avec le mot de passe de l'étape 2.
+3. Connectez-vous en super-admin sur https://germainbob.pythonanywhere.com/administration (adresse réservée, non affichée sur le site) avec le mot de passe de l'étape 2.
 4. Test de l'e-mail : créez une tontine d'essai avec votre adresse personnelle, vérifiez que l'e-mail
    de confirmation arrive (regardez aussi les indésirables), cliquez sur le lien.
    Puis supprimez cette tontine d'essai depuis l'espace super-admin.
