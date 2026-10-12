@@ -34,7 +34,7 @@ def body(r):
 c = app.test_client()
 c.post('/inscription', data={'name': 'Njangi Akwa', 'slug': 'akwa', 'first_name': 'Hélène', 'last_name': 'Ekwalla',
                              'email': 'h@akwa.cm', 'phone': '699000009', 'username': 'helene',
-                             'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                             'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for i, (fn, role) in enumerate([('Paul', 'MEMBRE'), ('Rose', 'CENSEUR'), ('Jean', 'TRESORIER')]):
     c.post('/members/add', data={'first_name': fn, 'last_name': 'Eboa', 'email': f'{fn.lower()}@akwa.cm', 'phone': f'69922233{i}',
                                  'username': fn.lower(), 'role': role, 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})

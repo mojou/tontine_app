@@ -25,7 +25,7 @@ PARAM_MODELS = {
 SKIP_POST = {'logout'}  # la déconnexion casserait la session de test
 
 with app.app_context():
-    users = [(u.id, u.role, u.username, u.tontine_id) for u in md.User.query.filter_by(is_active=True).all()]
+    users = [(u.get_id(), u.role, u.username, u.tontine_id) for u in md.User.query.filter_by(is_active=True).all()]
     samples = {}
     for param, model in PARAM_MODELS.items():
         rows = model.query.all()
@@ -76,7 +76,7 @@ for uid, role, name, tid in accounts:
             client = app.test_client()
             if uid:
                 with client.session_transaction() as sess:
-                    sess['_user_id'] = str(uid)
+                    sess['_user_id'] = uid
                     sess['_fresh'] = True
             hit(client, method, url, f'{role}:{name}')
 

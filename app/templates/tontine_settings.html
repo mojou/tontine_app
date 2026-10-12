@@ -75,7 +75,7 @@
                         <div class="form-group col-md-4">
                             <label for="guarantors_min">Avalistes exigés par emprunt</label>
                             <input type="number" class="form-control" id="guarantors_min" name="guarantors_min" min="0" max="5" step="1" required value="{{ val('guarantors_min') or 0 }}">
-                            <small class="text-muted">0 = aval facultatif</small>
+                            <small class="text-muted">0 = pas besoin d'avaliste</small>
                         </div>
                         <div class="form-group col-md-4">
                             <label for="guarantee_threshold">À partir d'un montant de (FCFA)</label>
@@ -83,7 +83,7 @@
                             <small class="text-muted">0 = pour tous les emprunts</small>
                         </div>
                     </div>
-                    <p class="small text-muted mb-0">Les nouveaux réglages s'appliquent aux prochaines opérations ; les emprunts déjà accordés gardent leur taux.</p>
+                    <p class="small text-muted mb-0">Les nouveaux réglages comptent pour la suite ; les emprunts déjà accordés gardent leur taux.</p>
                 </div>
             </div>
 
@@ -105,13 +105,13 @@
                         <span>
                             <strong style="color: var(--hl-green)">{{ (l.amount|float)|fcfa }} FCFA</strong>
                             <span class="small">· {{ l.name }} · {{ l.frequency_display|lower }}</span>
-                            {% if not l.is_active %}<span class="badge badge-secondary">désactivé</span>{% endif %}
+                            {% if not l.is_active %}<span class="badge badge-secondary">plus utilisé</span>{% endif %}
                         </span>
                         <form method="POST" action="{{ url_for('update_rubrique', rubrique_id=l.id) }}" class="mb-0">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="action" value="toggle">
                             <input type="hidden" name="next" value="{{ url_for('tontine_settings') }}#niveaux">
-                            <button type="submit" class="btn btn-sm {{ 'btn-outline-secondary' if l.is_active else 'btn-outline-success' }}">{{ 'Désactiver' if l.is_active else 'Réactiver' }}</button>
+                            <button type="submit" class="btn btn-sm {{ 'btn-outline-secondary' if l.is_active else 'btn-outline-success' }}">{{ 'Ne plus utiliser' if l.is_active else 'Utiliser à nouveau' }}</button>
                         </form>
                     </li>
                     {% endfor %}
@@ -139,11 +139,11 @@
                     <input type="hidden" name="next" value="{{ url_for('tontine_settings') }}#niveaux">
                     <label class="sr-only" for="levelAmount">Montant</label>
                     <input type="number" id="levelAmount" name="amount" class="form-control form-control-sm mr-2 mb-2" min="1" step="1" placeholder="Montant (FCFA)" required>
-                    <label class="sr-only" for="levelFreq">Périodicité</label>
+                    <label class="sr-only" for="levelFreq">Quand payer</label>
                     <select id="levelFreq" name="frequency" class="form-control form-control-sm mr-2 mb-2">
                         {% for code, label in frequency_choices if code not in ['UNIQUE', 'LIBRE'] %}<option value="{{ code }}" {% if code == 'BIMENSUEL' %}selected{% endif %}>{{ label }}</option>{% endfor %}
                     </select>
-                    <input type="text" name="name" class="form-control form-control-sm mr-2 mb-2" maxlength="80" placeholder="Nom (facultatif)">
+                    <input type="text" name="name" class="form-control form-control-sm mr-2 mb-2" maxlength="80" placeholder="Nom (pas obligatoire)">
                     <button type="submit" class="btn btn-sm btn-primary mb-2"><i class="fas fa-plus"></i> Ajouter ce niveau</button>
                 </form>
             </div>
@@ -151,6 +151,33 @@
 
         {# ---------------- Amende de retard au versement de la cagnotte ---------------- #}
         {% set p_mode = tontine.cycle_penalty_mode or 'PERCENT' %}
+        <div class="card mt-4" id="tirage">
+            <div class="card-header"><i class="fas fa-dice" style="color: var(--hl-gold)"></i> Tirage de l'ordre de passage</div>
+            <div class="card-body">
+                <p class="small text-muted">Choisissez à l'avance comment votre tontine décide qui reçoit la cagnotte en premier,
+                    en deuxième, etc. (cycles « tirage au sort » ; les cycles aux enchères ne sont pas concernés).</p>
+                <form method="POST" action="{{ url_for('draw_mode_settings') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="custom-control custom-radio mb-2">
+                        <input type="radio" class="custom-control-input" id="drawAuto" name="draw_mode" value="AUTO"
+                               {% if not tontine.draw_is_manual %}checked{% endif %}>
+                        <label class="custom-control-label" for="drawAuto"><strong>Automatique</strong> : l'application tire au sort
+                            <span class="text-muted small">(personne ne peut tricher ; le résultat s'affiche nom par nom)</span></label>
+                    </div>
+                    <div class="custom-control custom-radio mb-3">
+                        <input type="radio" class="custom-control-input" id="drawManual" name="draw_mode" value="MANUEL"
+                               {% if tontine.draw_is_manual %}checked{% endif %}>
+                        <label class="custom-control-label" for="drawManual"><strong>Manuel</strong> : le tirage se fait en réunion
+                            (papiers, etc.), puis on écrit le numéro de passage de chaque membre
+                            <span class="text-muted small">(1 = reçoit en premier, 2 = en deuxième…)</span></label>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+                    <small class="text-muted d-block mt-2">Règle actuelle :
+                        <strong>{{ 'manuel (ordre écrit après le tirage en réunion)' if tontine.draw_is_manual else "automatique (tirage par l'application)" }}</strong>.</small>
+                </form>
+            </div>
+        </div>
+
         <div class="card mt-4" id="amende-cycle">
             <div class="card-header"><i class="fas fa-gavel" style="color: var(--hl-gold)"></i> Amende quand un membre ne paie pas sa part du tour</div>
             <div class="card-body">
@@ -197,7 +224,7 @@
                             <input type="number" class="form-control" id="aidSeniority" name="aid_min_seniority_days" min="0" max="3650" value="{{ aid_rule_values.seniority_days }}" required>
                         </div>
                         <div class="form-group col-md-4">
-                            <label class="small font-weight-bold" for="aidDelay">Délai de déclaration (jours)</label>
+                            <label class="small font-weight-bold" for="aidDelay">Nombre de jours pour la déclarer</label>
                             <input type="number" class="form-control" id="aidDelay" name="aid_declaration_days" min="0" max="3650" value="{{ aid_rule_values.declaration_days }}" required>
                         </div>
                         <div class="form-group col-md-4">
@@ -223,7 +250,7 @@
                 <p class="small text-muted">Montant versé pour chaque événement. « Montant libre » : le membre propose un montant, plafonné à la valeur indiquée.</p>
                 <div class="table-container">
                     <table class="table table-sm">
-                        <thead><tr><th>Événement</th><th>Montant (FCFA)</th><th>Libre</th><th>Justificatif</th><th>Max / an</th><th>Actif</th><th></th></tr></thead>
+                        <thead><tr><th>Événement</th><th>Montant (FCFA)</th><th>Libre</th><th>Preuve exigée</th><th>Max / an</th><th>Actif</th><th></th></tr></thead>
                         <tbody>
                         {% for t in aid_types %}
                         {% set fid = 'aidType' ~ t.id %}
@@ -231,7 +258,7 @@
                             <td><input type="text" name="name" form="{{ fid }}" class="form-control form-control-sm" value="{{ t.name }}" maxlength="80" required aria-label="Nom"></td>
                             <td><input type="number" name="amount" form="{{ fid }}" class="form-control form-control-sm" style="width:110px" min="1" value="{{ t.amount|int }}" required aria-label="Montant"></td>
                             <td><input type="checkbox" name="free_amount" form="{{ fid }}" {% if t.free_amount %}checked{% endif %} aria-label="Montant libre"></td>
-                            <td><input type="checkbox" name="requires_document" form="{{ fid }}" {% if t.requires_document %}checked{% endif %} aria-label="Justificatif"></td>
+                            <td><input type="checkbox" name="requires_document" form="{{ fid }}" {% if t.requires_document %}checked{% endif %} aria-label="Preuve exigée"></td>
                             <td><input type="number" name="max_per_year" form="{{ fid }}" class="form-control form-control-sm" style="width:70px" min="0" max="50" value="{{ t.max_per_year or 0 }}" aria-label="Maximum par an"></td>
                             <td><input type="checkbox" name="is_active" form="{{ fid }}" {% if t.is_active %}checked{% endif %} aria-label="Actif"></td>
                             <td>
@@ -248,7 +275,7 @@
                             <td><input type="text" name="name" form="aidTypeNew" class="form-control form-control-sm" maxlength="80" placeholder="Nouvel événement" required aria-label="Nom du nouvel événement"></td>
                             <td><input type="number" name="amount" form="aidTypeNew" class="form-control form-control-sm" style="width:110px" min="1" required aria-label="Montant"></td>
                             <td><input type="checkbox" name="free_amount" form="aidTypeNew" aria-label="Montant libre"></td>
-                            <td><input type="checkbox" name="requires_document" form="aidTypeNew" checked aria-label="Justificatif"></td>
+                            <td><input type="checkbox" name="requires_document" form="aidTypeNew" checked aria-label="Preuve exigée"></td>
                             <td><input type="number" name="max_per_year" form="aidTypeNew" class="form-control form-control-sm" style="width:70px" min="0" max="50" value="0" aria-label="Maximum par an"></td>
                             <td>—</td>
                             <td>

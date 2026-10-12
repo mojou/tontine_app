@@ -111,7 +111,7 @@ def safe_amount(message=None):
 # ============================================================
 
 class LoginForm(FlaskForm):
-    username = StringField('Nom d\'utilisateur', validators=[
+    username = StringField('Nom d\'utilisateur', filters=[lambda v: v.strip() if isinstance(v, str) else v], validators=[
         DataRequired(), 
         Length(min=3, max=80),
         safe_username(),
@@ -201,7 +201,7 @@ class MemberRegistrationForm(FlaskForm):
         validate_choice=False  # choix fixés dynamiquement selon les niveaux de la tontine
     )
     
-    username = StringField('Nom d\'utilisateur', validators=[
+    username = StringField('Nom d\'utilisateur', filters=[lambda v: v.strip() if isinstance(v, str) else v], validators=[
         DataRequired(), 
         Length(min=3, max=80),
         safe_username(),
@@ -209,14 +209,14 @@ class MemberRegistrationForm(FlaskForm):
     ])
     password = PasswordField('Mot de passe', validators=[
         DataRequired(), 
-        Length(min=6),
-        Regexp(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$', 
-               message='Le mot de passe doit contenir au moins 6 caractères avec lettres et chiffres')
+        Length(min=8, message='Le mot de passe doit contenir au moins 8 caractères'),
+        Regexp(r'^(?=.*[A-Za-zÀ-ÿ])(?=.*\d).{8,}$',
+               message='Le mot de passe doit contenir au moins 8 caractères avec des lettres et des chiffres')
     ])
     confirm_password = PasswordField('Confirmer le mot de passe', 
                                       validators=[DataRequired(), EqualTo('password')])
     
-    submit = SubmitField('Soumettre ma candidature')
+    submit = SubmitField('Envoyer ma demande')
     
     def validate(self, extra_validators=None):
         if not super().validate(extra_validators):
@@ -299,7 +299,7 @@ class MemberForm(FlaskForm):
         ('20200', '20 200 FCFA')
     ], validators=[Optional()], coerce=str, validate_choice=False)
     
-    username = StringField('Nom d\'utilisateur', validators=[
+    username = StringField('Nom d\'utilisateur', filters=[lambda v: v.strip() if isinstance(v, str) else v], validators=[
         DataRequired(), 
         Length(min=3, max=80),
         safe_username(),
@@ -307,7 +307,7 @@ class MemberForm(FlaskForm):
     ])
     password = PasswordField('Mot de passe', validators=[
         DataRequired(), 
-        Length(min=6)
+        Length(min=8, message='Le mot de passe doit contenir au moins 8 caractères')
     ])
     confirm_password = PasswordField('Confirmer le mot de passe', 
                                       validators=[DataRequired(), EqualTo('password')])
@@ -427,7 +427,7 @@ class ProfileEditForm(FlaskForm):
 
 class TransactionForm(FlaskForm):
     member_id = SelectField('Membre', coerce=int, validators=[DataRequired()])
-    type = SelectField('Type de transaction', choices=[
+    type = SelectField('Sorte de paiement', choices=[
         ('TONTINE', 'Tontine'),
         ('PRESENCE', 'Cotisation Présence'),
         ('SANCTION', 'Sanction'),
@@ -832,7 +832,7 @@ class MemberFilterForm(FlaskForm):
         ('EXCLU', 'Exclu'),
         ('PENDING', 'En attente')
     ], validators=[Optional()])
-    tontine_status = SelectField('Statut tontine', choices=[
+    tontine_status = SelectField('Situation dans la tontine', choices=[
         ('', 'Tous'),
         ('VERT', 'Vert'),
         ('ORANGE', 'Orange'),

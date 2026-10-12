@@ -43,7 +43,7 @@ BAD = [(r'\b[A-Z]{3,}_[A-Z_]{2,}\b', 'code interne'),
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Njangi Parcours', 'slug': 'parcours', 'first_name': 'Hélène', 'last_name': 'Mballa',
                                 'email': 'h@parcours.cm', 'phone': '699000000', 'username': 'helene',
-                                'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                                'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 roles = [('Paul', 'MEMBRE'), ('Rose', 'CENSEUR'), ('Jean', 'TRESORIER'), ('Lucie', 'SECRETAIRE'), ('Marc', 'COMMUNICATION')]
 for i, (fn, role) in enumerate(roles):
     pres.post('/members/add', data={'first_name': fn, 'last_name': 'Essai', 'email': f'{fn.lower()}@parcours.cm',
@@ -98,8 +98,8 @@ check(not problems, f'toutes les pages de tous les rôles : français, sans code
 # ---------------------------------------------------------------- chiffres justes
 t = visible(paul.get('/dashboard'))
 check('25 000 Total de mes versements' in t, 'tableau de bord du membre : total de ses versements = 25 000')
-check("Mon épargne (rendue en fin d'exercice) : 20 000 FCFA" in t and '🟢 En règle' in t, 'situation du membre lisible (épargne, statut)')
-check('Nouvelle transaction' not in t, "un membre ne voit pas « Nouvelle transaction » (il n'y a pas droit)")
+check("Mon épargne (rendue en fin d'année) : 20 000 FCFA" in t and '🟢 En règle' in t, 'situation du membre lisible (épargne, statut)')
+check('Ajouter un paiement' not in t, "un membre ne voit pas « Ajouter un paiement » (il n'y a pas droit)")
 check(re.search(r'(Lundi|Mardi|Mercredi|Jeudi|Vendredi|Samedi|Dimanche) \d{1,2} \w+ 20\d\d', t), 'date du jour en français')
 t = visible(pres.get('/reports'))
 check('Total contributions 150 000 FCFA' in t, 'rapports : total des contributions = 150 000 (toutes les cotisations)')
@@ -108,7 +108,7 @@ check('Épargne 6 120 000 FCFA' in t and 'Fonds de caisse 6 30 000 FCFA' in t, '
 t = visible(paul.get('/loans'))
 check('(épargne : 20 000 FCFA)' in t and 'Ajouter un membre' not in t, "emprunts : épargne réelle affichée, pas de bouton « Ajouter un membre »")
 t = visible(clients['CENSEUR'].get('/avals'))
-check("Mon épargne (FCFA)" in t and "Épargne bloquée par mes avals en cours" in t and '10 000' in t,
+check("Mon épargne (FCFA)" in t and "Mon épargne bloquée parce que je garantis des emprunts" in t and '10 000' in t,
       "avals : Rose voit 10 000 d'épargne bloquée par l'aval de Paul (30 000 / 3)")
 check("Je peux avaliser un emprunt jusqu'à (FCFA)" in t and '30 000' in t, 'avals : capacité restante = 3 x (20 000 - 10 000)')
 check('Capacité d\'aval restante (indicative)' not in t, "avals : l'ancien calcul (avoirs) a disparu")
@@ -117,9 +117,22 @@ check('Capacité d\'aval restante (indicative)' not in t, "avals : l'ancien calc
 h = pres.get('/dashboard').get_data(as_text=True)
 sections = re.findall(r'<li class="nav-item menu-section">([^<]+)</li>', h)
 check(sections == ['Argent', 'Tontine', 'Vie du groupe', 'Administration'], f'menu du président en 4 rubriques {sections}')
-check('Procès-verbaux' in h and '> Réunions' not in h, '« Réunions » renommé « Procès-verbaux »')
+entries = [re.sub(r'\s+', ' ', e).strip() for e in re.findall(r'class="nav-link[^"]*"\s*href="[^"]*">\s*<i[^>]*></i>([^<]+)</a>', h)]
+check('Caisse' in entries and 'Séances' in entries and not {'Transactions', 'Cotisations', 'Procès-verbaux', 'Réunions'} & set(entries),
+      f'menu du président : « Caisse » et « Séances » remplacent 4 entrées {entries}')
+t = pres.get('/transactions').get_data(as_text=True)
+check('Journal des mouvements' in t and 'Situation' in t and re.search(r'nav-link active"\s*href="/cotisations"', t),
+      'Journal des mouvements : onglet de la Caisse, entrée « Caisse » allumée dans le menu')
+t = pres.get('/meetings').get_data(as_text=True)
+check('Feuilles de séance' in t and 'Nouveau procès-verbal' in t and re.search(r'nav-link active"\s*href="/seances"', t),
+      'procès-verbaux : onglet des Séances, entrée « Séances » allumée')
 h = paul.get('/dashboard').get_data(as_text=True)
-check('Procès-verbaux' in h and 'menu-section' in h, 'le menu du membre est aussi rangé')
+check('Procès-verbaux' in h and 'Caisse' in h and 'Mes transactions' not in h and 'menu-section' in h,
+      'membre : menu rangé, « Caisse » et « Procès-verbaux » (il n\'a pas les feuilles de séance)')
+t = paul.get('/meetings').get_data(as_text=True)
+check('Feuilles de séance' not in t and 'Nouveau procès-verbal' not in t, 'membre : PV en lecture seule, sans onglet séance')
+t = paul.get('/transactions', follow_redirects=True).get_data(as_text=True)
+check('Mes mouvements' in t, 'membre : onglet « Mes mouvements » dans la Caisse')
 t = visible(pres.get('/audit-logs'))
 check('Ajout transaction : Fonds de caisse 5 000 FCFA' in t and 'Président' in t, "journal d'audit lisible (type et rôle en français)")
 

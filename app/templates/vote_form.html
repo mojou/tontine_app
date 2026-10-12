@@ -33,9 +33,9 @@
 
                     <div class="form-row">
                         <div class="form-group col-md-6">
-                            <label class="font-weight-bold" for="end_date">Clôture automatique</label>
+                            <label class="font-weight-bold" for="end_date">Fermeture automatique</label>
                             <input type="datetime-local" name="end_date" id="end_date" class="form-control" value="{{ form_data.get('end_date', '') }}">
-                            <small class="form-text text-muted">Facultatif : sinon, clôture manuelle par le bureau.</small>
+                            <small class="form-text text-muted">Pas obligatoire : sinon, c'est le bureau qui ferme le vote.</small>
                         </div>
                         <div class="form-group col-md-6 d-flex align-items-center">
                             <div class="custom-control custom-checkbox mt-3">

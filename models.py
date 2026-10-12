@@ -33,6 +33,13 @@ class Tontine(db.Model):
     # mode « PERCENT » (pourcentage de la part non payée) ou « FIXED » (montant fixe en FCFA)
     cycle_penalty_mode = db.Column(db.String(10), nullable=True, default='PERCENT')
     cycle_penalty_value = db.Column(db.Numeric(12, 2), nullable=True)   # NULL = valeur par défaut (10 %)
+    # Tirage de l'ordre de passage : AUTO = l'application tire au hasard ; MANUEL = tirage fait en réunion
+    # (papiers, etc.), le bureau saisit ensuite le numéro de passage de chaque main
+    draw_mode = db.Column(db.String(10), nullable=True, default='AUTO')
+
+    @property
+    def draw_is_manual(self):
+        return self.draw_mode == 'MANUEL'
     billing_offered = db.Column(db.Boolean, nullable=True, default=False)   # version payante offerte sans limite
     free_until = db.Column(db.Date, nullable=True)                          # mois gratuits offerts jusqu'au
     paid_until = db.Column(db.Date, nullable=True)                          # payé jusqu'au
@@ -76,6 +83,9 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
+    # Mot de passe provisoire (donné par le président ou l'administrateur) : à changer à la 1re connexion
+    must_change_password = db.Column(db.Boolean, nullable=True, default=False)
+    password_changed_at = db.Column(db.DateTime, nullable=True)
 
     member = db.relationship('Member', backref='user_account', uselist=False, foreign_keys=[member_id])
     tontine = db.relationship('Tontine', foreign_keys=[tontine_id])
@@ -85,10 +95,19 @@ class User(UserMixin, db.Model):
         return self.role == 'SUPERADMIN'
 
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = generate_password_hash(password)   # scrypt, sel aléatoire
+        self.password_changed_at = utcnow()
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def session_fingerprint(self):
+        """Change avec le mot de passe : un changement de mot de passe déconnecte tous les appareils"""
+        return (self.password_hash or '')[-12:]
+
+    def get_id(self):
+        return f"{self.id}:{self.session_fingerprint}"
 
     def is_admin(self):
         return self.role in ['PRESIDENT', 'SECRETAIRE', 'TRESORIER', 'CENSEUR', 'COMMUNICATION']
@@ -261,6 +280,20 @@ class Member(TenantMixin, db.Model):
         return self.assets - self.guarantee_exposure
 
     @property
+    def guarantees_in_force(self):
+        """Avals de CE membre qui l'engagent encore : demande en attente sur une demande d'emprunt,
+        ou aval accordé / appelé sur un emprunt pas encore remboursé"""
+        result = []
+        for g in LoanGuarantor.query.filter(LoanGuarantor.member_id == self.id,
+                                            LoanGuarantor.status.in_(['EN_ATTENTE', 'ACCEPTE', 'APPELE'])).all():
+            if not g.loan:
+                continue
+            if (g.status == 'EN_ATTENTE' and g.loan.status == 'PENDING') or \
+                    (g.status != 'EN_ATTENTE' and g.loan.status in ('PENDING', 'ACTIF', 'OVERDUE')):
+                result.append(g)
+        return result
+
+    @property
     def unsettled_guarantor_debts(self):
         """Avals appelés pour CE membre (emprunteur) et pas encore réglés envers l'avaliste"""
         return LoanGuarantor.query.join(Loan, LoanGuarantor.loan_id == Loan.id).filter(
@@ -286,11 +319,11 @@ class Member(TenantMixin, db.Model):
 
     def is_eligible_for_loan(self, requested_amount=0):
         if self.status != 'ACTIF' or not self.is_active:
-            return False, "Le statut du membre n'est pas actif."
+            return False, "Ce membre n'est pas actif."
         if not self.has_paid_fonds_caisse:
             return False, "Le fonds de caisse obligatoire n'a pas été payé."
         if self.tontine_status == 'ROUGE':
-            return False, "Membre en statut ROUGE."
+            return False, "Ce membre est en rouge (suspendu)."
         if self.debit_balance > 0:
             return False, f"Dette de {self.debit_balance:,.0f} FCFA."
         active_loans = [l for l in self.loans if l.status in ('PENDING', 'ACTIF', 'OVERDUE')]
@@ -298,6 +331,13 @@ class Member(TenantMixin, db.Model):
             return False, "Un emprunt est déjà en cours."
         if self.unsettled_guarantor_debts:
             return False, "Un avaliste a payé à votre place : réglez d'abord cette dette."
+        # Un avaliste reste engagé tant que l'emprunt qu'il garantit n'est pas remboursé : il ne peut pas emprunter
+        for g in self.guarantees_in_force:
+            if g.status == 'EN_ATTENTE':
+                return False, (f"{g.loan.member_name} vous a demandé d'être son avaliste : refusez d'abord cette demande "
+                               "(page Avals) si vous voulez emprunter.")
+            return False, (f"Vous êtes avaliste de l'emprunt de {g.loan.member_name} : vous pourrez emprunter "
+                           "quand cet emprunt sera remboursé.")
         # Plafond : 3 fois les avoirs du membre (cotisations tontine + épargne + fonds de caisse)
         max_allowed = self.assets * 3
         requested = Decimal(str(requested_amount))
@@ -330,7 +370,7 @@ class Transaction(TenantMixin, db.Model):
     created_at = db.Column(db.DateTime, default=utcnow)
     creator = db.relationship('User', foreign_keys=[created_by], backref='transactions_created')
 
-    # Rubrique de cotisation (facultative : les anciennes transactions n'en ont pas)
+    # Cotisation (facultative : les anciennes transactions n'en ont pas)
     contribution_type_id = db.Column(db.Integer, db.ForeignKey('contribution_types.id'), nullable=True)
     contribution_type = db.relationship('ContributionType')
     # Cycle de tontine concerné (cotisation d'un tour / cagnotte versée)
@@ -354,7 +394,7 @@ class Transaction(TenantMixin, db.Model):
     def source_module(self):
         return {
             'SORTIE_LOAN': 'Emprunts', 'REMBOURSEMENT': 'Emprunts / Avals', 'BENEFICE_TONTINE': 'Cycles de tontine', 'RESTITUTION_TONTINE': 'Cycles de tontine',
-            'ENCHERE': 'Cycles de tontine', 'SANCTION': 'Sanctions', 'AIDE': 'Aides sociales', 'PARTAGE': "Fin d'exercice",
+            'ENCHERE': 'Cycles de tontine', 'SANCTION': 'Sanctions', 'AIDE': 'Aides sociales', 'PARTAGE': "Fin d'année",
         }.get(self.type, 'Transactions')
 
     @property
@@ -1048,6 +1088,7 @@ class TontineDraw(TenantMixin, db.Model):
     drawn_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     drawn_at = db.Column(db.DateTime, default=utcnow)
     notes = db.Column(db.String(255), nullable=True)
+    is_manual = db.Column(db.Boolean, nullable=True, default=False)   # ordre saisi à la main (tirage fait en réunion)
 
     cycle = db.relationship('TontineCycleDetail', backref=db.backref('draws', lazy='dynamic'))
     drawer = db.relationship('User', foreign_keys=[drawn_by])

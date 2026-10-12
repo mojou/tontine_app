@@ -1,0 +1,16 @@
+{# Séances : la feuille d'argent du jour de réunion et son procès-verbal, au même endroit.
+   Les membres qui n'ont pas accès aux feuilles de séance ne voient que les procès-verbaux (pas d'onglets). #}
+{% if current_user.role in ['PRESIDENT', 'TRESORIER', 'SECRETAIRE', 'CENSEUR'] %}
+<ul class="nav nav-tabs mb-3 onglets-groupe">
+    <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'seances' %}active{% endif %}" href="{{ url_for('seances') }}">
+            <i class="fas fa-clipboard-check"></i> Feuilles de séance
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'meetings' %}active{% endif %}" href="{{ url_for('meetings') }}">
+            <i class="fas fa-file-signature"></i> Procès-verbaux
+        </a>
+    </li>
+</ul>
+{% endif %}

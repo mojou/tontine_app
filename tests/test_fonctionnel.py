@@ -15,9 +15,9 @@ check.failed = False
 def login(c, username):
     with app.app_context():
         u = User.query.filter_by(username=username).first()
-        uid = u.id
+        uid = u.get_id()
     with c.session_transaction() as s:
-        s['_user_id'] = str(uid); s['_fresh'] = True
+        s['_user_id'] = uid; s['_fresh'] = True
 
 c = app.test_client()
 r = c.get('/t/jsb'); html = r.get_data(as_text=True)

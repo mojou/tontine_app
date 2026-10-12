@@ -34,7 +34,7 @@ def text(r):
 c = app.test_client()
 c.post('/inscription', data={'name': 'Tontine Rigueur', 'slug': 'rigueur', 'first_name': 'Hélène', 'last_name': 'Ngo',
                              'email': 'h@rigueur.cm', 'phone': '699000001', 'username': 'helene',
-                             'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                             'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for i, fn in enumerate(['Paul', 'Rose', 'Jean']):
     c.post('/members/add', data={'first_name': fn, 'last_name': 'Test', 'email': f'{fn.lower()}@rigueur.cm',
                                  'phone': f'69911122{i}', 'username': fn.lower(), 'role': 'MEMBRE',
@@ -68,7 +68,7 @@ with app.app_context():
           and db.session.get(ContributionType, rub['PRESENCE']).late_fine == Decimal('200'),
           'amendes enregistrées sur les cotisations (tontine 500, présence 200, fonds de caisse 1 000)')
 h = text(c.get('/cotisations'))
-check('500 FCFA' in h and '1 000 FCFA' in h, 'les amendes apparaissent dans la liste des cotisations')
+check('500 F' in h and '1 000 F' in h, 'les amendes apparaissent dans la liste des cotisations')
 # Ajout rapide d'un niveau (Paramètres) : pas de champ amende -> 0, sans erreur
 c.post('/cotisations/rubriques/add', data={'category': 'TONTINE', 'amount': '2000', 'frequency': 'BIMENSUEL', 'next': '/parametres'})
 with app.app_context():

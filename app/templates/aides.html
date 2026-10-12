@@ -32,7 +32,7 @@
                             <div class="small text-muted">{{ t.name }}</div>
                             <div class="amount">{{ 'jusqu\'à ' if t.free_amount }}{{ fcfa(t.amount) }} FCFA</div>
                             <div class="small text-muted">
-                                {% if t.requires_document %}<i class="fas fa-paperclip"></i> justificatif{% endif %}
+                                {% if t.requires_document %}<i class="fas fa-paperclip"></i> preuve demandée{% endif %}
                                 {% if t.max_per_year %} · {{ t.max_per_year }}/an max{% endif %}
                             </div>
                         </div>
@@ -119,7 +119,7 @@
                         <small class="text-muted" id="amountHelp"></small>
                     </div>
                     <div class="form-group col-md-4">
-                        <label class="small font-weight-bold" for="aidDoc">Justificatif <span id="docRequired" class="text-danger" style="display:none">*</span></label>
+                        <label class="small font-weight-bold" for="aidDoc">Preuve (photo ou papier) <span id="docRequired" class="text-danger" style="display:none">*</span></label>
                         <input type="file" name="document" id="aidDoc" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png,.webp">
                         <small class="text-muted">Photo ou PDF (acte, certificat...). Visible seulement du bureau.</small>
                     </div>
@@ -157,14 +157,14 @@
         {% if aides %}
         <div class="table-container">
             <table class="table mb-0">
-                <thead><tr><th>Membre</th><th>Événement</th><th>Date</th><th class="text-right">Montant</th><th>Statut</th><th>Validations</th><th></th></tr></thead>
+                <thead><tr><th>Membre</th><th>Événement</th><th>Date</th><th class="text-right">Montant</th><th>État</th><th>Validations</th><th></th></tr></thead>
                 <tbody>
                 {% for a in aides %}
                 <tr>
                     <td>{{ a.member_name }}</td>
                     <td>{{ a.get_type_display() }}
                         {% if is_bureau and a.description %}<br><small class="text-muted">{{ a.description|truncate(80) }}</small>{% endif %}
-                        {% if a.document and (is_bureau or a.member_id == current_user.member_id) %}<br><a href="{{ url_for('aid_document', aide_id=a.id) }}" target="_blank" class="small"><i class="fas fa-paperclip"></i> justificatif</a>{% endif %}
+                        {% if a.document and (is_bureau or a.member_id == current_user.member_id) %}<br><a href="{{ url_for('aid_document', aide_id=a.id) }}" target="_blank" class="small"><i class="fas fa-paperclip"></i> voir la preuve</a>{% endif %}
                     </td>
                     <td class="small">{{ a.event_date.strftime('%d/%m/%Y') if a.event_date else a.request_date.strftime('%d/%m/%Y') }}</td>
                     <td class="text-right">{{ fcfa(a.amount) }}{% if a.sanctions_deducted %}<br><small class="text-danger">− {{ fcfa(a.sanctions_deducted) }} amendes</small>{% endif %}</td>

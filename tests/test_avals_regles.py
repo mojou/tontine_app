@@ -39,7 +39,7 @@ def login(username):
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine Garants', 'slug': 'garants', 'first_name': 'Hélène', 'last_name': 'Ngo',
                                 'email': 'h@garants.cm', 'phone': '699000001', 'username': 'helene',
-                                'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                                'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 names = ['Marc', 'Awa', 'Kofi', 'Ines', 'Yao']
 for i, first in enumerate(names):
     pres.post('/members/add', data={'first_name': first, 'last_name': 'Test', 'email': f'{first.lower()}@garants.cm',
@@ -161,6 +161,70 @@ with app.app_context():
     db.session.commit()
     reasons = m.aval_problems(db.session.get(Member, ids['Kofi']), 3000)
     check(any('cotisations en retard' in r for r in reasons), f'cotisation du tour 1 manquante : Kofi refusé ({reasons})')
+
+
+# ---------------------------------------------------------------- épargne engagée : retrait bloqué
+def withdraw(name, amount):
+    r = pres.post('/transactions/add', data={'member_id': ids[name], 'type': 'RETRAIT_EPARGNE', 'amount': amount,
+                                             'payment_mode': 'ESPECE', 'description': f'retrait {name}'}, follow_redirects=True)
+    with app.app_context():
+        n = Transaction.query.filter_by(member_id=ids[name], type='RETRAIT_EPARGNE').count()
+    return n, body(r)
+
+
+n, h = withdraw('Awa', 5000)
+check(n == 0 and '10 000 FCFA bloqués comme avaliste' in h and 'au plus 0 FCFA' in h,
+      "Awa avalise 30 000 : son épargne (10 000) ne peut pas être retirée, message clair")
+n, h = withdraw('Marc', 15000)
+check(n == 0 and "n'a que 10 000 FCFA d'épargne" in h, "retrait supérieur à l'épargne refusé")
+n, h = withdraw('Marc', 4000)
+check(n == 1, 'retrait possible sur une épargne libre')
+
+# ---------------------------------------------------------------- approbation : l'avaliste est revérifié
+with app.app_context():
+    lid = db.session.get(LoanGuarantor, g_awa).loan_id
+    db.session.add(Sanction(tontine_id=tid, member_id=ids['Awa'], type_sanction='RETARD_REUNION', amount=Decimal('700'),
+                            sanction_date=date.today(), status='PENDING', description='Absence'))
+    db.session.commit()
+r = pres.post(f'/loans/{lid}/approve', follow_redirects=True)
+with app.app_context():
+    check(db.session.get(Loan, lid).status == 'PENDING', "Awa a accepté puis pris une amende : le bureau ne peut pas approuver")
+check("l'avaliste Awa Test ne remplit plus les conditions" in body(r) and "700 FCFA d'amendes impayées" in body(r),
+      'raison expliquée au bureau')
+with app.app_context():
+    Sanction.query.filter_by(member_id=ids['Awa'], status='PENDING').one().status = 'PAID'
+    db.session.commit()
+pres.post(f'/loans/{lid}/approve')
+with app.app_context():
+    check(db.session.get(Loan, lid).status == 'ACTIF', 'Awa à nouveau à jour : prêt approuvé')
+
+# ---------------------------------------------------------------- un avaliste engagé ne peut pas emprunter
+r = awa.post('/loan/request', data={'member_id': ids['Awa'], 'amount': 5000, 'duration_months': 2}, follow_redirects=True)
+with app.app_context():
+    check(Loan.query.filter_by(member_id=ids['Awa']).count() == 0, "Awa garantit l'emprunt de Marc : elle ne peut pas emprunter")
+check("Vous êtes avaliste de l'emprunt de Marc Test" in body(r) and 'quand cet emprunt sera remboursé' in body(r),
+      'raison expliquée à Awa')
+
+# ---------------------------------------------------------------- demande d'aval sans réponse sur un prêt approuvé
+with app.app_context():
+    Sanction.query.filter_by(member_id=ids['Ines'], status='PENDING').delete()
+    db.session.get(Tontine, tid).guarantee_threshold = Decimal('100000')    # plus aucun avaliste exigé
+    db.session.commit()
+kofi = login('kofi')
+kofi.post('/loan/request', data={'member_id': ids['Kofi'], 'amount': 3000, 'duration_months': 2, 'guarantor_ids': [ids['Ines']]})
+with app.app_context():
+    kloan = Loan.query.filter_by(member_id=ids['Kofi'], status='PENDING').one().id
+    g_ines = LoanGuarantor.query.filter_by(loan_id=kloan).one().id
+ines = login('ines')
+check('Kofi Test' in body(ines.get('/avals')), "Ines voit la demande d'aval de Kofi")
+pres.post(f'/loans/{kloan}/approve')
+with app.app_context():
+    m.g.tenant_id = tid
+    check(db.session.get(Loan, kloan).status == 'ACTIF' and db.session.get(LoanGuarantor, g_ines).status == 'ANNULE',
+          "prêt approuvé sans avaliste exigé : la demande restée sans réponse est annulée")
+    check(m.committed_savings(db.session.get(Member, ids['Ines'])) == 0, "l'épargne d'Ines n'est plus bloquée")
+r = ines.post(f'/avals/{g_ines}/respond', data={'action': 'accept'}, follow_redirects=True)
+check("n'attend plus de réponse" in body(r), "Ines ne peut plus répondre à une demande close")
 
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:

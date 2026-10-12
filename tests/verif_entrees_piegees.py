@@ -30,7 +30,7 @@ NUMERIC_FIELDS = ['amount', 'bid_amount', 'pool_amount', 'custom_amount', 'frequ
                   'option_id', 'member_id', 'contribution_type_id', 'year']
 
 with app.app_context():
-    users = [(u.id, u.role, u.tontine_id) for u in md.User.query.filter_by(is_active=True).all()
+    users = [(u.get_id(), u.role, u.tontine_id) for u in md.User.query.filter_by(is_active=True).all()
              if u.role in ('PRESIDENT', 'TRESORIER', 'SUPERADMIN', 'MEMBRE')]
     samples = {}
     for param, model in {'member_id': md.Member, 'transaction_id': md.Transaction, 'loan_id': md.Loan,
@@ -73,7 +73,7 @@ for uid, role, tid in users:
         for method, u, query, data in cases:
             client = app.test_client()
             with client.session_transaction() as sess:
-                sess['_user_id'] = str(uid)
+                sess['_user_id'] = uid
                 sess['_fresh'] = True
             count += 1
             try:

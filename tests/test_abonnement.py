@@ -44,7 +44,7 @@ check(billing.monthly_price(10) == 0 and billing.monthly_price(11) == 2200 and b
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine Grande', 'slug': 'grande', 'first_name': 'Hélène', 'last_name': 'Ngo',
                                 'email': 'h@grande.cm', 'phone': '699000001', 'username': 'helene',
-                                'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                                'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 
 
 def add_member(i, role='MEMBRE'):

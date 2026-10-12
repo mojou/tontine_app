@@ -247,7 +247,7 @@ select.form-control:focus {
         <div class="register-body">
             <div class="alert alert-warning">
                 <i class="fas fa-info-circle"></i> 
-                <strong>Important :</strong> Après votre inscription, le trésorier validera votre dossier et vous assignera une position dans le groupe. 
+                <strong>Important :</strong> Après votre inscription, le bureau vérifie votre demande et vous donne votre tour. 
                 Vous recevrez une notification par email lorsque votre compte sera activé.
             </div>
             
@@ -396,7 +396,7 @@ select.form-control:focus {
                         <div class="col-md-12">
                             <div class="form-group">
                                 <label class="form-label">{{ form.username.label.text }} <span class="text-danger">*</span></label>
-                                {{ form.username(class="form-control", placeholder="Nom d'utilisateur") }}
+                                {{ form.username(class="form-control", placeholder="Nom d'utilisateur", autocapitalize="none", autocorrect="off", spellcheck="false") }}
                                 {% for error in form.username.errors %}
                                     <div class="text-danger small">{{ error }}</div>
                                 {% endfor %}
@@ -443,7 +443,7 @@ select.form-control:focus {
                 </div>
                 
                 <button type="submit" class="btn btn-register" id="submitBtn">
-                    <i class="fas fa-paper-plane"></i> Soumettre ma candidature
+                    <i class="fas fa-paper-plane"></i> Envoyer ma demande
                 </button>
                 
                 <div class="text-center mt-3">
@@ -472,7 +472,7 @@ select.form-control:focus {
                 <h6>1. Cotisations</h6>
                 <p>Chaque membre s'engage à payer ses cotisations dans les délais.</p>
                 <h6>2. Sanctions</h6>
-                <p>Tout retard entraîne une pénalité de 500 FCFA par jour.</p>
+                <p>Chaque jour de retard coûte une amende de 500 FCFA.</p>
                 <h6>3. Emprunts</h6>
                 <p>Emprunt possible jusqu'à 3x l'épargne.</p>
             </div>

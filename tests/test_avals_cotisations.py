@@ -40,7 +40,7 @@ def client_for(username, pwd, slug='amis'):
 pres = app.test_client()
 r = pres.post('/inscription', data={'name': 'Tontine des Amis', 'slug': 'amis', 'first_name': 'Hélène', 'last_name': 'Ngo',
                                     'email': 'h@amis.cm', 'phone': '699000001', 'username': 'helene',
-                                    'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                                    'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 check(r.status_code == 302, 'tontine créée')
 with app.app_context():
     t = Tontine.query.filter_by(slug='amis').one()

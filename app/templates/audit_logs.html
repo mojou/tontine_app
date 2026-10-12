@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Journaux d'Audit de Sécurité{% if current_tontine %} - {{ current_tontine.name }}{% else %} - {{ app_name }}{% endif %}{% endblock %}
-{% block page_title %}<i class="fas fa-history text-gradient"></i> Piste d'Audit & Sécurité{% endblock %}
+{% block title %}Historique des actions{% if current_tontine %} - {{ current_tontine.name }}{% else %} - {{ app_name }}{% endif %}{% endblock %}
+{% block page_title %}<i class="fas fa-history text-gradient"></i> Historique des actions{% endblock %}
 
 {% block content %}
 <div class="fade-in">
-    <p class="text-muted">Journal immuable traçant l'ensemble des écritures comptables, des ouvertures de session et des modifications d'informations.</p>
+    <p class="text-muted">Tout ce qui a été fait dans l'application : qui a fait quoi, et quand. Rien ne peut y être effacé.</p>
 
     <div class="card">
         <div class="card-header bg-white text-dark">

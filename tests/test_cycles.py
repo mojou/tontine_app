@@ -142,10 +142,11 @@ with app.app_context():
 # ---------------------------------------------------------------- membre : vue
 with app.app_context():
     mu = User.query.filter_by(tontine_id=jsb_id, role='MEMBRE', is_active=True).first()
+    mu_session_id = mu.get_id() if mu else None
 if mu:
     mc = app.test_client()
     with mc.session_transaction() as sess:
-        sess['_user_id'] = str(mu.id); sess['_fresh'] = True
+        sess['_user_id'] = mu_session_id; sess['_fresh'] = True
     check(mc.get('/tontine-cycles').status_code == 200, 'un membre voit les cycles')
     check(mc.post(f'/tontine-cycles/{aid}/register-benefit', data={'participant_id': wid}).status_code == 302, 'un membre ne peut pas verser')
     check(mc.get('/dashboard').status_code == 200, 'tableau de bord membre')

@@ -12,13 +12,13 @@ pages = ['/dashboard', '/members', '/transactions', '/transactions/add', '/loans
          '/reports', '/audit-logs', '/profile', '/votes', '/votes/add', '/tirages', '/galerie', '/parametres', '/members/add', '/avals', '/cotisations', '/cotisations?year=2025', '/seances', '/exercice', '/demandes-mot-de-passe']
 bad = []
 with app.app_context():
-    users = [(u.id, u.role, u.username) for u in User.query.filter(User.is_active == True).all()]
+    users = [(u.get_id(), u.role, u.username) for u in User.query.filter(User.is_active == True).all()]
     jsb = Tontine.query.filter_by(slug='jsb').first()
     member_ids = [x.id for x in Member.query.filter_by(tontine_id=jsb.id).limit(3).all()]
 for uid, role, name in users:
     c = app.test_client()
     with c.session_transaction() as s:
-        s['_user_id'] = str(uid); s['_fresh'] = True
+        s['_user_id'] = uid; s['_fresh'] = True
     extra = [f'/members/{i}' for i in member_ids] + ['/tontine-cycles/1', '/tontine-cycles/1/tirage', '/meetings/1']
     for url in pages + extra:
         try:

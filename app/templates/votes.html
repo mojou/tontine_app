@@ -6,7 +6,7 @@
 {% block content %}
 <div class="fade-in">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
-        <p class="text-muted mb-2">Décisions et élections soumises au vote des membres actifs.</p>
+        <p class="text-muted mb-2">Les décisions et élections où les membres votent.</p>
         {% if can_manage %}
         <a href="{{ url_for('add_vote') }}" class="btn btn-primary mb-2"><i class="fas fa-plus"></i> Nouveau vote</a>
         {% endif %}

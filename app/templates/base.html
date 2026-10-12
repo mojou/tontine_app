@@ -319,25 +319,52 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Responsive */
-        @media (max-width: 768px) {
+        /* Responsive : téléphones ET tablettes (jusqu'à 1199 px) -> le menu se range et s'ouvre avec ☰,
+           pour laisser toute la largeur aux tableaux (montants et boutons d'action) */
+        .sidebar-overlay { display: none; }
+        @media (max-width: 1199.98px) {
             .sidebar {
                 margin-left: -280px;
+                box-shadow: none;
             }
             .sidebar.active {
                 margin-left: 0;
+                box-shadow: 4px 0 24px rgba(0,0,0,.25);
+            }
+            .sidebar-overlay.active {
+                display: block; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 998;
             }
             .content {
                 margin-left: 0;
                 width: 100%;
             }
             .navbar-custom {
-                padding: 10px 15px;
+                padding: 10px 16px;
             }
             .main-content {
-                padding: 15px;
+                padding: 18px;
             }
+            #sidebarToggle { font-size: 1.35rem; padding: 6px 10px; margin-right: 6px; color: var(--hl-green); }
+            /* Tableaux plus serrés : plus de colonnes visibles sans défiler */
+            .table th, .table td { padding: .5rem .55rem; font-size: .88rem; }
+            .table th { white-space: normal; line-height: 1.2; }
+            .table .btn-sm, .table .btn-group-sm > .btn { padding: 4px 8px; }
         }
+        @media (max-width: 767.98px) {
+            .main-content { padding: 15px; }
+            .navbar-custom h4 { font-size: 1.05rem; }
+            .card-header { padding: 12px 14px; }
+            .card-body { padding: 14px; }
+        }
+        /* Montants et boutons d'action d'un tableau : jamais coupés sur deux lignes */
+        .table td.text-right, .table th.text-right, .table td.nowrap, .table .btn-group, .table td.actions { white-space: nowrap; }
+        /* Tableau large (une colonne par cotisation) : la 1re colonne (le membre) reste visible pendant le défilement */
+        .table-sticky-first th:first-child, .table-sticky-first td:first-child {
+            position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 2px 0 4px rgba(0,0,0,.06);
+        }
+        .table-sticky-first thead th:first-child { background: #f8f9fa; z-index: 3; }
+        .scroll-hint { display: none; }
+        @media (max-width: 1199.98px) { .scroll-hint { display: block; } }
         
         /* Scrollbar */
         ::-webkit-scrollbar {
@@ -405,7 +432,7 @@
                     <li class="nav-item menu-section">{{ item.section }}</li>
                     {% endif %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == item.url %}active{% endif %}" 
+                        <a class="nav-link {% if request.endpoint in item.active %}active{% endif %}"
                            href="{{ url_for(item.url) }}">
                             <i class="{{ item.icon }}"></i> {{ item.name }}
                         </a>
@@ -437,7 +464,7 @@
         <!-- Content -->
         <div class="content">
             <nav class="navbar-custom">
-                <button type="button" id="sidebarToggle" class="btn btn-link d-md-none">
+                <button type="button" id="sidebarToggle" class="btn btn-link d-xl-none" aria-label="Ouvrir le menu">
                     <i class="fas fa-bars"></i>
                 </button>
                 <h4>{% block page_title %}{% endblock %}</h4>
@@ -519,10 +546,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/locales/bootstrap-datepicker.fr.min.js"></script>
     
     <script>
-        // Sidebar toggle for mobile
+        // Menu sur téléphone et tablette : ☰ ouvre ; toucher à côté ou choisir une page referme
+        if (!$('.sidebar-overlay').length) { $('body').append('<div class="sidebar-overlay"></div>'); }
+        function closeSidebar() { $('.sidebar, .sidebar-overlay').removeClass('active'); }
         $('#sidebarToggle').on('click', function() {
-            $('.sidebar').toggleClass('active');
+            $('.sidebar, .sidebar-overlay').toggleClass('active');
         });
+        $(document).on('click', '.sidebar-overlay', closeSidebar);
+        $('.sidebar .nav-link').on('click', function() { if (window.innerWidth < 1200) closeSidebar(); });
+        $(document).on('keydown', function(e) { if (e.key === 'Escape') closeSidebar(); });
+
+        // Boutons « Voir » : petite bulle d'explication (au toucher sur tablette/téléphone, au clic sur PC)
+        $('[data-toggle="popover"]').popover({container: 'body'});
         
         // Auto-hide alerts after 5 seconds
         setTimeout(function() {

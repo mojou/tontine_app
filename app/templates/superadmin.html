@@ -243,7 +243,7 @@
                     <div class="form-group col-md-3"><label for="phone">Téléphone *</label><input type="text" class="form-control" id="phone" name="phone" required value="{{ form_data.get('phone', '') }}"></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group col-md-4"><label for="username">Identifiant de connexion *</label><input type="text" class="form-control" id="username" name="username" required value="{{ form_data.get('username', '') }}"></div>
+                    <div class="form-group col-md-4"><label for="username">Identifiant de connexion *</label><input type="text" class="form-control" id="username" name="username" required value="{{ form_data.get('username', '') }}" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
                     <div class="form-group col-md-4"><label for="password">Mot de passe provisoire * (8 car. min.)</label><input type="password" class="form-control" id="password" name="password" minlength="8" required autocomplete="new-password"></div>
                 </div>
                 <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Créer la tontine</button>

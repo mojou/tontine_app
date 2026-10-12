@@ -1,18 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Registre de Caisse{% if current_tontine %} - {{ current_tontine.name }}{% else %} - {{ app_name }}{% endif %}{% endblock %}
+{% block title %}Caisse{% if current_tontine %} - {{ current_tontine.name }}{% else %} - {{ app_name }}{% endif %}{% endblock %}
+{% block page_title %}<i class="fas fa-cash-register"></i> Caisse{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="h3 font-weight-bold mb-0">
-            <i class="fas fa-book text-primary mr-2"></i>Registre Comptable de Caisse
-        </h2>
-        <p class="text-muted mb-0">Visualisez et gérez tous les flux financiers entrants et sortants de la tontine.</p>
-    </div>
+{% include '_onglets_caisse.html' %}
+<div class="d-flex justify-content-between align-items-center flex-wrap mb-4">
+    <p class="text-muted mb-0">
+        {% if current_user.is_admin() %}Chaque entrée et sortie d'argent, une par une. Les paiements faits en réunion arrivent ici
+        depuis la feuille de séance ; « Ajouter un paiement » sert pour un paiement fait hors réunion.
+        {% else %}Chacun de vos paiements et de ce que vous avez reçu, un par un.{% endif %}
+    </p>
     {% if current_user.is_admin() %}
     <button class="btn btn-success shadow-sm" data-toggle="modal" data-target="#addTransactionModal">
-        <i class="fas fa-plus mr-2"></i>Nouvelle Écriture
+        <i class="fas fa-plus mr-2"></i>Ajouter un paiement
     </button>
     {% endif %}
 </div>
@@ -21,7 +22,7 @@
     <div class="card-body">
         <form method="GET" action="{{ url_for('transactions') }}" class="row">
             <div class="col-md-3">
-                <label class="small text-muted">Type de transaction</label>
+                <label class="small text-muted">Sorte de paiement</label>
                 <select name="type" class="form-control form-control-sm">
                     <option value="">Tous les types</option>
                     {% for code, info in transaction_types.items() %}
@@ -60,10 +61,10 @@
     {% set savings = (summary.get('EPARGNE', 0) or 0) - (summary.get('RETRAIT_EPARGNE', 0) or 0) %}
     {% for label, amount, css, hint in [
         ('Cotisations tontine', summary.get('TONTINE', 0), 'bg-success text-white', type_hints['TONTINE']),
-        ('Épargne des membres (restituable)', savings, 'bg-primary text-white', type_hints['EPARGNE']),
+        ('Épargne des membres (on la leur rend)', savings, 'bg-primary text-white', type_hints['EPARGNE']),
         ('Droits de présence', summary.get('PRESENCE', 0), 'bg-info text-white', type_hints['PRESENCE']),
         ('Sanctions recouvrées', summary.get('SANCTION', 0), 'bg-warning text-dark', type_hints['SANCTION']),
-        ('Total des sorties', total_out, 'bg-danger text-white', 'Prêts décaissés, cagnottes versées, aides, épargne rendue, dépenses...'),
+        ('Total des sorties', total_out, 'bg-danger text-white', 'Prêts donnés, cagnottes données, aides, épargne rendue, dépenses...'),
     ] %}
     <div class="col-6 col-lg mb-2">
         <div class="card {{ css }} shadow-sm h-100" title="{{ hint }}">
@@ -80,9 +81,9 @@
     <div class="card-header bg-white py-3">
         <div class="d-flex justify-content-between align-items-center">
             <h6 class="mb-0 font-weight-bold">
-                <i class="fas fa-list-ul text-primary mr-2"></i>Historique des transactions
+                <i class="fas fa-list-ul text-primary mr-2"></i>Tous ses paiements
             </h6>
-            <span class="badge badge-secondary">{% if pagination %}{{ pagination.total }}{% else %}{{ transactions|length }}{% endif %} transaction(s)</span>
+            <span class="badge badge-secondary">{% if pagination %}{{ pagination.total }}{% else %}{{ transactions|length }}{% endif %} paiement(s)</span>
         </div>
     </div>
     <div class="card-body p-0">
@@ -90,13 +91,13 @@
             <table class="table table-hover table-striped mb-0 align-middle">
                 <thead class="thead-dark">
                     <tr>
-                        <th class="border-0">ID</th>
+                        <th class="border-0 d-none d-xl-table-cell">N°</th>
                         <th class="border-0">Date</th>
                         <th class="border-0">Membre</th>
-                        <th class="border-0">Type d'opération</th>
-                        <th class="border-0">Mode</th>
-                        <th class="border-0">Description</th>
-                        <th class="border-0 text-right">Montant (FCFA)</th>
+                        <th class="border-0">Pour quoi</th>
+                        <th class="border-0 d-none d-lg-table-cell">Payé par</th>
+                        <th class="border-0 d-none d-xl-table-cell">Explication</th>
+                        <th class="border-0 text-right">Montant</th>
                         {% if current_user.is_admin() %}
                         <th class="border-0 text-center">Actions</th>
                         {% endif %}
@@ -106,8 +107,8 @@
                     {% if transactions %}
                         {% for tx in transactions %}
                         <tr>
-                            <td><small class="text-muted font-weight-bold">#{{ tx.id }}</small></td>
-                            <td>{{ tx.date.strftime('%d/%m/%Y') }}</td>
+                            <td class="d-none d-xl-table-cell"><small class="text-muted font-weight-bold">#{{ tx.id }}</small></td>
+                            <td class="nowrap">{{ tx.date.strftime('%d/%m/%y') }}</td>
                             <td>
                                 <strong>{{ tx.member_name }}</strong>
                                 {% if tx.member_id != current_user.id and current_user.is_admin() %}
@@ -121,21 +122,21 @@
                                     {{ tx.get_type_display() if tx.get_type_display else tx.type }}
                                 </span>
                             </td>
-                            <td>
+                            <td class="d-none d-lg-table-cell">
                                 {% set payment_mode = tx.payment_mode or 'ESPECE' %}
                                 <span class="badge {{ 'badge-secondary' if payment_mode == 'ESPECE' else 'badge-info' }}">{{ payment_modes.get(payment_mode, payment_mode) }}</span>
                             </td>
-                            <td><span class="small text-muted">{{ tx.description or '-' }}</span></td>
+                            <td class="d-none d-xl-table-cell"><span class="small text-muted">{{ tx.description or '-' }}</span></td>
                             <td class="text-right font-weight-bold {% if tx.is_outflow %}text-danger{% else %}text-success{% endif %}">
                                 {% if tx.is_outflow %}-{% else %}+{% endif %}
                                 {{ (tx.amount)|fcfa }} F
                             </td>
                             {% if current_user.is_admin() %}
-                            <td class="text-center">
+                            <td class="text-center actions">
                                 <div class="btn-group btn-group-sm">
                                     <a href="{{ url_for('view_transaction', transaction_id=tx.id) }}" class="btn btn-outline-secondary" title="Détail"><i class="fas fa-eye"></i></a>
                                     {% if tx.is_system %}
-                                    <span class="btn btn-outline-light text-muted" title="Écriture générée par le module « {{ tx.source_module }} » : elle se corrige depuis ce module"><i class="fas fa-lock"></i></span>
+                                    <span class="btn btn-outline-light text-muted" title="Paiement créé par la page « {{ tx.source_module }} » : on le corrige depuis cette page"><i class="fas fa-lock"></i></span>
                                     {% else %}
                                     {% if current_user.role in ['TRESORIER', 'PRESIDENT'] %}
                                     <a href="{{ url_for('edit_transaction', transaction_id=tx.id) }}" class="btn btn-outline-info" title="Modifier"><i class="fas fa-edit"></i></a>
@@ -153,11 +154,11 @@
                         <tr>
                             <td colspan="{% if current_user.is_admin() %}8{% else %}7{% endif %}" class="text-center py-4 text-muted">
                                 <i class="fas fa-wallet fa-2x mb-2 d-block"></i>
-                                Aucune transaction financière répertoriée dans le système.
+                                Aucun paiement pour le moment.
                                 {% if current_user.is_admin() %}
                                 <br>
                                 <button class="btn btn-sm btn-success mt-3" data-toggle="modal" data-target="#addTransactionModal">
-                                    <i class="fas fa-plus mr-1"></i>Ajouter une transaction
+                                    <i class="fas fa-plus mr-1"></i>Ajouter un paiement
                                 </button>
                                 {% endif %}
                             </td>
@@ -217,7 +218,7 @@
                     <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body text-left">
-                    <p>Êtes-vous sûr de vouloir supprimer cette transaction ?</p>
+                    <p>Voulez-vous vraiment supprimer ce paiement ?</p>
                     <p class="text-muted small">
                         <strong>ID:</strong> #{{ tx.id }}<br>
                         <strong>Membre:</strong> {{ tx.member_name }}<br>
@@ -246,7 +247,7 @@
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title font-weight-bold">
-                        <i class="fas fa-calculator mr-2"></i>Enregistrer un Mouvement
+                        <i class="fas fa-calculator mr-2"></i>Ajouter un paiement
                     </h5>
                     <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
@@ -266,7 +267,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="font-weight-bold">Type d'Opération</label>
+                                <label class="font-weight-bold">Ce que le membre paie ou reçoit</label>
                                 <select name="type" class="form-control" required>
                                     {% for code in manual_transaction_types %}
                                     <option value="{{ code }}">{{ transaction_types[code][0] }} ({{ 'sortie' if transaction_types[code][1] == 'SORTIE' else 'entrée' }})</option>
@@ -295,7 +296,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="font-weight-bold">Date de l'opération</label>
+                                <label class="font-weight-bold">Date du paiement</label>
                                 <input type="date" name="date" id="modal_add_date" class="form-control" required>
                             </div>
                         </div>
@@ -311,7 +312,7 @@
                         <i class="fas fa-times mr-1"></i>Annuler
                     </button>
                     <button type="submit" class="btn btn-success font-weight-bold">
-                        <i class="fas fa-save mr-1"></i>Confirmer l'opération
+                        <i class="fas fa-save mr-1"></i>Confirmer
                     </button>
                 </div>
             </div>

@@ -17,7 +17,7 @@
                     <tr><th>Total dû</th><td class="text-right">{{ fcfa(loan.total_amount) }} FCFA</td></tr>
                     <tr><th>Déjà remboursé</th><td class="text-right">{{ fcfa(loan.amount_paid or 0) }} FCFA</td></tr>
                     <tr class="font-weight-bold" style="color: var(--hl-green)"><th>Reste à payer</th><td class="text-right">{{ fcfa(loan.remaining_amount) }} FCFA</td></tr>
-                    {% if loan.end_date %}<tr><th>Échéance</th><td class="text-right {{ 'text-danger' if loan.is_overdue }}">{{ loan.end_date.strftime('%d/%m/%Y') }}</td></tr>{% endif %}
+                    {% if loan.end_date %}<tr><th>Date limite</th><td class="text-right {{ 'text-danger' if loan.is_overdue }}">{{ loan.end_date.strftime('%d/%m/%Y') }}</td></tr>{% endif %}
                 </table>
 
                 <form method="POST" action="{{ url_for('repay_loan', loan_id=loan.id) }}">

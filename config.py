@@ -81,6 +81,9 @@ class Config:
     ALLOW_PUBLIC_SIGNUP = os.environ.get('ALLOW_PUBLIC_SIGNUP', 'True').lower() == 'true'
     # Une tontine créée en ligne doit être confirmée par e-mail, sinon elle est supprimée
     REQUIRE_EMAIL_CONFIRMATION = os.environ.get('REQUIRE_EMAIL_CONFIRMATION', 'True').lower() == 'true'
+    # Mot de passe donné par le président / l'administrateur : changement obligatoire à la 1re connexion
+    FORCE_PASSWORD_CHANGE = os.environ.get('FORCE_PASSWORD_CHANGE', 'True').lower() == 'true'
+    PASSWORD_MIN_LENGTH = 8
     EMAIL_CONFIRMATION_HOURS = int(os.environ.get('EMAIL_CONFIRMATION_HOURS', '3'))
     # Abonnement : lien de paiement SasPay (facultatif). {montant} et {reference} sont remplacés.
     # Cycle : un membre qui n'a pas payé sa part au versement de la cagnotte reçoit une amende

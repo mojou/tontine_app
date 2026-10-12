@@ -31,7 +31,7 @@ def body(r):
 c = app.test_client()
 c.post('/inscription', data={'name': 'Njangi Bonaberi', 'slug': 'bonaberi', 'first_name': 'Hélène', 'last_name': 'Ekwalla',
                              'email': 'h@bona.cm', 'phone': '699000009', 'username': 'helene',
-                             'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                             'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for i, (fn, ln) in enumerate([('Paul', 'Eboa'), ('Rose', 'Ngo'), ('Jean', 'Mbappe')]):
     c.post('/members/add', data={'first_name': fn, 'last_name': ln, 'email': f'{fn.lower()}@bona.cm', 'phone': f'69922233{i}',
                                  'username': fn.lower(), 'role': 'MEMBRE', 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})
@@ -112,7 +112,7 @@ c.post(f'/tontine-cycles/{cyc[20000]}/register-benefit', data={'confirm_offline'
 with app.app_context():
     check(Transaction.query.filter_by(tontine_id=tid, type='ENCHERE').count() == 1, 'mise de 4 000 en caisse')
 
-# ---------------------------------------------------------------- fin d'exercice
+# ---------------------------------------------------------------- fin d'année
 year = m.date.today().year
 h = body(c.get(f'/exercice?year={year}'))
 check(c.get(f'/exercice?year={year}').status_code == 200 and 'Paul' in h and 'Rose' in h, 'aperçu du partage')

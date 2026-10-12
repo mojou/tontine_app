@@ -35,7 +35,7 @@ def login(client, slug, username, pwd):
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine des Amis', 'slug': 'amis', 'first_name': 'Hélène', 'last_name': 'Ngo',
                                 'email': 'h@amis.cm', 'phone': '+237699000001', 'username': 'helene',
-                                'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                                'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for fn, role, phone in [('Marc', 'MEMBRE', '+237699111222'), ('Awa', 'SECRETAIRE', '699333444')]:
     pres.post('/members/add', data={'first_name': fn, 'last_name': 'Test', 'email': f'{fn.lower()}@amis.cm', 'phone': phone,
                                     'username': fn.lower(), 'role': role, 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})
@@ -63,7 +63,7 @@ anon.post('/mot-de-passe-oublie', data={'tontine': 'jsb', 'identifier': 'marc'})
 with app.app_context():
     check(PasswordResetRequest.query.count() == 1, "même identifiant dans une autre tontine : rien")
 
-check(login(pres, 'amis', 'helene', 'Helene2026').status_code in (200, 302), 'présidente connectée')
+check(login(pres, 'amis', 'helene', 'Mbalmayo2026').status_code in (200, 302), 'présidente connectée')
 h = body(pres.get('/dashboard'))
 check('ont oublié leur mot de passe' in h, 'alerte sur le tableau de bord de la présidente')
 h = body(pres.get('/demandes-mot-de-passe'))

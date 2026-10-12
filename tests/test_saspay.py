@@ -58,7 +58,7 @@ def tx(tid, ref, amount, currency='XAF'):
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine Payante', 'slug': 'payante', 'first_name': 'Hélène', 'last_name': 'Ngo',
                                 'email': 'h@payante.cm', 'phone': '699000001', 'username': 'helene',
-                                'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                                'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for i in range(1, 12):
     pres.post('/members/add', data={'first_name': f'Membre{i}', 'last_name': 'Test', 'email': f'm{i}@payante.cm',
                                     'phone': f'6992{i:05d}', 'username': f'membre{i}', 'role': 'MEMBRE',

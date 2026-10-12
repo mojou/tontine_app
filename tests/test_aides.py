@@ -39,8 +39,8 @@ def doc():
 
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine Solidarité', 'slug': 'solidarite', 'first_name': 'Hélène', 'last_name': 'Abena',
-                                'email': 'h@sol.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Helene2026',
-                                'password_confirm': 'Helene2026'})
+                                'email': 'h@sol.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Mbalmayo2026',
+                                'password_confirm': 'Mbalmayo2026'})
 for fn, role in [('Paul', 'MEMBRE'), ('Awa', 'MEMBRE'), ('Jean', 'TRESORIER'), ('Rose', 'SECRETAIRE')]:
     pres.post('/members/add', data={'first_name': fn, 'last_name': 'Fouda', 'email': f'{fn.lower()}@sol.cm', 'phone': '699111111',
                                     'username': fn.lower(), 'role': role, 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})

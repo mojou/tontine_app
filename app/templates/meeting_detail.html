@@ -9,8 +9,9 @@
 <div class="fade-in">
     <div class="mb-3">
         <a href="{{ url_for('meetings') }}" class="btn btn-secondary">
-            <i class="fas fa-arrow-left"></i> Retour à la liste
+            <i class="fas fa-arrow-left"></i> Tous les procès-verbaux
         </a>
+        {% if current_user.role in ['SECRETAIRE', 'PRESIDENT'] %}
         <a href="{{ url_for('edit_meeting', meeting_id=meeting.id) }}" class="btn btn-warning">
             <i class="fas fa-edit"></i> Modifier
         </a>
@@ -27,6 +28,7 @@
                 <i class="fas fa-trash"></i> Supprimer
             </button>
         </form>
+        {% endif %}
     </div>
     
     <div class="row">
@@ -117,7 +119,7 @@
                             <thead class="bg-light">
                                 <tr>
                                     <th>Membre</th>
-                                    <th>Statut</th>
+                                    <th>État</th>
                                 </tr>
                             </thead>
                             <tbody>

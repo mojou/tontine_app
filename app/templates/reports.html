@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="fade-in">
-    <h1><i class="fas fa-chart-line"></i> Rapports et statistiques</h1>
+    <h1><i class="fas fa-chart-line"></i> Rapports</h1>
     
     <div class="alert alert-info">
         <i class="fas fa-calendar"></i> Situation au {{ now.strftime('%d/%m/%Y') }}
@@ -23,9 +23,9 @@
         <div class="col-md-3">
             <div class="card bg-success text-white">
                 <div class="card-body">
-                    <h5 class="card-title">Transactions</h5>
+                    <h5 class="card-title">Paiements</h5>
                     <h2>{{ total_transactions | default(0) }}</h2>
-                    <small>Total des transactions</small>
+                    <small>Nombre de paiements</small>
                 </div>
             </div>
         </div>
@@ -97,7 +97,7 @@
                         <label for="report_type">Type de rapport</label>
                         <select name="report_type" id="report_type" class="form-control" required>
                             <option value="cotisations">Cotisations & Tontines</option>
-                            <option value="loans">Gestion des Emprunts</option>
+                            <option value="loans">Emprunts</option>
                             <option value="sanctions">Suivi des Sanctions</option>
                             <option value="financial">Rapport Financier Global</option>
                         </select>
@@ -148,7 +148,7 @@
     
     <div class="card" style="margin-bottom: 20px;">
         <div class="card-header">
-            <i class="fas fa-chart-pie"></i> Répartition des transactions par type
+            <i class="fas fa-chart-pie"></i> L'argent par sorte de paiement
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -214,7 +214,7 @@
     
     <div class="card">
         <div class="card-header">
-            <i class="fas fa-history"></i> Flux des 10 dernières transactions globales
+            <i class="fas fa-history"></i> Les 10 derniers paiements
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -237,7 +237,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted">Aucune transaction récente enregistrée.</td>
+                            <td colspan="4" class="text-center text-muted">Aucun paiement récente enregistrée.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -34,7 +34,7 @@ c = app.test_client()
 outbox = app.extensions.setdefault('outbox', [])
 c.post('/inscription', headers=PROXY, data={'name': 'Tontine En Ligne', 'slug': 'en-ligne', 'first_name': 'Awa', 'last_name': 'Diop',
                                             'email': 'awa@exemple.cm', 'phone': '699000001', 'username': 'awa',
-                                            'password': 'Awa2026xx', 'password_confirm': 'Awa2026xx'})
+                                            'password': 'Dakar2026xx', 'password_confirm': 'Dakar2026xx'})
 link = re.search(r'\S+/inscription/confirmer/\S+', outbox[-1]['body']).group(0) if outbox else ''
 check(link.startswith('https://germainbob.pythonanywhere.com/inscription/confirmer/'),
       f'lien de confirmation en https sur germainbob.pythonanywhere.com ({link[:60]}…)')

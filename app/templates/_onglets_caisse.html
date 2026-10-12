@@ -1,0 +1,13 @@
+{# Caisse : une seule page, deux vues du même argent (totaux / détail des mouvements) #}
+<ul class="nav nav-tabs mb-3 onglets-groupe">
+    <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'cotisations' %}active{% endif %}" href="{{ url_for('cotisations') }}">
+            <i class="fas fa-chart-pie"></i> Situation
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'transactions' %}active{% endif %}" href="{{ url_for('transactions') }}">
+            <i class="fas fa-list"></i> {{ 'Journal des mouvements' if current_user.is_admin() else 'Mes mouvements' }}
+        </a>
+    </li>
+</ul>

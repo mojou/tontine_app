@@ -34,7 +34,7 @@ def text(r):
 c = app.test_client()
 c.post('/inscription', data={'name': 'Tontine Ecarts', 'slug': 'ecarts', 'first_name': 'Hélène', 'last_name': 'Ngo',
                              'email': 'h@ecarts.cm', 'phone': '699000001', 'username': 'helene',
-                             'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                             'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for i, fn in enumerate(['Paul', 'Rose']):
     c.post('/members/add', data={'first_name': fn, 'last_name': 'Test', 'email': f'{fn.lower()}@ecarts.cm',
                                  'phone': f'69911122{i}', 'username': fn.lower(), 'role': 'MEMBRE',

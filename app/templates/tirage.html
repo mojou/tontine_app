@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Tirage - Cycle #{{ cycle.cycle_number }}{% endblock %}
-{% block page_title %}<i class="fas fa-dice"></i> Tirage au sort · {{ cycle.display_name }}{% endblock %}
+{% block page_title %}<i class="fas fa-dice"></i> {{ 'Ordre de passage' if manual else 'Tirage au sort' }} · {{ cycle.display_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -27,7 +27,11 @@
     <div class="row">
         <div class="col-lg-7">
             <div class="draw-stage mb-4">
-                {% if reveal_draw %}
+                {% if reveal_draw and reveal_draw.is_manual %}
+                <div class="small text-uppercase mb-2">Ordre écrit le {{ reveal_draw.drawn_at.strftime('%d/%m/%Y à %H:%M') }}</div>
+                <div class="draw-wheel"><i class="fas fa-users"></i></div>
+                <p class="mb-0">Tirage fait en réunion · {{ reveal_draw.results|length }} main(s)</p>
+                {% elif reveal_draw %}
                 <div class="small text-uppercase mb-2">Tirage du {{ reveal_draw.drawn_at.strftime('%d/%m/%Y à %H:%M') }}</div>
                 <div class="draw-wheel" id="wheel">…</div>
                 <div class="draw-counter mt-2" id="counter"></div>
@@ -40,10 +44,10 @@
 
             {% if reveal_draw %}
             <div class="card">
-                <div class="card-header">Ordre de passage tiré</div>
-                <ul class="order-list" id="revealList">
+                <div class="card-header">{{ 'Ordre de passage écrit' if reveal_draw.is_manual else 'Ordre de passage tiré' }}</div>
+                <ul class="order-list" id="{{ 'manualList' if reveal_draw.is_manual else 'revealList' }}">
                     {% for r in reveal_draw.results %}
-                    <li class="pending" data-name="{{ r.member.full_name }}">
+                    <li class="{{ 'shown' if reveal_draw.is_manual else 'pending' }}" data-name="{{ r.member.full_name }}">
                         <span class="pos">{{ r.position }}</span>
                         {{ display_photo(r.member, 36) }}
                         <strong>{{ r.member.full_name }}</strong>
@@ -53,7 +57,44 @@
             </div>
             {% endif %}
 
-            {% if can_draw and cycle.status == 'EN_COURS' and remaining|length >= 2 and not cycle.is_auction %}
+            {% if can_draw and cycle.status == 'EN_COURS' and remaining|length >= 2 and not cycle.is_auction and manual %}
+            <div class="card">
+                <div class="card-body">
+                    <h5><i class="fas fa-pen"></i> Écrire l'ordre de passage</h5>
+                    <p class="small text-muted">
+                        Faites le tirage en réunion, puis écrivez le numéro tiré par chacun :
+                        <strong>{{ first_pos }}</strong> reçoit la cagnotte en premier, puis {{ first_pos + 1 }}, etc.,
+                        jusqu'à <strong>{{ last_pos }}</strong>. Chaque numéro une seule fois.
+                        {% if cycle.beneficiaries_count %}Ceux qui ont déjà reçu la cagnotte ne bougent pas.{% endif %}
+                    </p>
+                    <form method="POST" id="manualForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <table class="table table-sm mb-3">
+                            <thead><tr><th>Membre</th><th style="width: 130px">N° de passage</th></tr></thead>
+                            <tbody>
+                            {% for p in remaining %}
+                            <tr>
+                                <td class="align-middle">{{ p.label }}</td>
+                                <td><input type="number" name="pos_{{ p.id }}" class="form-control form-control-sm pos-input" required
+                                           min="{{ first_pos }}" max="{{ last_pos }}" step="1" inputmode="numeric"
+                                           value="{{ entered.get('pos_' ~ p.id, '') }}" aria-label="Numéro de passage de {{ p.label }}"></td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        <div class="alert alert-danger small py-2" id="dupAlert" style="display:none"></div>
+                        <div class="form-group">
+                            <input type="text" name="notes" class="form-control" maxlength="255" value="{{ entered.get('notes', '') }}"
+                                   placeholder="Note (ex : tirage en réunion du 12/10, 15 présents)">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg btn-block"
+                                onclick="return confirm('Enregistrer cet ordre de passage ? Il remplace l\'ordre actuel des membres qui n\'ont pas encore reçu la cagnotte.');">
+                            <i class="fas fa-save"></i> Enregistrer l'ordre de passage
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% elif can_draw and cycle.status == 'EN_COURS' and remaining|length >= 2 and not cycle.is_auction %}
             <div class="card">
                 <div class="card-body">
                     <h5><i class="fas fa-random"></i> Nouveau tirage</h5>
@@ -96,8 +137,9 @@
                 <ul class="list-group list-group-flush">
                     {% for d in draws %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span class="small">{{ d.drawn_at.strftime('%d/%m/%Y %H:%M') }} · {{ d.drawer.username if d.drawer else '—' }}</span>
-                        <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id, reveal=d.id) }}" class="btn btn-sm btn-outline-primary">Rejouer</a>
+                        <span class="small">{{ d.drawn_at.strftime('%d/%m/%Y %H:%M') }} · {{ d.drawer.username if d.drawer else '—' }}
+                            {% if d.is_manual %}<span class="badge badge-secondary">en réunion</span>{% endif %}</span>
+                        <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id, reveal=d.id) }}" class="btn btn-sm btn-outline-primary">{{ 'Voir' if d.is_manual else 'Rejouer' }}</a>
                     </li>
                     {% endfor %}
                 </ul>
@@ -109,7 +151,28 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if reveal_draw %}
+{% if manual %}
+<script>
+// Signale tout de suite un numéro écrit deux fois (le serveur vérifie aussi)
+$(function() {
+    var inputs = $('#manualForm .pos-input'), alertBox = $('#dupAlert');
+    function check() {
+        var seen = {}, dups = [];
+        inputs.removeClass('is-invalid');
+        inputs.each(function() {
+            var v = $(this).val();
+            if (!v) return;
+            if (seen[v]) { $(this).addClass('is-invalid'); seen[v].addClass('is-invalid'); if (dups.indexOf(v) < 0) dups.push(v); }
+            else seen[v] = $(this);
+        });
+        if (dups.length) alertBox.text('Numéro donné deux fois : ' + dups.join(', ')).show(); else alertBox.hide();
+    }
+    inputs.on('input', check);
+    check();
+});
+</script>
+{% endif %}
+{% if reveal_draw and not reveal_draw.is_manual %}
 <script>
 $(function() {
     var items = $('#revealList li');

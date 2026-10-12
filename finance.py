@@ -11,7 +11,7 @@
 #   - TONTINE : cotisations rotatives, reversées intégralement au bénéficiaire du tour
 #   - CAISSE  : caisse générale (présences, fonds de caisse, adhésions, amendes,
 #               intérêts d'emprunt) qui finance les prêts et le fonctionnement
-#   - EPARGNE : épargne individuelle ("banque"), restituée en fin d'exercice
+#   - EPARGNE : épargne individuelle ("banque"), restituée en fin d'année
 #   - SECOURS : caisse de solidarité (décès, maladie, naissance, mariage)
 #   - PROJET  : caisse projet / investissement collectif
 
@@ -31,7 +31,7 @@ FUNDS = OrderedDict([
 # code -> (libellé, sens, fonds)
 TRANSACTION_TYPES = OrderedDict([
     ('TONTINE', ('Cotisation tontine', IN, 'TONTINE')),
-    ('PRESENCE', ('Droit de présence (séance)', IN, 'CAISSE')),
+    ('PRESENCE', ('Droit de présence (réunion)', IN, 'CAISSE')),
     ('EPARGNE', ('Épargne', IN, 'EPARGNE')),
     ('FONDS_CAISSE', ('Fonds de caisse', IN, 'CAISSE')),
     ('ADHESION', ("Frais d'adhésion", IN, 'CAISSE')),
@@ -40,15 +40,15 @@ TRANSACTION_TYPES = OrderedDict([
     ('PROJET', ('Cotisation projet', IN, 'PROJET')),
     ('AUTRE_COTISATION', ('Autre cotisation', IN, 'CAISSE')),
     ('SANCTION', ('Sanction / amende', IN, 'CAISSE')),
-    ('ENCHERE', ("Mise d'enchère (retenue sur cagnotte)", IN, 'CAISSE')),
+    ('ENCHERE', ("Enchère (prise sur la cagnotte)", IN, 'CAISSE')),
     ('REMBOURSEMENT', ("Remboursement d'emprunt", IN, 'CAISSE')),
-    ('SORTIE_LOAN', ("Décaissement d'emprunt", OUT, 'CAISSE')),
+    ('SORTIE_LOAN', ("Prêt remis au membre", OUT, 'CAISSE')),
     ('BENEFICE_TONTINE', ('Cagnotte versée au bénéficiaire', OUT, 'TONTINE')),
     ('AIDE', ('Aide sociale versée', OUT, 'SECOURS')),
-    ('RETRAIT_EPARGNE', ("Restitution d'épargne", OUT, 'EPARGNE')),
+    ('RETRAIT_EPARGNE', ("Épargne rendue au membre", OUT, 'EPARGNE')),
     ('RESTITUTION_TONTINE', ("Avance de tontine rendue", OUT, 'TONTINE')),
-    ('PARTAGE', ('Part des bénéfices (fin d\'exercice)', OUT, 'CAISSE')),
-    ('DEPENSE', ('Dépense de fonctionnement', OUT, 'CAISSE')),
+    ('PARTAGE', ('Part des bénéfices (fin d\'année)', OUT, 'CAISSE')),
+    ('DEPENSE', ('Dépense de la tontine', OUT, 'CAISSE')),
 ])
 
 PAYMENT_MODES = OrderedDict([
@@ -64,7 +64,7 @@ MOBILE_MODES = {'ORANGE_MONEY', 'MTN_MOBILE', 'WAVE', 'MOOV_MONEY'}
 # Modes d'attribution de la cagnotte dans un cycle
 CYCLE_MODES = OrderedDict([
     ('TIRAGE', "Tirage au sort de l'ordre de passage"),
-    ('ENCHERE', 'Enchères à chaque tour (le plus offrant reçoit la cagnotte, sa mise va en caisse)'),
+    ('ENCHERE', 'Enchères à chaque tour (celui qui propose le plus reçoit la cagnotte ; ce qu’il propose va en caisse)'),
 ])
 
 # Écart entre deux tours selon la périodicité de la cotisation
@@ -89,32 +89,32 @@ FREQUENCIES = OrderedDict([
     ('BIMENSUEL', 'Tous les 15 jours'),
     ('MENSUEL', 'Chaque mois'),
     ('ANNUEL', 'Chaque année'),
-    ('LIBRE', 'Libre / volontaire'),
+    ('LIBRE', 'Quand on veut'),
 ])
 
 
 # Explication en langage simple de chaque type (formulaire de saisie, fiche membre)
 TYPE_HINTS = {
-    'TONTINE': "Part versée au cycle de tontine : elle est reversée en entier au bénéficiaire du tour.",
-    'PRESENCE': "Droit payé à chaque séance ; il alimente la caisse générale.",
-    'EPARGNE': "Argent mis de côté par le membre à titre personnel (« banque ») : il reste à lui "
-               "et lui est rendu en fin d'exercice. Ce n'est PAS le fonds de caisse.",
-    'FONDS_CAISSE': "Contribution obligatoire à la caisse générale (finance les prêts et le fonctionnement).",
+    'TONTINE': "Part de la tontine : elle est donnée en entier à celui qui bouffe ce tour.",
+    'PRESENCE': "Somme payée à chaque réunion ; elle va dans la caisse générale.",
+    'EPARGNE': "Argent que le membre met de côté pour lui-même (« banque ») : il reste à lui "
+               "et on le lui rend en fin d'année. Ce n'est PAS le fonds de caisse.",
+    'FONDS_CAISSE': "Somme obligatoire versée à la caisse générale (elle sert aux prêts et aux dépenses de la tontine).",
     'ADHESION': "Frais payés une seule fois à l'entrée dans la tontine.",
     'SECOURS': "Cotisation à la caisse de solidarité qui finance les aides (décès, maladie, naissance...).",
     'ACCUEIL': "Participation à la collation / l'accueil de la séance.",
-    'PROJET': "Cotisation pour un projet ou un investissement collectif.",
+    'PROJET': "Cotisation pour un projet commun.",
     'AUTRE_COTISATION': "Autre versement à la caisse générale.",
     'SANCTION': "Paiement d'une amende.",
-    'ENCHERE': "Mise de l'enchère retenue sur la cagnotte ; elle va en caisse.",
+    'ENCHERE': "Somme proposée à l'enchère, prise sur la cagnotte ; elle va en caisse.",
     'REMBOURSEMENT': "Remboursement d'un emprunt.",
-    'SORTIE_LOAN': "Argent prêté au membre (sortie de caisse).",
-    'BENEFICE_TONTINE': "Cagnotte du cycle versée au membre (sortie).",
-    'AIDE': "Aide sociale versée au membre par la caisse de secours (sortie).",
-    'RETRAIT_EPARGNE': "Épargne rendue au membre (sortie).",
-    'RESTITUTION_TONTINE': "Cotisation de tontine payée en trop, rendue au membre ou versée dans son épargne (sortie).",
-    'PARTAGE': "Part des bénéfices de fin d'exercice versée au membre (sortie).",
-    'DEPENSE': "Dépense de fonctionnement de la tontine (sortie).",
+    'SORTIE_LOAN': "Argent prêté au membre (sort de la caisse).",
+    'BENEFICE_TONTINE': "Cagnotte donnée au membre (sort de la caisse).",
+    'AIDE': "Aide donnée au membre par la caisse de secours (sort de la caisse).",
+    'RETRAIT_EPARGNE': "Épargne rendue au membre (sort de la caisse).",
+    'RESTITUTION_TONTINE': "Cotisation payée en trop, rendue au membre ou mise dans son épargne (sort de la caisse).",
+    'PARTAGE': "Part des bénéfices de fin d'année donnée au membre (sort de la caisse).",
+    'DEPENSE': "Dépense de la tontine (sort de la caisse).",
 }
 
 
@@ -157,9 +157,9 @@ def default_contribution_types(tontine):
         dict(name='Fonds de caisse', category='FONDS_CAISSE', amount=fonds, frequency='UNIQUE', is_mandatory=True,
              description="Versé une fois à l'entrée ; sert de fonds de roulement et de garantie."),
         dict(name="Frais d'adhésion", category='ADHESION', amount=Decimal('2000'), frequency='UNIQUE', is_mandatory=True,
-             description="Droit d'entrée non remboursable (carte, registre, frais de bureau)."),
+             description="Somme payée une fois pour entrer, qu'on ne rend pas (carte, cahier, frais du bureau)."),
         dict(name='Épargne', category='EPARGNE', amount=Decimal('0'), frequency='LIBRE', is_mandatory=False,
-             description="Montant libre déposé à la « banque » de la tontine ; restitué en fin d'exercice avec la part des intérêts."),
+             description="Somme libre mise à la « banque » de la tontine ; on vous la rend en fin d'année avec votre part des intérêts."),
         dict(name='Caisse de secours', category='SECOURS', amount=Decimal('1000'), frequency='MENSUEL', is_mandatory=True,
              description='Solidarité : décès, maladie, naissance, mariage.'),
         dict(name='Accueil / collation', category='ACCUEIL', amount=Decimal('500'), frequency='PAR_SEANCE', is_mandatory=False,

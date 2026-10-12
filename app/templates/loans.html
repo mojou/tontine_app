@@ -8,7 +8,7 @@
 
 <div class="fade-in">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h1><i class="fas fa-hand-holding-usd"></i> Gestion des prêts</h1>
+        <h1><i class="fas fa-hand-holding-usd"></i> Emprunts</h1>
         <div>
             <button type="button" class="btn btn-success" data-toggle="modal" data-target="#loanRequestModal" id="openLoanModalBtn">
                 <i class="fas fa-plus"></i> Demander un prêt
@@ -20,9 +20,9 @@
         <div class="card-body">
             <form method="GET" action="{{ url_for('loans') }}" class="form-inline justify-content-between">
                 <div class="form-group mb-2">
-                    <label for="status_filter" class="mr-2">Statut :</label>
+                    <label for="status_filter" class="mr-2">État :</label>
                     <select name="status" id="status_filter" class="form-control mr-3" onchange="this.form.submit()">
-                        <option value="">Tous les statuts</option>
+                        <option value="">Toutes les situations</option>
                         <option value="PENDING" {% if request.args.get('status') == 'PENDING' %}selected{% endif %}>En attente</option>
                         <option value="ACTIF" {% if request.args.get('status') == 'ACTIF' %}selected{% endif %}>Actif</option>
                         <option value="COMPLETED" {% if request.args.get('status') == 'COMPLETED' %}selected{% endif %}>Remboursé</option>
@@ -87,7 +87,7 @@
                             </th>
                             <th>
                                 <a class="text-dark d-block" href="{{ url_for('loans', sort='amount', order='asc' if current_sort == 'amount' and current_order == 'desc' else 'desc', status=request.args.get('status', ''), overdue=request.args.get('overdue', ''), search=request.args.get('search', '')) }}">
-                                    Montant Principal
+                                    Montant
                                     {% if current_sort == 'amount' %}
                                         <i class="fas fa-sort-{{ 'up' if current_order == 'asc' else 'down' }}"></i>
                                     {% else %}
@@ -95,12 +95,12 @@
                                     {% endif %}
                                 </a>
                             </th>
-                            <th>Intérêts</th>
-                            <th>Total à payer</th>
-                            <th>Début / Échéance</th>
+                            <th class="text-right d-none d-xl-table-cell">Intérêts</th>
+                            <th class="text-right">Reste à payer</th>
+                            <th class="d-none d-lg-table-cell">Début / Date limite</th>
                             <th>Avalistes</th>
-                            <th>Statut</th>
-                            <th>Pénalités Retard</th>
+                            <th>État</th>
+                            <th class="d-none d-xl-table-cell">Amendes de retard</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -119,16 +119,16 @@
                                     <span class="text-muted">Membre supprimé</span>
                                 {% endif %}
                             </td>
-                            <td><strong>{{ (loan.amount)|fcfa }}</strong> <small>FCFA</small></td>
-                            <td class="text-secondary">{{ (loan.interest)|fcfa }} <small>FCFA</small></td>
-                            <td class="text-primary font-weight-bold">{{ (loan.remaining_amount)|fcfa }} <small>FCFA</small></td>
-                            <td>
-                                <small class="d-block"><b>Du:</b> {{ loan.start_date.strftime('%d/%m/%Y') if loan.start_date else '-' }}</small>
-                                <small class="d-block"><b>Au:</b> {{ loan.end_date.strftime('%d/%m/%Y') if loan.end_date else '-' }}</small>
+                            <td class="text-right"><strong>{{ (loan.amount)|fcfa }}</strong> <small>F</small></td>
+                            <td class="text-secondary text-right d-none d-xl-table-cell">{{ (loan.interest)|fcfa }} <small>F</small></td>
+                            <td class="text-primary font-weight-bold text-right">{{ (loan.remaining_amount)|fcfa }} <small>F</small></td>
+                            <td class="d-none d-lg-table-cell nowrap">
+                                <small class="d-block"><b>Du</b> {{ loan.start_date.strftime('%d/%m/%y') if loan.start_date else '-' }}</small>
+                                <small class="d-block"><b>Au</b> {{ loan.end_date.strftime('%d/%m/%y') if loan.end_date else '-' }}</small>
                             </td>
                             {% set req = required_guarantors if loan.amount|float > guarantee_threshold else 0 %}
                             {% set accepted = loan.guarantors|selectattr('status', 'equalto', 'ACCEPTE')|list|length %}
-                            <td style="min-width: 150px">
+                            <td style="min-width: 110px">
                                 {% for g in loan.guarantors %}
                                     <span class="badge badge-{{ g.status_color }} d-inline-block mb-1" title="{{ g.status_display }}">{{ g.member.full_name }}</span>
                                 {% else %}
@@ -154,20 +154,23 @@
                                 {% elif loan.status == 'REJECTED' %}
                                     <span class="badge badge-secondary">Rejeté</span>
                                 {% endif %}
+                                {% if loan.is_overdue and loan.status == 'ACTIF' %}
+                                <small class="d-block d-xl-none text-danger mt-1">+{{ loan.overdue_days }} jours</small>
+                                {% endif %}
                             </td>
-                            <td>
+                            <td class="d-none d-xl-table-cell">
                                 {% if loan.is_overdue and loan.status == 'ACTIF' %}
                                     <span class="text-danger font-weight-bold">
                                         <i class="fas fa-clock"></i> +{{ loan.overdue_days }} jours
                                     </span>
                                     <small class="text-muted d-block" style="font-size: 75%;">
-                                        Pénalité cumulée: {{ (loan.overdue_days * 500)|fcfa }} FCFA
+                                        Amende accumulée : {{ (loan.overdue_days * 500)|fcfa }} FCFA
                                     </small>
                                 {% else %}
                                     <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="loan-actions">
                                 {% if current_user.role in ['PRESIDENT', 'TRESORIER', 'SECRETAIRE'] %}
                                     {% if loan.status == 'PENDING' %}
                                         {% if accepted >= req %}
@@ -355,7 +358,7 @@
                         
                         <div id="activeLoanWarning" class="alert alert-danger" style="display: none;">
                             <i class="fas fa-ban"></i> <strong>Règlement intérieur :</strong>
-                            <div id="activeLoanDetails" class="mt-1">Ce membre dispose déjà d'un encours de prêt actif. Le cumul est interdit.</div>
+                            <div id="activeLoanDetails" class="mt-1">Ce membre a déjà un emprunt pas encore remboursé. On ne peut pas avoir deux emprunts en même temps.</div>
                         </div>
                         
                         <div class="form-group">
@@ -392,7 +395,7 @@
                                 {% if required_guarantors %}
                                     {{ required_guarantors }} avaliste(s) exigé(s){% if guarantee_threshold > 0 %} au-delà de {{ (guarantee_threshold)|fcfa }} FCFA{% endif %}.
                                 {% else %}
-                                    Facultatif dans cette tontine.
+                                    Pas obligatoire dans cette tontine.
                                 {% endif %}
                                 Maintenez <kbd>Ctrl</kbd> pour en choisir plusieurs. Chacun devra accepter avant l'approbation du prêt.<br>
                                 Pour avaliser, un membre doit être à jour en réunion, ne pas avoir de dette d'emprunt et avoir une
@@ -401,7 +404,7 @@
                         </div>
                         
                         <div class="alert alert-info shadow-sm" id="modalPreview">
-                            <i class="fas fa-calculator"></i> Saisissez le montant et la durée pour voir le calcul des remboursements.
+                            <i class="fas fa-calculator"></i> Écrivez le montant et la durée pour voir combien il faudra rembourser.
                         </div>
                         
                         <div id="errorMessage" class="alert alert-danger" style="display: none;">
@@ -452,7 +455,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
     let isBlockedByPolicy = false;
-    const defaultPreviewText = `<i class="fas fa-calculator"></i> Saisissez le montant et la durée pour voir le calcul des remboursements.`;
+    const defaultPreviewText = `<i class="fas fa-calculator"></i> Écrivez le montant et la durée pour voir combien il faudra rembourser.`;
     
     $(document).ready(function() {
         $('#loanRequestModal').on('shown.bs.modal', function () {

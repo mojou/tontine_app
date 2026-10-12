@@ -146,6 +146,7 @@ def flash(message, category='message'):   # noqa: F811 - remplace flask.flash da
     _flask_flash(french_numbers(message), category)
 
 import secrets
+import hmac
 import json
 import uuid
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -155,11 +156,36 @@ from tenancy import set_current_tenant, tenant_bypass
 # USER LOADER
 # ============================================================
 
+@app.after_request
+def security_headers(response):
+    """En-têtes de protection du navigateur (clickjacking, type de contenu, référent, https)"""
+    h = response.headers
+    h.setdefault('X-Content-Type-Options', 'nosniff')
+    h.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    h.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    h.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+    h.setdefault('Content-Security-Policy', "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; "
+                                            "form-action 'self' https://pay.saspay.me")
+    if request.is_secure:
+        h.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    if current_user.is_authenticated:   # pages personnelles : jamais gardées en cache
+        h.setdefault('Cache-Control', 'no-store')
+    return response
+
+
 @login_manager.user_loader
 def load_user(user_id):
-    # Chargé avant que la tontine courante soit connue : pas de filtre ici
+    # Chargé avant que la tontine courante soit connue : pas de filtre ici.
+    # L'identifiant de session contient une empreinte du mot de passe : après un changement de mot de passe,
+    # les sessions ouvertes ailleurs (téléphone perdu, ordinateur partagé…) ne sont plus valables.
+    uid, _, fingerprint = str(user_id).partition(':')
+    if not uid.isdigit() or not fingerprint:
+        return None
     with tenant_bypass():
-        return db.session.get(User, int(user_id))
+        user = db.session.get(User, int(uid))
+    if user is None or not hmac.compare_digest(user.session_fingerprint, fingerprint):
+        return None
+    return user
 
 
 # ============================================================
@@ -167,7 +193,7 @@ def load_user(user_id):
 # ============================================================
 
 # Pages accessibles au super-admin (qui n'appartient à aucune tontine)
-SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine',
+SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine', 'change_password',
                         'superadmin_billing_payment', 'superadmin_billing_offer', 'superadmin_delete_tontine',
                         'superadmin_payment_currency',
                         'logout', 'static', 'index', 'tontine_home', 'login', 'signup', 'guide', 'administration_login',
@@ -187,6 +213,12 @@ def resolve_current_tenant():
         if request.endpoint not in SUPERADMIN_ENDPOINTS:
             return redirect(url_for('superadmin'))
         return None
+
+    if (current_user.must_change_password and app.config['FORCE_PASSWORD_CHANGE']
+            and request.endpoint not in ('change_password', 'logout', 'static')):
+        flash('Bienvenue ! Pour votre sécurité, choisissez votre propre mot de passe '
+              '(celui qui vous a été donné est provisoire).', 'warning')
+        return redirect(url_for('change_password'))
 
     tontine = db.session.get(Tontine, current_user.tontine_id) if current_user.tontine_id else None
     if not tontine or not tontine.is_active:
@@ -248,7 +280,9 @@ def _pending_aval_count():
     """Nombre de demandes d'aval qui attendent la réponse de l'utilisateur connecté"""
     if not g.get('tenant_id') or not current_user.is_authenticated or not current_user.member_id:
         return 0
-    return LoanGuarantor.query.filter_by(member_id=current_user.member_id, status='EN_ATTENTE').count()
+    return (LoanGuarantor.query.join(Loan, LoanGuarantor.loan_id == Loan.id)
+            .filter(LoanGuarantor.member_id == current_user.member_id, LoanGuarantor.status == 'EN_ATTENTE',
+                    Loan.status == 'PENDING').count())
 
 
 def _pending_reset_count():
@@ -398,6 +432,28 @@ with app.app_context():
 PLATFORM_LOGIN = '__plateforme__'
 
 
+def normalize_username(value):
+    """Identifiant tel qu'il est enregistré : sans espaces autour, en minuscules"""
+    return (value or '').strip().lower()
+
+
+def find_user(username, tontine_id=None, superadmin=False):
+    """Compte d'une tontine (ou super-admin) par identifiant, sans tenir compte des majuscules :
+    « Patrick », « patrick » et « PATRICK » désignent le même compte."""
+    query = User.query.filter(db.func.lower(User.username) == normalize_username(username))
+    if superadmin:
+        query = query.filter(User.role == 'SUPERADMIN', User.tontine_id.is_(None))
+    else:
+        query = query.filter(User.tontine_id == tontine_id)
+    return query.order_by(User.id).first()
+
+
+def password_matches(user, password):
+    """Mot de passe exact ; à défaut, sans les espaces ajoutés au début/à la fin par le clavier du téléphone"""
+    password = password or ''
+    return user.check_password(password) or (password.strip() != password and user.check_password(password.strip()))
+
+
 def _public_tontines():
     """Tontines actives et confirmées (une inscription en attente de confirmation reste invisible)"""
     return Tontine.query.filter(Tontine.is_active == True, Tontine.pending_confirmation.isnot(True))  # noqa: E712
@@ -438,7 +494,10 @@ def register():
             flash('Cet email est déjà utilisé. Veuillez vous connecter.', 'danger')
             return redirect(url_for('login', t=tontine.slug))
 
-        existing_user = User.query.filter_by(tontine_id=tontine.id, username=form.username.data).first()
+        if password_problems(form.password.data, form.username.data):
+            flash(password_error_message(password_problems(form.password.data, form.username.data)), 'danger')
+            return render_template('register.html', form=form, tontine=tontine)
+        existing_user = find_user(form.username.data, tontine.id)
         if existing_user:
             flash('Ce nom d\'utilisateur est déjà pris.', 'danger')
             return render_template('register.html', form=form, tontine=tontine, levels=levels)
@@ -470,7 +529,7 @@ def register():
 
         user = User(
             tontine_id=tontine.id,
-            username=form.username.data,
+            username=normalize_username(form.username.data),
             email=form.email.data,
             role='MEMBRE',
             member_id=member.id,
@@ -482,7 +541,7 @@ def register():
 
         log_activity(None, 'PUBLIC', f"Nouvelle inscription: {member.full_name}", request.remote_addr)
 
-        flash('Inscription réussie ! Votre dossier est en attente de validation.', 'success')
+        flash("Inscription envoyée ! Le bureau doit maintenant l'accepter.", 'success')
         return redirect(url_for('login', t=tontine.slug))
 
     return render_template('register.html', form=form, tontine=tontine, levels=levels)
@@ -554,18 +613,22 @@ def login():
         # « aucune tontine » du visiteur anonyme serait propagé à user.member.
         with tenant_bypass():
             if selected == PLATFORM_LOGIN:
-                user = User.query.filter_by(username=form.username.data, role='SUPERADMIN', tontine_id=None).first()
+                user = find_user(form.username.data, superadmin=True)
             else:
                 tontine = Tontine.query.filter_by(slug=selected, is_active=True).first()
                 if tontine:
-                    user = User.query.filter_by(tontine_id=tontine.id, username=form.username.data).first()
+                    user = find_user(form.username.data, tontine.id)
 
-        if user and user.check_password(form.password.data) and user.is_active:
+        if user and password_matches(user, form.password.data) and user.is_active:
             _clear_failures(attempt_key)
             if user.tontine and user.tontine.pending_confirmation:
                 flash(f"Confirmez d'abord votre adresse e-mail : un lien a été envoyé à {user.email}. Sans confirmation, "
                       f"la tontine est supprimée {app.config['EMAIL_CONFIRMATION_HOURS']} h après sa création.", 'warning')
                 return redirect(url_for('signup_pending', slug=user.tontine.slug))
+            if not (user.password_hash or '').startswith('scrypt:'):   # ancien chiffrement : remplacé par scrypt
+                user.set_password(form.password.data.strip() if not user.check_password(form.password.data)
+                                  else form.password.data)
+            session.clear()   # nouvelle session à chaque connexion (pas de « fixation de session »)
             login_user(user, remember=form.remember.data)
             user.last_login = utcnow()
             db.session.commit()
@@ -594,11 +657,41 @@ def administration_login():
     return redirect(url_for('login', t=PLATFORM_LOGIN))
 
 
+@app.route('/mot-de-passe', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Changer son mot de passe (obligatoire après un mot de passe provisoire)"""
+    forced = bool(current_user.must_change_password)
+    if request.method == 'POST':
+        current = request.form.get('current_password') or ''
+        new = request.form.get('new_password') or ''
+        if not password_matches(current_user, current):
+            flash('Mot de passe actuel incorrect.', 'danger')
+        elif password_problems(new, current_user.username):
+            flash(password_error_message(password_problems(new, current_user.username)), 'danger')
+        elif new != request.form.get('new_password_confirm'):
+            flash('Les deux nouveaux mots de passe ne correspondent pas.', 'danger')
+        elif current_user.check_password(new):
+            flash("Choisissez un mot de passe différent de l'actuel.", 'danger')
+        else:
+            user = current_user._get_current_object()
+            user.set_password(new)
+            user.must_change_password = False
+            db.session.commit()
+            log_activity(user.id, user.role, 'Mot de passe changé (les autres appareils sont déconnectés)', request.remote_addr)
+            session.clear()
+            login_user(user)   # cet appareil reste connecté avec la nouvelle empreinte
+            flash('Mot de passe changé. Vos autres appareils ont été déconnectés.', 'success')
+            return redirect(url_for('superadmin' if user.is_superadmin else 'dashboard'))
+    return render_template('change_password.html', forced=forced, min_length=app.config['PASSWORD_MIN_LENGTH'])
+
+
 @app.route('/logout')
 @login_required
 def logout():
     tontine = current_tontine()
     logout_user()
+    session.clear()
     flash('Vous avez été déconnecté.', 'info')
     if tontine:
         return redirect(url_for('tontine_home', slug=tontine.slug))
@@ -880,7 +973,7 @@ def member_detail(member_id):
     fund_summary = [
         ('Tontine (cycles)', member._sum_types(['TONTINE']), finance.type_hint('TONTINE')),
         ('Fonds de caisse', member._sum_types(['FONDS_CAISSE']), finance.type_hint('FONDS_CAISSE')),
-        ('Épargne personnelle (restituable)', member.savings_balance, finance.type_hint('EPARGNE')),
+        ('Épargne personnelle (on la lui rend)', member.savings_balance, finance.type_hint('EPARGNE')),
     ]
 
     return render_template('member_detail.html',
@@ -916,12 +1009,15 @@ def add_member():
         group_type = form.group_type.data
         position_in_group = form.position_in_group.data
         chosen_tontine_amount = form.chosen_tontine_amount.data
-        username = form.username.data
+        username = normalize_username(form.username.data)
         role = form.role.data
         password = form.password.data
         confirm_password = form.confirm_password.data
         
         # Vérification supplémentaire des mots de passe
+        if password_problems(password, username):
+            flash(password_error_message(password_problems(password, username)), 'danger')
+            return render_template('member_form.html', form=form, title="Ajouter un membre")
         if password != confirm_password:
             flash('Les mots de passe ne correspondent pas.', 'danger')
             return render_template('member_form.html', title="Ajouter un membre", form=form)
@@ -932,7 +1028,7 @@ def add_member():
             flash(f'L\'email "{email}" est déjà utilisé.', 'danger')
             return render_template('member_form.html', title="Ajouter un membre", form=form)
         
-        existing_user = User.query.filter_by(tontine_id=g.tenant_id, username=username).first()
+        existing_user = find_user(username, g.tenant_id)
         if existing_user:
             flash(f'Le nom d\'utilisateur "{username}" est déjà pris.', 'danger')
             return render_template('member_form.html', title="Ajouter un membre", form=form)
@@ -961,7 +1057,8 @@ def add_member():
         db.session.flush()
         
         user = User(tontine_id=g.tenant_id, username=username, email=email, role=role,
-                    member_id=member.id, is_active=True)
+                    member_id=member.id, is_active=True,
+                    must_change_password=app.config['FORCE_PASSWORD_CHANGE'])   # mot de passe provisoire
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -1026,7 +1123,7 @@ def delete_member(member_id):
     
     db.session.commit()
     log_activity(current_user.id, current_user.role, f"Désactivation membre: {member.full_name}", request.remote_addr)
-    flash('Membre désactivé avec succès !', 'success')
+    flash('Membre retiré de la liste. Ses paiements restent enregistrés.', 'success')
     return redirect(url_for('members'))
 
 @app.route('/members/<int:member_id>/activate', methods=['POST'])
@@ -1047,7 +1144,7 @@ def activate_member(member_id):
         log_activity(current_user.id, current_user.role, f"Activation membre: {member.full_name}", request.remote_addr)
         flash(f'Membre {member.full_name} activé avec succès !', 'success')
     else:
-        flash('Ce membre n\'est pas en attente de validation.', 'warning')
+        flash('Ce membre n\'attend pas d\'être accepté.', 'warning')
     
     return redirect(url_for('members'))
 
@@ -1072,10 +1169,10 @@ def update_status(member_id):
     if new_status and new_status in ['VERT', 'ORANGE', 'ROUGE']:
         member.tontine_status = new_status
         db.session.commit()
-        log_activity(current_user.id, current_user.role, f"Statut tontine de {member.full_name} -> {new_status}", request.remote_addr)
-        flash(f'Statut tontine de {member.full_name} mis à jour : {new_status}', 'success')
+        log_activity(current_user.id, current_user.role, f"Situation dans la tontine de {member.full_name} -> {new_status}", request.remote_addr)
+        flash(f'Situation dans la tontine de {member.full_name} mis à jour : {new_status}', 'success')
     else:
-        flash('Statut invalide.', 'danger')
+        flash('Situation inconnue.', 'danger')
     
     return redirect(url_for('member_detail', member_id=member_id))
 
@@ -1097,11 +1194,11 @@ def update_member_status(member_id):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'success': True, 'status': new_status})
         
-        flash(f'Statut de {member.full_name} mis à jour avec succès.', 'success')
+        flash(f'Situation de {member.full_name} modifiée.', 'success')
     else:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'success': False, 'message': 'Statut invalide'})
-        flash('Statut invalide.', 'danger')
+        flash('Situation inconnue.', 'danger')
     
     return redirect(url_for('member_detail', member_id=member_id))
 
@@ -1247,11 +1344,16 @@ def add_transaction():
     if form.validate_on_submit():
         if form.member_id.data == 0:
             flash('Veuillez sélectionner un membre valide.', 'danger')
-            return render_template('transaction_form.html', form=form, title="Ajouter une transaction", rubriques=rubriques)
+            return render_template('transaction_form.html', form=form, title="Ajouter un paiement", rubriques=rubriques)
 
         rubrique = _selected_rubrique()
+        if (rubrique.category if rubrique else form.type.data) == 'RETRAIT_EPARGNE':
+            problem = savings_withdrawal_problem(db.session.get(Member, form.member_id.data), form.amount.data)
+            if problem:
+                flash(problem, 'danger')
+                return render_template('transaction_form.html', form=form, title="Ajouter un paiement", rubriques=rubriques)
         if _is_recent_duplicate(form.member_id.data, rubrique.category if rubrique else form.type.data, form.amount.data):
-            flash("Cette opération vient déjà d'être enregistrée (double clic ?). Vérifiez la liste des transactions.", 'warning')
+            flash("Ce paiement vient déjà d'être enregistré (double clic ?). Vérifiez la liste des paiements.", 'warning')
             return redirect(url_for('transactions'))
         transaction = Transaction(
             member_id=form.member_id.data,
@@ -1302,21 +1404,21 @@ def add_transaction():
                 flash(f"{_fmt(released)} FCFA reversés au bénéficiaire qui avait reçu une cagnotte réduite.", 'info')
         log_activity(current_user.id, current_user.role, f"Ajout transaction : {finance.type_label(transaction.type)} "
                      f"{transaction.amount:,.0f} FCFA", request.remote_addr)
-        flash('Transaction enregistrée avec succès !', 'success')
+        flash('Paiement enregistré.', 'success')
         return redirect(url_for('transactions'))
 
-    return render_template('transaction_form.html', form=form, title="Ajouter une transaction", rubriques=rubriques)
+    return render_template('transaction_form.html', form=form, title="Ajouter un paiement", rubriques=rubriques)
 
 
 @app.route('/transactions/<int:transaction_id>/edit', methods=['GET', 'POST'])
 @login_required
 @role_required(['TRESORIER', 'PRESIDENT'])
 def edit_transaction(transaction_id):
-    """Modifier une transaction existante"""
+    """Modifier un paiement existante"""
     transaction = db.get_or_404(Transaction, transaction_id)
     if transaction.is_system:
-        flash(f"Cette écriture est générée par le module « {transaction.source_module} » : "
-              "elle ne se modifie pas ici.", 'danger')
+        flash(f"Ce paiement a été créé par la page « {transaction.source_module} » : "
+              "on le modifie depuis cette page, pas ici.", 'danger')
         return redirect(url_for('transactions'))
     form = TransactionForm(obj=transaction)
     form.type.choices = _transaction_type_choices(transaction.type)
@@ -1327,9 +1429,18 @@ def edit_transaction(transaction_id):
     form.member_id.choices = [(0, 'Choisir un membre')] + [(m.id, m.full_name) for m in Member.query.filter_by(is_active=True).order_by(Member.last_name).all()]
     
     if form.validate_on_submit():
+        rubrique = _selected_rubrique()
+        if (rubrique.category if rubrique else form.type.data) == 'RETRAIT_EPARGNE':
+            # L'ancien montant de ce retrait est rendu à l'épargne avant de contrôler le nouveau
+            same = transaction.type == 'RETRAIT_EPARGNE' and transaction.member_id == form.member_id.data
+            problem = savings_withdrawal_problem(db.session.get(Member, form.member_id.data), form.amount.data,
+                                                 transaction.amount if same else 0)
+            if problem:
+                flash(problem, 'danger')
+                return render_template('transaction_form.html', form=form, transaction=transaction,
+                                       title="Modifier un paiement", rubriques=rubriques)
         try:
             transaction.member_id = form.member_id.data
-            rubrique = _selected_rubrique()
             transaction.type = rubrique.category if rubrique else form.type.data
             transaction.contribution_type_id = rubrique.id if rubrique else None
             transaction.amount = Decimal(str(form.amount.data))
@@ -1340,14 +1451,14 @@ def edit_transaction(transaction_id):
             db.session.commit()
             
             log_activity(current_user.id, current_user.role, f"Modification transaction #{transaction_id}", request.remote_addr)
-            flash('Transaction modifiée avec succès !', 'success')
+            flash('Paiement modifié.', 'success')
             return redirect(url_for('transactions'))
             
         except Exception as e:
             db.session.rollback()
             flash(f'Erreur lors de la modification : {str(e)}', 'danger')
     
-    return render_template('transaction_form.html', form=form, transaction=transaction, title="Modifier une transaction",
+    return render_template('transaction_form.html', form=form, transaction=transaction, title="Modifier un paiement",
                            rubriques=rubriques)
 
 
@@ -1358,8 +1469,8 @@ def delete_transaction(transaction_id):
     """Supprimer une transaction"""
     transaction = db.get_or_404(Transaction, transaction_id)
     if transaction.is_system:
-        flash(f"Cette écriture est générée par le module « {transaction.source_module} » : "
-              "la supprimer ici fausserait les soldes. Corrigez-la depuis ce module.", 'danger')
+        flash(f"Ce paiement a été créé par la page « {transaction.source_module} » : "
+              "le supprimer ici fausserait les comptes. Corrigez-le depuis cette page.", 'danger')
         return redirect(url_for('transactions'))
     
     try:
@@ -1367,7 +1478,7 @@ def delete_transaction(transaction_id):
         db.session.commit()
         
         log_activity(current_user.id, current_user.role, f"Suppression transaction #{transaction_id}", request.remote_addr)
-        flash('Transaction supprimée avec succès !', 'success')
+        flash('Paiement supprimé.', 'success')
         
     except Exception as e:
         db.session.rollback()
@@ -1384,7 +1495,7 @@ def view_transaction(transaction_id):
     
     # Vérifier les droits d'accès
     if not current_user.is_admin() and transaction.member_id != current_user.member_id:
-        flash('Vous n\'avez pas accès à cette transaction.', 'danger')
+        flash('Vous ne pouvez pas voir ce paiement.', 'danger')
         return redirect(url_for('transactions'))
     
     return render_template('transaction_detail.html', transaction=transaction)
@@ -1498,7 +1609,7 @@ def loan_request():
     if hasattr(member, 'is_eligible_for_loan'):
         is_eligible, reason = member.is_eligible_for_loan(amount)
         if not is_eligible:
-            flash(f"Échec d'éligibilité : {reason}", "danger")
+            flash(f"Emprunt refusé : {reason}", "danger")
             return redirect(url_for('loans'))
     
     # Calculer les intérêts
@@ -1552,7 +1663,7 @@ def loan_request():
         names = ', '.join(g.full_name for g in guarantors)
         flash(f"Demande d'emprunt de {amount:,.0f} FCFA envoyée. Elle attend l'accord de vos avalistes : {names}.", "success")
     else:
-        flash(f"Demande d'emprunt de {amount:,.0f} FCFA soumise avec succès.", "success")
+        flash(f"Demande d'emprunt de {amount:,.0f} FCFA envoyée.", "success")
     return redirect(url_for('loans'))
 
 
@@ -1570,12 +1681,23 @@ def approve_loan(loan_id):
         return redirect(url_for('loans'))
 
     required = required_guarantors_for(loan.amount)
-    accepted = len([g for g in loan.guarantors if g.status == 'ACCEPTE'])
-    if accepted < required:
-        flash(f"Impossible d'approuver : {accepted}/{required} aval(s) accordé(s). "
+    accepted = [g for g in loan.guarantors if g.status == 'ACCEPTE']
+    if len(accepted) < required:
+        flash(f"Impossible d'approuver : {len(accepted)}/{required} aval(s) accordé(s). "
               "Attendez la réponse des avalistes ou demandez-en un autre.", "danger")
         return redirect(url_for('loans'))
+    # La situation d'un avaliste a pu changer depuis son accord (amende, emprunt, retrait d'épargne...)
+    for g in accepted:
+        reasons = aval_problems(g.member, loan.amount, ignore_guarantee_id=g.id)
+        if reasons:
+            flash(f"Impossible d'approuver : l'avaliste {g.member.full_name} ne remplit plus les conditions "
+                  f"({' ; '.join(reasons)}). Attendez qu'il se mette à jour, ou rejetez la demande.", "danger")
+            return redirect(url_for('loans'))
 
+    # Les avalistes sollicités qui n'ont pas répondu ne sont plus engagés
+    for g in loan.guarantors:
+        if g.status == 'EN_ATTENTE':
+            g.status = 'ANNULE'
     loan.status = 'ACTIF'
     loan.approval_date = date.today()
     loan.approved_by = current_user.id
@@ -1609,7 +1731,7 @@ def reject_loan(loan_id):
     loan = db.get_or_404(Loan, loan_id)
     
     if loan.status != 'PENDING':
-        flash("Impossible de rejeter un emprunt déjà traité.", "warning")
+        flash("Cet emprunt a déjà été accepté ou refusé.", "warning")
         return redirect(url_for('loans'))
     
     rejection_reason = request.form.get('rejection_reason', 'Refusé par le bureau')
@@ -1644,7 +1766,7 @@ def repay_loan(loan_id):
     # Traitement POST
     payment_amount = _parse_decimal(request.form.get('amount') or '0', 0, 1_000_000_000)
     if not payment_amount or payment_amount <= 0:
-        flash('Veuillez entrer un montant de remboursement valide.', 'danger')
+        flash('Écrivez un montant de remboursement correct.', 'danger')
         return redirect(url_for('loans'))
     expected_paid = _parse_decimal(request.form.get('expected_paid'), 0, 1_000_000_000_000) if request.form.get('expected_paid') else None
     if expected_paid is not None and expected_paid != Decimal(str(loan.amount_paid or 0)):
@@ -1653,7 +1775,7 @@ def repay_loan(loan_id):
     remaining = loan.total_amount - loan.amount_paid
     
     if payment_amount > remaining:
-        flash(f"Le montant saisi dépasse le solde restant dû ({remaining:,.0f} FCFA).", "danger")
+        flash(f"Le montant écrit dépasse ce qui reste à rembourser ({remaining:,.0f} FCFA).", "danger")
         return redirect(url_for('loans'))
     
     loan.amount_paid += payment_amount
@@ -1838,7 +1960,7 @@ def pay_sanction(sanction_id):
     db.session.commit()
     
     log_activity(current_user.id, current_user.role, f"Paiement sanction #{sanction.id} - {sanction.amount} FCFA", request.remote_addr)
-    flash(f"Le paiement de l'amende de {sanction.amount:,.0f} FCFA a été encaissé.", "success")
+    flash(f"L'amende de {sanction.amount:,.0f} FCFA est payée.", "success")
     return redirect(url_for('sanctions'))
 
 
@@ -2370,6 +2492,9 @@ def add_tontine_cycle():
     flash(f"{cycle.display_name} créé : {total_parts} mains, cagnotte de {cycle.total_amount:,.0f} FCFA par tour.", 'success')
 
     if mode == 'TIRAGE' and f.get('draw_now') == 'on':
+        if tontine.draw_is_manual:
+            flash("Écrivez maintenant le numéro de passage de chaque main, comme tiré en réunion.", 'info')
+            return redirect(url_for('tirage_cycle', cycle_id=cycle.id))
         draw = perform_draw(cycle, 'Tirage à la création du cycle')
         return redirect(url_for('tirage_cycle', cycle_id=cycle.id, reveal=draw.id))
     return redirect(url_for('tontine_cycle_detail', cycle_id=cycle.id))
@@ -2536,22 +2661,22 @@ def cycle_next_steps(cycle, contrib):
                                                  TontineCycleDetail.cycle_number > cycle.cycle_number).first()
     late_and_advance = contrib['late_total'] + contrib['advance_total']
     return [
-        {'done': late_and_advance == 0, 'title': 'Solder les cotisations du cycle',
+        {'done': late_and_advance == 0, 'title': 'Finir de payer les cotisations du cycle',
          'detail': 'Tout le monde est à jour.' if late_and_advance == 0 else
-         f"{_fmt(contrib['late_total'])} FCFA en retard et {_fmt(contrib['advance_total'])} FCFA d'avance à régulariser "
+         f"{_fmt(contrib['late_total'])} FCFA en retard et {_fmt(contrib['advance_total'])} FCFA payés en avance à corriger "
          "(bouton « Régulariser » dans l'état des cotisations).",
          'url': '#etatCotisations', 'link': "Voir l'état des cotisations"},
         {'done': fund == 0, 'title': 'Vérifier que la caisse du cycle est à 0',
-         'detail': 'Tout ce qui est entré a été reversé aux bénéficiaires.' if fund == 0 else
-         f"Solde de {_fmt(fund)} FCFA : " + ('des cotisations ont été versées sans être encaissées.' if fund < 0
-                                            else "de l'argent reste à reverser ou à rendre."),
+         'detail': "Tout l'argent reçu a été donné aux bénéficiaires." if fund == 0 else
+         f"Il reste {_fmt(fund)} FCFA : " + ('des cagnottes ont été données sans que les cotisations soient reçues.' if fund < 0
+                                            else "de l'argent reste à donner ou à rendre."),
          'url': '#etatCotisations', 'link': 'Régulariser'},
-        {'done': fines == 0, 'title': 'Encaisser les amendes des participants',
+        {'done': fines == 0, 'title': 'Faire payer les amendes des participants',
          'detail': 'Aucune amende en attente.' if fines == 0 else f"{_fmt(fines)} FCFA d'amendes encore à payer.",
          'url': url_for('sanctions'), 'link': 'Voir les sanctions'},
         {'done': next_cycle is not None, 'title': 'Lancer le cycle suivant',
          'detail': f"{next_cycle.display_name} a été créé." if next_cycle else
-         'Même niveau ou un autre ; les mains peuvent changer et de nouveaux membres peuvent entrer. Faites ensuite le tirage.',
+         'Même montant ou un autre ; chacun peut changer son nombre de mains et de nouveaux membres peuvent entrer. Faites ensuite le tirage.',
          'url': url_for('tontine_cycle_detail', cycle_id=next_cycle.id) if next_cycle else url_for('add_tontine_cycle'),
          'link': 'Ouvrir le nouveau cycle' if next_cycle else 'Nouveau cycle'},
     ]
@@ -2605,7 +2730,7 @@ def register_benefit(cycle_id):
             abort(404)
         back = redirect(url_for('seance_detail', seance_id=seance.id) + '#cagnottes')
         if seance.is_closed:
-            flash('Cette séance est clôturée : rouvrez-la pour verser une cagnotte.', 'warning')
+            flash('Cette séance est fermée : rouvrez-la pour donner une cagnotte.', 'warning')
             return back
         if f'c{cycle.id}' not in (seance.columns or '').split(','):
             flash("Ce cycle ne fait pas partie de cette séance.", 'danger')
@@ -3086,7 +3211,7 @@ def aid_eligibility(member, tontine):
     if rules['require_secours']:
         ok, paid, expected = secours_situation(member)
         checks.append((ok, 'À jour de la caisse de secours', f"{paid:,.0f} / {expected:,.0f} FCFA".replace(',', ' ')))
-    checks.append((member.tontine_status != 'ROUGE', 'Pas en statut rouge (suspendu)',
+    checks.append((member.tontine_status != 'ROUGE', 'Pas en rouge (suspendu)',
                    {'VERT': 'en règle', 'ORANGE': 'avertissement', 'ROUGE': 'suspendu'}.get(member.tontine_status, 'en règle')))
     return checks
 
@@ -3191,9 +3316,9 @@ def request_aide():
 
     file = request.files.get('document')
     if aid_type.requires_document and not (file and file.filename):
-        problems.append('Justificatif obligatoire pour cet événement (photo ou PDF).')
+        problems.append('Preuve obligatoire pour cet événement (photo ou PDF).')
     elif file and file.filename and file.filename.rsplit('.', 1)[-1].lower() not in DOCUMENT_EXTENSIONS:
-        problems.append('Justificatif : formats acceptés PDF, JPG, PNG, WEBP.')
+        problems.append('Preuve : seulement une photo (JPG, PNG, WEBP) ou un PDF.')
 
     unmet = [label for ok, label, _ in aid_eligibility(member, tontine) if not ok]
     derogation = (request.form.get('derogation') or '').strip()
@@ -3636,6 +3761,44 @@ def perform_draw(cycle, notes=None):
     return draw
 
 
+def read_manual_order(cycle, form):
+    """Numéros de passage saisis pour les mains pas encore servies.
+    Retourne ({participant_id: position}, erreurs). Chaque numéro libre doit être donné une seule fois."""
+    remaining = cycle.remaining_participants
+    first = cycle.beneficiaries_count + 1
+    last = cycle.beneficiaries_count + len(remaining)
+    order, errors, seen = {}, [], {}
+    for p in remaining:
+        raw = (form.get(f'pos_{p.id}') or '').strip()
+        if not raw:
+            errors.append(f"Numéro manquant pour {p.label}.")
+            continue
+        if not raw.isdigit() or not first <= int(raw) <= last:
+            errors.append(f"{p.label} : le numéro doit être entre {first} et {last}.")
+            continue
+        n = int(raw)
+        if n in seen:
+            errors.append(f"Le numéro {n} est donné deux fois ({seen[n]} et {p.label}).")
+            continue
+        seen[n] = p.label
+        order[p.id] = n
+    return order, errors
+
+
+def save_manual_order(cycle, order, notes=None):
+    """Enregistre l'ordre de passage saisi à la main, comme un tirage (visible dans l'historique)"""
+    draw = TontineDraw(cycle_id=cycle.id, drawn_by=current_user.id, is_manual=True,
+                       notes=(notes or 'Tirage fait en réunion, ordre saisi à la main')[:255])
+    for p in sorted(cycle.remaining_participants, key=lambda x: order[x.id]):
+        p.position = order[p.id]
+        draw.results.append(TontineDrawResult(member_id=p.member_id, position=p.position))
+    db.session.add(draw)
+    db.session.commit()
+    log_activity(current_user.id, current_user.role,
+                 f"Ordre de passage saisi à la main {cycle.display_name} ({len(order)} mains)", request.remote_addr)
+    return draw
+
+
 @app.route('/tirages')
 @login_required
 def tirages():
@@ -3663,17 +3826,35 @@ def tirage_cycle(cycle_id):
         if len(cycle.remaining_participants) < 2:
             flash('Il faut au moins deux mains restantes pour faire un tirage.', 'warning')
             return redirect(url_for('tirage_cycle', cycle_id=cycle.id))
-        draw = perform_draw(cycle, (request.form.get('notes') or '').strip())
+        notes = (request.form.get('notes') or '').strip()
+        # Le mode choisi dans les Paramètres décide : pas de tirage par l'application si la réunion tire elle-même
+        if current_tontine().draw_is_manual:
+            order, errors = read_manual_order(cycle, request.form)
+            if errors:
+                for e in errors:
+                    flash(e, 'danger')
+                return _tirage_page(cycle, can_draw, entered=request.form)
+            save_manual_order(cycle, order, notes)
+            flash("Ordre de passage enregistré. Chaque membre peut le voir dans la tontine.", 'success')
+            return redirect(url_for('tirage_cycle', cycle_id=cycle.id))
+        draw = perform_draw(cycle, notes)
         return redirect(url_for('tirage_cycle', cycle_id=cycle.id, reveal=draw.id))
 
+    return _tirage_page(cycle, can_draw)
+
+
+def _tirage_page(cycle, can_draw, entered=None):
     draws = cycle.draws.order_by(TontineDraw.drawn_at.desc()).all()
     reveal_draw = None
     reveal_id = request.args.get('reveal', type=int)
     if reveal_id:
         reveal_draw = TontineDraw.query.filter_by(id=reveal_id, cycle_id=cycle.id).first()
     beneficiaries = CycleBeneficiary.query.filter_by(cycle_id=cycle.id).order_by(CycleBeneficiary.position).all()
-    return render_template('tirage.html', cycle=cycle, remaining=cycle.remaining_participants, draws=draws,
-                           reveal_draw=reveal_draw, beneficiaries=beneficiaries, can_draw=can_draw)
+    remaining = cycle.remaining_participants
+    return render_template('tirage.html', cycle=cycle, remaining=remaining, draws=draws,
+                           reveal_draw=reveal_draw, beneficiaries=beneficiaries, can_draw=can_draw,
+                           manual=current_tontine().draw_is_manual, entered=entered or {},
+                           first_pos=cycle.beneficiaries_count + 1, last_pos=cycle.beneficiaries_count + len(remaining))
 
 
 # ============================================================
@@ -3812,7 +3993,7 @@ def aval_standing(member, ignore_guarantee_id=None):
     if not member.is_active or member.status != 'ACTIF':
         problems.append("n'est pas un membre actif")
     if member.tontine_status == 'ROUGE':
-        problems.append("est en statut rouge")
+        problems.append("est en rouge (suspendu)")
     pending_fines = member.total_sanctions_pending
     if pending_fines > 0:
         problems.append(f"n'est pas à jour : {_fmt(pending_fines)} FCFA d'amendes impayées")
@@ -3831,13 +4012,45 @@ def aval_standing(member, ignore_guarantee_id=None):
     if member.unsettled_guarantor_debts:
         problems.append("doit encore rembourser un avaliste qui a payé pour lui")
 
+    available = max(member.savings_balance - committed_savings(member, ignore_guarantee_id), Decimal('0'))
+    return problems, available
+
+
+def _guarantee_in_force(g):
+    """Aval qui engage encore l'épargne : demande en attente sur une demande d'emprunt, ou aval accordé/appelé
+    sur un prêt non soldé (une demande restée sans réponse sur un prêt déjà décidé n'engage plus rien)"""
+    if not g.loan:
+        return False
+    if g.status == 'EN_ATTENTE':
+        return g.loan.status == 'PENDING'
+    return g.status in ('ACCEPTE', 'APPELE') and g.loan.status in _OPEN_LOAN_STATUSES
+
+
+def committed_savings(member, ignore_guarantee_id=None):
+    """Épargne bloquée par les avals en cours (le tiers de chaque emprunt avalisé)"""
     committed = Decimal('0')
     for g in LoanGuarantor.query.filter(LoanGuarantor.member_id == member.id,
                                         LoanGuarantor.status.in_(['EN_ATTENTE', 'ACCEPTE', 'APPELE'])).all():
-        if g.id != ignore_guarantee_id and g.loan and g.loan.status in _OPEN_LOAN_STATUSES:
+        if g.id != ignore_guarantee_id and _guarantee_in_force(g):
             committed += Decimal(str(g.loan.amount)) / GUARANTEE_SAVINGS_RATIO
-    available = max(member.savings_balance - committed, Decimal('0'))
-    return problems, available
+    return committed.quantize(Decimal('1'))
+
+
+def savings_withdrawal_problem(member, amount, already_counted=Decimal('0')):
+    """Message si le retrait d'épargne dépasse ce que le membre peut reprendre (vide = autorisé).
+    `already_counted` : montant d'un retrait existant qu'on est en train de modifier."""
+    if member is None:
+        return None
+    savings = member.savings_balance + Decimal(str(already_counted or 0))
+    committed = committed_savings(member)
+    free = max(savings - committed, Decimal('0'))
+    if Decimal(str(amount)) <= free:
+        return None
+    if committed > 0:
+        return (f"Retrait refusé : {member.full_name} a {_fmt(savings)} FCFA d'épargne, dont {_fmt(min(committed, savings))} FCFA "
+                f"bloqués comme avaliste (le tiers des emprunts qu'il garantit). Il peut reprendre au plus {_fmt(free)} FCFA "
+                "jusqu'au remboursement de ces emprunts.")
+    return f"Retrait refusé : {member.full_name} n'a que {_fmt(savings)} FCFA d'épargne."
 
 
 def aval_problems(member, loan_amount, ignore_guarantee_id=None):
@@ -4146,7 +4359,7 @@ def _rubrique_from_form(rubrique=None):
             category='TONTINE', amount=amount, is_active=True).first():
         errors.append(f"Le niveau {amount:,.0f} FCFA existe déjà.".replace(',', ' '))
     if frequency not in finance.FREQUENCIES:
-        errors.append('Périodicité invalide.')
+        errors.append('Quand payer invalide.')
     if amount is None:
         errors.append('Montant invalide.')
     late_fine = None
@@ -4184,7 +4397,7 @@ def add_rubrique():
     db.session.add(rubrique)
     db.session.commit()
     log_activity(current_user.id, current_user.role, f"Création rubrique de cotisation « {rubrique.name} »", request.remote_addr)
-    flash(f"Rubrique « {rubrique.name} » créée.", 'success')
+    flash(f"Cotisation « {rubrique.name} » créée.", 'success')
     return redirect(_rubriques_back())
 
 
@@ -4196,7 +4409,7 @@ def update_rubrique(rubrique_id):
     if request.form.get('action') == 'toggle':
         rubrique.is_active = not rubrique.is_active
         db.session.commit()
-        flash(f"Rubrique « {rubrique.name} » {'réactivée' if rubrique.is_active else 'désactivée'}.", 'success')
+        flash(f"Cotisation « {rubrique.name} » {'remise en service' if rubrique.is_active else 'arrêtée'}.", 'success')
         return redirect(_rubriques_back())
     _, errors = _rubrique_from_form(rubrique)
     if errors:
@@ -4206,7 +4419,7 @@ def update_rubrique(rubrique_id):
         return redirect(_rubriques_back())
     db.session.commit()
     log_activity(current_user.id, current_user.role, f"Modification rubrique « {rubrique.name} »", request.remote_addr)
-    flash(f"Rubrique « {rubrique.name} » mise à jour.", 'success')
+    flash(f"Cotisation « {rubrique.name} » modifiée.", 'success')
     return redirect(_rubriques_back())
 
 
@@ -4299,7 +4512,7 @@ def add_seance():
         elif raw[:1] == 'c' and raw[1:].isdigit() and TontineCycleDetail.query.filter_by(id=int(raw[1:])).first():
             keys.append(raw)
     if not keys:
-        flash('Choisissez au moins une cotisation à encaisser pendant la séance.', 'danger')
+        flash('Choisissez au moins une cotisation à recevoir pendant la séance.', 'danger')
         return redirect(url_for('seances'))
     seance = Seance(date=seance_date, title=(request.form.get('title') or '').strip()[:120] or None,
                     columns=','.join(keys)[:500], created_by=current_user.id)
@@ -4335,7 +4548,7 @@ def seance_detail(seance_id):
         if current_user.role not in SEANCE_MANAGERS:
             abort(403)
         if seance.is_closed:
-            flash('Cette séance est clôturée.', 'warning')
+            flash('Cette séance est fermée.', 'warning')
             return redirect(url_for('seance_detail', seance_id=seance.id))
         payment_mode = _payment_mode_from_form()
         created, total = 0, Decimal('0')
@@ -4505,8 +4718,8 @@ def close_seance(seance_id):
         total = sum((f['amount'] for f in fines), Decimal('0'))
         log_activity(current_user.id, current_user.role,
                      f"Clôture {seance.display_name} : {len(fines)} amende(s) de retard, {_fmt(total)} FCFA", request.remote_addr)
-        flash(f"Séance clôturée. {len(fines)} amende(s) de retard infligée(s) pour {_fmt(total)} FCFA."
-              if fines else 'Séance clôturée. Aucun retard de cotisation.', 'success')
+        flash(f"Séance fermée. {len(fines)} amende(s) de retard infligée(s) pour {_fmt(total)} FCFA."
+              if fines else 'Séance fermée. Aucun retard de cotisation.', 'success')
         return back
     # Réouverture : les amendes automatiques non payées sont annulées (recalculées à la prochaine clôture)
     cancelled = Sanction.query.filter(Sanction.origin_key.like(f"seance{seance.id}:%"), Sanction.status == 'PENDING').all()
@@ -4577,10 +4790,10 @@ def exercise():
         if current_user.role not in ('PRESIDENT', 'TRESORIER'):
             abort(403)
         if closure:
-            flash(f"L'exercice {year} est déjà clôturé.", 'warning')
+            flash(f"L'année {year} est déjà fermée.", 'warning')
             return redirect(url_for('exercise', year=year))
         if not preview['savers']:
-            flash("Aucun membre n'a d'épargne à restituer.", 'warning')
+            flash("Aucun membre n'a d'épargne à rendre.", 'warning')
             return redirect(url_for('exercise', year=year))
         if preview['distributed'] > max(preview['caisse_balance'], Decimal('0')):
             flash(f"La caisse générale ({preview['caisse_balance']:,.0f} FCFA) ne suffit pas pour distribuer "
@@ -4603,7 +4816,7 @@ def exercise():
         log_activity(current_user.id, current_user.role,
                      f"Clôture exercice {year} : épargne {preview['total_savings']:,.0f}, bénéfices {preview['distributed']:,.0f} FCFA",
                      request.remote_addr)
-        flash(f"Exercice {year} clôturé : {len(preview['savers'])} membre(s) remboursé(s).", 'success')
+        flash(f"Année {year} fermée : {len(preview['savers'])} membre(s) remboursé(s).", 'success')
         return redirect(url_for('exercise', year=year))
 
     years = list(range(date.today().year, date.today().year - 5, -1))
@@ -4653,6 +4866,24 @@ def cycle_penalty_settings():
     log_activity(current_user.id, current_user.role, f"Amende de retard au versement de la cagnotte : {label}", request.remote_addr)
     flash(f"Règle enregistrée : {label} pour une part non payée au versement de la cagnotte.", 'success')
     return redirect(url_for('tontine_settings') + '#amende-cycle')
+
+
+@app.route('/parametres/tirage', methods=['POST'])
+@login_required
+@president_required
+def draw_mode_settings():
+    """Comment l'ordre de passage est décidé : tirage par l'application, ou tirage en réunion saisi à la main"""
+    tontine = current_tontine()
+    mode = request.form.get('draw_mode')
+    if mode not in ('AUTO', 'MANUEL'):
+        abort(400)
+    tontine.draw_mode = mode
+    db.session.commit()
+    label = ("tirage fait en réunion, ordre saisi à la main" if mode == 'MANUEL'
+             else "tirage au sort fait par l'application")
+    log_activity(current_user.id, current_user.role, f"Mode de tirage : {label}", request.remote_addr)
+    flash(f"Règle enregistrée : {label}.", 'success')
+    return redirect(url_for('tontine_settings') + '#tirage')
 
 
 @app.route('/parametres', methods=['GET', 'POST'])
@@ -4778,7 +5009,7 @@ def create_tontine_with_president(form):
     Retourne (tontine, user, erreurs). Ne commite pas si erreurs."""
     name = (form.get('name') or '').strip()
     slug = (form.get('slug') or '').strip().lower()
-    username = (form.get('username') or '').strip()
+    username = normalize_username(form.get('username'))
     password = form.get('password') or ''
     first_name = (form.get('first_name') or '').strip()
     last_name = (form.get('last_name') or '').strip()
@@ -4802,8 +5033,8 @@ def create_tontine_with_president(form):
         errors.append('Adresse email invalide.')
     if not re.match(r'^[A-Za-z0-9_.-]{3,80}$', username or ''):
         errors.append("L'identifiant doit faire au moins 3 caractères (lettres, chiffres, . _ -).")
-    if len(password) < 8:
-        errors.append('Le mot de passe doit contenir au moins 8 caractères.')
+    if password_problems(password, username):
+        errors.append(password_error_message(password_problems(password, username)))
     if 'password_confirm' in form and form.get('password_confirm') != password:
         errors.append('Les deux mots de passe ne correspondent pas.')
     if errors:
@@ -4860,6 +5091,8 @@ def superadmin_add_tontine():
         for e in errors:
             flash(e, 'danger')
         return _superadmin_page(request.form)
+    user.must_change_password = app.config['FORCE_PASSWORD_CHANGE']   # mot de passe provisoire donné par l'admin
+    db.session.commit()
 
     log_activity(current_user.id, current_user.role, f"Création tontine « {tontine.name} » ({tontine.slug})", request.remote_addr)
     flash(f"Tontine « {tontine.name} » créée. Le président peut se connecter avec l'identifiant « {user.username} ».", 'success')
@@ -5523,8 +5756,35 @@ def whatsapp_url(phone, text):
     return f"https://wa.me/?text={quote(text)}"
 
 
+COMMON_PASSWORDS = {'password', 'motdepasse', 'azerty123', 'qwerty123', '12345678', '123456789', 'password1',
+                    'motdepasse1', 'azertyuiop', 'tontine123', 'tontine2026', 'admin123', 'bonjour123', 'cameroun1',
+                    'cameroun2026', 'abc12345', 'abcd1234', 'aa123456', 'iloveyou1', 'welcome1', 'ghelia123'}
+
+
+def password_problems(password, username=None):
+    """Règle unique pour tout nouveau mot de passe ; retourne la liste des défauts (vide = accepté)"""
+    pwd = password or ''
+    problems = []
+    if len(pwd) < app.config['PASSWORD_MIN_LENGTH']:
+        problems.append(f"il faut au moins {app.config['PASSWORD_MIN_LENGTH']} caractères")
+    if not re.search(r'[A-Za-zÀ-ÿ]', pwd) or not re.search(r'\d', pwd):
+        problems.append('il faut des lettres et des chiffres')
+    if len(pwd) > 128:
+        problems.append('128 caractères au plus')
+    low = pwd.lower()
+    if low in COMMON_PASSWORDS or len(set(low)) <= 2:
+        problems.append('il est trop courant (comme « 12345678 » ou « motdepasse1 »)')
+    if username and len(username) >= 3 and normalize_username(username) in low:
+        problems.append("il ne doit pas contenir votre identifiant")
+    return problems
+
+
+def password_error_message(problems):
+    return 'Mot de passe trop faible : ' + ' ; '.join(problems) + '.'
+
+
 def _password_is_strong(pwd):
-    return len(pwd) >= 8 and re.search(r'[A-Za-z]', pwd) and re.search(r'\d', pwd)
+    return not password_problems(pwd)
 
 
 @app.route('/mot-de-passe-oublie', methods=['GET', 'POST'])
@@ -5548,7 +5808,7 @@ def forgot_password():
             with tenant_bypass():
                 user = User.query.filter(
                     User.tontine_id == tontine.id, User.is_active == True,
-                    db.or_(User.username == identifier, db.func.lower(User.email) == identifier.lower())
+                    db.or_(db.func.lower(User.username) == identifier.strip().lower(), db.func.lower(User.email) == identifier.strip().lower())
                 ).first()
             if user:
                 set_current_tenant(tontine.id)
@@ -5582,12 +5842,13 @@ def reset_password(token):
 
     if request.method == 'POST':
         password = request.form.get('password') or ''
-        if not _password_is_strong(password):
-            flash('Le mot de passe doit contenir au moins 8 caractères, avec des lettres et des chiffres.', 'danger')
+        if password_problems(password, user.username):
+            flash(password_error_message(password_problems(password, user.username)), 'danger')
         elif password != request.form.get('password_confirm'):
             flash('Les deux mots de passe ne correspondent pas.', 'danger')
         else:
             user.set_password(password)
+            user.must_change_password = False
             if user.tontine_id:
                 set_current_tenant(user.tontine_id)
                 PasswordResetRequest.query.filter_by(user_id=user.id, status='EN_ATTENTE').update(

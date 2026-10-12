@@ -28,7 +28,7 @@ def body(r):
 
 SIGNUP = {'name': 'Tontine des Amis', 'slug': 'amis', 'location': 'Bafoussam', 'first_name': 'Hélène',
           'last_name': 'Ngo', 'email': 'helene@amis.cm', 'phone': '699000001', 'username': 'helene',
-          'password': 'Helene2026', 'password_confirm': 'Helene2026'}
+          'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'}
 
 anon = app.test_client()
 r = anon.get('/')
@@ -64,7 +64,7 @@ check(anon.get('/register?t=amis').status_code == 200, 'formulaire d\'adhésion'
 check(anon.get('/register').status_code == 302, 'adhésion sans tontine -> retour accueil')
 r = anon.post('/register?t=amis', data={'first_name': 'Marc', 'last_name': 'Tchoua', 'email': 'marc@amis.cm', 'phone': '699123456',
                                         'cotisation_type': 'PRESENCE', 'tontine_amount': '', 'username': 'marc',
-                                        'password': 'Marc2026', 'confirm_password': 'Marc2026'})
+                                        'password': 'Bafang2026', 'confirm_password': 'Bafang2026'})
 check(r.status_code == 302 and 't=amis' in r.headers['Location'], 'demande d\'adhésion envoyée')
 with app.app_context():
     marc = Member.query.filter_by(email='marc@amis.cm').one()
@@ -72,11 +72,11 @@ with app.app_context():
     check(marc.status == 'PENDING' and marc.tontine_id == t.id, 'membre en attente, rattaché à la bonne tontine')
 
 member = app.test_client()
-r = member.post('/login', data={'tontine': 'amis', 'username': 'marc', 'password': 'Marc2026'})
+r = member.post('/login', data={'tontine': 'amis', 'username': 'marc', 'password': 'Bafang2026'})
 check(r.status_code == 200, 'compte en attente : connexion refusée')
 check('Marc' in body(founder.get('/members?show_inactive=true')), 'la présidente voit la demande')
 founder.post(f'/members/{marc_id}/activate')
-r = member.post('/login', data={'tontine': 'amis', 'username': 'marc', 'password': 'Marc2026'})
+r = member.post('/login', data={'tontine': 'amis', 'username': 'marc', 'password': 'Bafang2026'})
 check(r.status_code == 302, 'après validation : connexion du membre')
 h = body(member.get('/dashboard'))
 check(r.status_code == 302 and 'Premiers pas' not in h, 'le membre n\'a pas le guide du président')

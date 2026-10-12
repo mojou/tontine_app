@@ -31,8 +31,8 @@ def body(r):
 
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine Discipline', 'slug': 'discipline', 'first_name': 'Hélène', 'last_name': 'Mballa',
-                                'email': 'h@dis.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Helene2026',
-                                'password_confirm': 'Helene2026'})
+                                'email': 'h@dis.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Mbalmayo2026',
+                                'password_confirm': 'Mbalmayo2026'})
 for fn, role in [('Paul', 'MEMBRE'), ('Rose', 'CENSEUR'), ('Jean', 'TRESORIER')]:
     pres.post('/members/add', data={'first_name': fn, 'last_name': 'Ndongo', 'email': f'{fn.lower()}@dis.cm', 'phone': '699111111',
                                     'username': fn.lower(), 'role': role, 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})

@@ -46,7 +46,7 @@
                         </div>
                         {% endif %}
                     </div>
-                    <small class="text-muted d-block mt-2">Un nouveau montant crée automatiquement sa rubrique de cotisation (ex. « Tontine 25 000 »).
+                    <small class="text-muted d-block mt-2">Un nouveau montant crée tout seul sa cotisation (ex. « Tontine 25 000 »).
                         Plusieurs cycles peuvent tourner en même temps, un par montant.</small>
                 </div>
             </div>
@@ -71,13 +71,14 @@
                             <input type="number" class="form-control" id="frequency_days" name="frequency_days" min="1" max="366" value="{{ form_data.get('frequency_days', '') }}" placeholder="14">
                         </div>
                         <div class="form-group col-md-4">
-                            <label for="label">Nom (facultatif)</label>
+                            <label for="label">Nom (pas obligatoire)</label>
                             <input type="text" class="form-control" id="label" name="label" maxlength="100" value="{{ form_data.get('label', '') }}" placeholder="Ex : Tontine des femmes">
                         </div>
                     </div>
                     <div class="custom-control custom-checkbox" id="drawNowBox">
                         <input type="checkbox" class="custom-control-input" id="draw_now" name="draw_now" {% if not form_data or form_data.get('draw_now') %}checked{% endif %}>
-                        <label class="custom-control-label" for="draw_now">Tirer au sort l'ordre de passage tout de suite</label>
+                        <label class="custom-control-label" for="draw_now">{% if current_tontine.draw_is_manual %}Écrire l'ordre de passage tout de suite
+                            <span class="text-muted small">(tirage fait en réunion)</span>{% else %}Tirer au sort l'ordre de passage tout de suite{% endif %}</label>
                     </div>
                 </div>
             </div>
@@ -115,7 +116,7 @@
         <div class="col-lg-4">
             <div class="card summary">
                 <div class="card-body">
-                    <h6 class="text-muted text-uppercase small">Récapitulatif</h6>
+                    <h6 class="text-muted text-uppercase small">Résumé</h6>
                     <div class="mb-2"><span class="big" id="sumParts">0</span> main(s) · <span id="sumMembers">0</span> membre(s)</div>
                     <div class="mb-1 small text-muted">Cagnotte par tour</div>
                     <div class="big mb-2"><span id="sumPot">0</span> <small>FCFA</small></div>

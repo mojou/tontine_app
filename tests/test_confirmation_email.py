@@ -40,7 +40,7 @@ outbox = app.extensions.setdefault('outbox', [])
 def signup(client, slug, email):
     return client.post('/inscription', data={'name': f'Tontine {slug}', 'slug': slug, 'first_name': 'Awa', 'last_name': 'Diop',
                                               'email': email, 'phone': '699000001', 'username': 'awa',
-                                              'password': 'Awa2026xx', 'password_confirm': 'Awa2026xx'})
+                                              'password': 'Dakar2026xx', 'password_confirm': 'Dakar2026xx'})
 
 
 def tontine(slug):
@@ -68,7 +68,7 @@ check(c.get('/dashboard').status_code == 302, "pas connecté tant que l'e-mail n
 v = app.test_client()
 check(v.get('/t/akwa').status_code == 404, 'page publique de la tontine invisible avant confirmation')
 check('Tontine akwa' not in text(v.get('/login')), 'absente de la liste de connexion')
-r = v.post('/login', data={'tontine': 'akwa', 'username': 'awa', 'password': 'Awa2026xx'}, follow_redirects=True)
+r = v.post('/login', data={'tontine': 'akwa', 'username': 'awa', 'password': 'Dakar2026xx'}, follow_redirects=True)
 check("Confirmez d'abord votre adresse e-mail" in text(r), 'connexion refusée : « confirmez d\'abord votre adresse e-mail »')
 
 # renvoyer le lien

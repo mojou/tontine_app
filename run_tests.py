@@ -36,6 +36,9 @@ SUITES = [
     ('test_ajout_cycle.py', 'aj.db', 'Ajout en cours de cycle (rappel)'),
     ('test_seances_exercice.py', 'se.db', "Séances et fin d'exercice"),
     ('test_mot_de_passe.py', 'rs.db', 'Mot de passe oublié'),
+    ('test_connexion.py', 'cx.db', 'Connexion (majuscules, espaces, sécurité)'),
+    ('test_securite.py', 'sx.db', 'Sécurité des comptes (mot de passe provisoire, sessions, en-têtes)'),
+    ('test_tirage_manuel.py', 'tm.db', 'Tirage automatique ou écrit à la main'),
     ('test_sanctions.py', 'sa.db', 'Sanctions + contrôle de toutes les pages'),
     ('test_aides.py', 'ai.db', 'Aides sociales (règles, barème, versement)'),
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),
@@ -71,7 +74,8 @@ def migrated_copy(workdir, name):
 
 def run(script, workdir, extra=()):
     # Les séries existantes créent leurs tontines sans e-mail ; test_confirmation_email l'active lui-même
-    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONWARNINGS='ignore', REQUIRE_EMAIL_CONFIRMATION='False')
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONWARNINGS='ignore', REQUIRE_EMAIL_CONFIRMATION='False',
+               FORCE_PASSWORD_CHANGE='False')
     env.pop('DATABASE_URL', None)
     proc = subprocess.run([sys.executable, os.path.join(TESTS, script), workdir, ROOT, *extra], cwd=ROOT, env=env,
                           capture_output=True, text=True, encoding='utf-8', errors='replace')

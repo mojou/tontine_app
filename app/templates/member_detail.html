@@ -13,7 +13,7 @@
             <i class="fas fa-edit"></i> Modifier
         </a>
         <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#changeTontineStatusModal">
-            <i class="fas fa-exchange-alt"></i> Changer statut tontine
+            <i class="fas fa-exchange-alt"></i> Changer sa situation
         </button>
         <form method="POST" action="{{ url_for('member_reset_link', member_id=member.id) }}" class="d-inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -44,13 +44,13 @@
             <div class="member-detail"><i class="fas fa-map-marker-alt"></i> {{ member.city or 'Non renseigné' }} {{ member.address or '' }}</div>
             
             <div class="member-detail mt-2">
-                <strong>Statut du compte :</strong>
+                <strong>Compte :</strong>
                 <span class="badge badge-{{ member.get_status_color() }}" style="font-size: 0.9rem;">
                     {{ {'ACTIF': 'Actif', 'SUSPENDU': 'Suspendu', 'EXCLU': 'Exclu', 'PENDING': 'En attente de validation', 'INACTIF': 'Inactif'}.get(member.status, member.status) }}
                 </span>
             </div>
             <div class="member-detail">
-                <strong>Statut tontine :</strong>
+                <strong>Situation dans la tontine :</strong>
                 {% if member.tontine_status == 'VERT' %}
                     <span class="badge badge-success" style="font-size: 0.9rem;">
                         🟢 En règle
@@ -76,7 +76,7 @@
             <div class="stat-value text-warning">
                 {{ (member.total_active_debt | default(0))|fcfa }} FCFA
             </div>
-            <div class="stat-label">Dette (Prêts en cours)</div>
+            <div class="stat-label">Dette (emprunts pas encore remboursés)</div>
             <hr class="my-2">
             
             <div class="stat-value text-danger">{{ (member.total_sanctions_pending | default(0))|fcfa }} FCFA</div>
@@ -99,7 +99,7 @@
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
-                    <h5 class="modal-title">Changer le statut tontine</h5>
+                    <h5 class="modal-title">Changer sa situation dans la tontine</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -108,7 +108,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="modal-body text-left">
                         <p>Membre : <strong>{{ member.full_name }}</strong></p>
-                        <p>Statut actuel : 
+                        <p>Situation actuelle : 
                             {% if member.tontine_status == 'VERT' %}
                                 <span class="badge badge-success">🟢 En règle</span>
                             {% elif member.tontine_status == 'ORANGE' %}
@@ -118,7 +118,7 @@
                             {% endif %}
                         </p>
                         <div class="form-group">
-                            <label>Nouveau statut :</label>
+                            <label>Nouvelle situation :</label>
                             <select name="tontine_status" class="form-control" required>
                                 <option value="">-- Sélectionnez --</option>
                                 <option value="VERT" {% if member.tontine_status == 'VERT' %}selected{% endif %}>🟢 En règle</option>
@@ -128,7 +128,7 @@
                         </div>
                         <div class="alert alert-info small mt-2">
                             <i class="fas fa-info-circle"></i> 
-                            Ce statut est également mis à jour automatiquement en fonction des échecs de cotisation.
+                            Cette situation change aussi toute seule quand le membre ne paie pas ses cotisations.
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -143,7 +143,7 @@
     <div class="grid-tables">
         <div class="card">
             <div class="card-header">
-                <i class="fas fa-exchange-alt"></i> Historique des transactions
+                <i class="fas fa-exchange-alt"></i> Tous ses paiements
                 {% if current_user.role in ['SECRETAIRE', 'PRESIDENT', 'TRESORIER'] %}
                 <a href="{{ url_for('add_transaction') }}?member={{ member.id }}" style="float: right; color: white;">
                     <i class="fas fa-plus"></i> Ajouter
@@ -177,7 +177,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="4" class="text-center">Aucune transaction</td>
+                                <td colspan="4" class="text-center">Aucun paiement</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -202,8 +202,8 @@
                             <tr>
                                 <th>Montant</th>
                                 <th>Intérêts</th>
-                                <th>Statut</th>
-                                <th>Échéance</th>
+                                <th>État</th>
+                                <th>Date limite</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -250,7 +250,7 @@
                             <th>Type</th>
                             <th class="text-right">Montant</th>
                             <th>Description</th>
-                            <th>Statut</th>
+                            <th>État</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -300,7 +300,7 @@
                             <th>Date</th>
                             <th>Type</th>
                             <th class="text-right">Montant</th>
-                            <th>Statut</th>
+                            <th>État</th>
                         </tr>
                     </thead>
                     <tbody>

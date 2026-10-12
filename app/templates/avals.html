@@ -23,7 +23,7 @@
         <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-piggy-bank" style="color: var(--hl-green)"></i>
             <div class="stat-value">{{ fcfa(me.savings_balance) }}</div><div class="stat-label">Mon épargne (FCFA)</div></div></div>
         <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-lock" style="color: var(--hl-gold)"></i>
-            <div class="stat-value">{{ fcfa(my_aval.engaged) }}</div><div class="stat-label">Épargne bloquée par mes avals en cours</div></div></div>
+            <div class="stat-value">{{ fcfa(my_aval.engaged) }}</div><div class="stat-label">Mon épargne bloquée parce que je garantis des emprunts</div></div></div>
         <div class="col-md-4 mb-3"><div class="stat-card"><i class="fas fa-handshake" style="color: var(--hl-green-700)"></i>
             {% if my_aval.problems %}
             <div class="stat-value text-danger">0</div><div class="stat-label">Je ne peux pas avaliser pour le moment</div>
@@ -44,7 +44,7 @@
         {% if my_requests %}
         <div class="table-container">
             <table class="table mb-0">
-                <thead><tr><th>Emprunteur</th><th>Emprunt</th><th>Part garantie</th><th>Statut</th><th></th></tr></thead>
+                <thead><tr><th>Emprunteur</th><th>Emprunt</th><th>Part garantie</th><th>État</th><th></th></tr></thead>
                 <tbody>
                 {% for g in my_requests %}
                 <tr>
@@ -57,7 +57,7 @@
                         {% if g.status == 'EN_ATTENTE' and g.loan.status == 'PENDING' %}
                         <form method="POST" action="{{ url_for('respond_aval', guarantee_id=g.id) }}" class="form-inline justify-content-end">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="text" name="note" class="form-control form-control-sm mr-2 mb-1" maxlength="255" placeholder="Message (facultatif)">
+                            <input type="text" name="note" class="form-control form-control-sm mr-2 mb-1" maxlength="255" placeholder="Message (pas obligatoire)">
                             <button type="submit" name="action" value="accept" class="btn btn-sm btn-success mr-1 mb-1"
                                     onclick="return confirm('Vous vous engagez à payer jusqu\'à {{ fcfa(g.amount) }} FCFA si {{ g.loan.member_name }} ne rembourse pas. Confirmer ?');">
                                 <i class="fas fa-check"></i> J'accepte</button>
@@ -127,7 +127,7 @@
             <span><i class="fas fa-users-cog"></i> Tous les avals de la tontine</span>
             <form method="GET" class="form-inline">
                 <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
-                    <option value="">Tous les statuts</option>
+                    <option value="">Toutes les situations</option>
                     {% for code, info in statuses.items() %}<option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ info[0] }}</option>{% endfor %}
                 </select>
             </form>
@@ -135,7 +135,7 @@
         {% if all_guarantees %}
         <div class="table-container">
             <table class="table table-sm mb-0">
-                <thead><tr><th>Emprunteur</th><th>Avaliste</th><th>Emprunt</th><th>Reste dû</th><th>Garanti / payé</th><th>Statut</th>{% if can_manage %}<th>Actions</th>{% endif %}</tr></thead>
+                <thead><tr><th>Emprunteur</th><th>Avaliste</th><th>Emprunt</th><th>Reste dû</th><th>Garanti / payé</th><th>État</th>{% if can_manage %}<th>Actions</th>{% endif %}</tr></thead>
                 <tbody>
                 {% for g in all_guarantees %}
                 {% set loan = g.loan %}

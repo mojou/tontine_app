@@ -23,8 +23,8 @@
                     <tr><th style="width: 40%">Membre</th><td>{% if transaction.member %}<a href="{{ url_for('member_detail', member_id=transaction.member_id) }}">{{ transaction.member_name }}</a>{% else %}—{% endif %}</td></tr>
                     <tr><th>Date</th><td>{{ transaction.date.strftime('%d/%m/%Y') if transaction.date else '—' }}</td></tr>
                     <tr><th>Mode de paiement</th><td>{{ payment_modes.get(transaction.payment_mode, transaction.payment_mode or '—') }}</td></tr>
-                    {% if transaction.payment_reference %}<tr><th>Référence</th><td><code>{{ transaction.payment_reference }}</code></td></tr>{% endif %}
-                    {% if transaction.contribution_type %}<tr><th>Rubrique</th><td>{{ transaction.contribution_type.name }}</td></tr>{% endif %}
+                    {% if transaction.payment_reference %}<tr><th>N° du paiement</th><td><code>{{ transaction.payment_reference }}</code></td></tr>{% endif %}
+                    {% if transaction.contribution_type %}<tr><th>Cotisation</th><td>{{ transaction.contribution_type.name }}</td></tr>{% endif %}
                     {% if transaction.cycle_id %}<tr><th>Cycle</th><td><a href="{{ url_for('tontine_cycle_detail', cycle_id=transaction.cycle_id) }}">Voir le cycle</a></td></tr>{% endif %}
                     {% if transaction.seance %}<tr><th>Séance</th><td>{{ transaction.seance.display_name }}</td></tr>{% endif %}
                     {% if transaction.description %}<tr><th>Description</th><td>{{ transaction.description }}</td></tr>{% endif %}

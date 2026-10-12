@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}Gestion des Membres{% if current_tontine %} - {{ current_tontine.name }}{% else %} - {{ app_name }}{% endif %}{% endblock %}
-{% block page_title %}<i class="fas fa-users text-gradient"></i> Registre des Membres{% endblock %}
+{% block page_title %}<i class="fas fa-users text-gradient"></i> Liste des membres{% endblock %}
 
 {% block content %}
 <div class="fade-in">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <p class="text-muted mb-0">Effectif global de l'association et gestion administrative.</p>
+            <p class="text-muted mb-0">Tous les membres de la tontine.</p>
         </div>
         {% if current_user.is_admin() %}
         <button class="btn btn-primary shadow-sm" data-toggle="modal" data-target="#addMemberModal">
@@ -25,7 +25,7 @@
                     <input type="text" name="search" class="form-control form-control-sm" placeholder="Nom, téléphone..." value="{{ search }}">
                 </div>
                 <div class="col-md-2 col-sm-6">
-                    <label class="small text-muted">Statut</label>
+                    <label class="small text-muted">État</label>
                     <select name="status" class="form-control form-control-sm">
                         <option value="">Tous</option>
                         <option value="ACTIF" {% if status_filter == 'ACTIF' %}selected{% endif %}>Actif</option>
@@ -35,7 +35,7 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-sm-6">
-                    <label class="small text-muted">Statut tontine</label>
+                    <label class="small text-muted">Situation dans la tontine</label>
                     <select name="tontine_status" class="form-control form-control-sm">
                         <option value="">Tous</option>
                         <option value="VERT" {% if tontine_status_filter == 'VERT' %}selected{% endif %}>🟢 Vert (règle)</option>
@@ -47,7 +47,7 @@
                     <label class="small text-muted">Afficher</label>
                     <select name="show_inactive" class="form-control form-control-sm">
                         <option value="false" {% if show_inactive == 'false' or not show_inactive %}selected{% endif %}>Membres actifs</option>
-                        <option value="true" {% if show_inactive == 'true' %}selected{% endif %}>Tous (incl. inactifs)</option>
+                        <option value="true" {% if show_inactive == 'true' %}selected{% endif %}>Tous (avec les membres retirés)</option>
                     </select>
                 </div>
                 
@@ -75,14 +75,14 @@
                 <table class="table table-hover table-striped mb-0">
                     <thead class="thead-light">
                         <tr>
-                            <th>ID</th>
+                            <th class="d-none d-xl-table-cell">N°</th>
                             <th>Nom & Prénoms</th>
-                            <th>Téléphone</th>
-                            <th>Ville</th>
-                            <th>Inscription</th>
-                            <th title="Cotisations versées aux cycles de tontine">Tontine cotisée</th>
-                            <th title="Épargne personnelle, rendue en fin d'exercice">Épargne</th>
-                            <th>Statut</th>
+                            <th class="d-none d-md-table-cell">Téléphone</th>
+                            <th class="d-none d-xl-table-cell">Ville</th>
+                            <th class="d-none d-xl-table-cell">Inscription</th>
+                            <th class="text-right" title="Cotisations versées aux cycles de tontine">Tontine cotisée</th>
+                            <th class="text-right" title="Épargne personnelle, rendue en fin d'année">Épargne</th>
+                            <th>État</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -90,7 +90,7 @@
                         {% if members %}
                             {% for m in members %}
                             <tr {% if not m.is_active %}class="table-secondary" style="opacity: 0.7;"{% endif %}>
-                                <td><span class="badge badge-secondary">#{{ m.id }}</span></td>
+                                <td class="d-none d-xl-table-cell"><span class="badge badge-secondary">#{{ m.id }}</span></td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if m.photo and m.photo != 'None' %}
@@ -106,32 +106,29 @@
                                         <div>
                                             <a href="{{ url_for('member_detail', member_id=m.id) }}" class="font-weight-bold text-dark">
                                                 {{ m.full_name }}
-                                                {% if not m.is_active %}<span class="badge badge-secondary ml-1">Désactivé</span>{% endif %}
+                                                {% if not m.is_active %}<span class="badge badge-secondary ml-1">Retiré</span>{% endif %}
                                             </a>
-                                            <small class="text-muted d-block">{{ m.profession or 'Sans profession' }}</small>
+                                            <small class="text-muted d-none d-md-block">{{ m.profession or 'Sans profession' }}</small>
+                                            <a href="tel:{{ m.phone }}" class="small text-secondary d-md-none"><i class="fas fa-phone-alt"></i> {{ m.phone }}</a>
                                         </div>
                                     </div>
                                 </td>
-                                <td><a href="tel:{{ m.phone }}" class="text-secondary"><i class="fas fa-phone-alt mr-1 small"></i> {{ m.phone }}</a></td>
-                                <td><small>{{ m.city or '—' }}</small></td>
-                                <td><small>{{ m.registration_date.strftime('%d/%m/%y') }}</small></td>
-                                <td class="font-weight-bold text-success">{{ (m.total_tontine_paid)|fcfa }} F</td>
-                                <td class="font-weight-bold" style="color: var(--hl-green-700)">{{ (m.savings_balance)|fcfa }} F</td>
-                                <td>
-                                    <div class="d-flex flex-column">
-                                        <span class="badge badge-{{ m.get_status_color() }} mb-1">
-                                            {{ {'ACTIF': 'Actif', 'SUSPENDU': 'Suspendu', 'EXCLU': 'Exclu', 'PENDING': 'En attente de validation', 'INACTIF': 'Inactif'}.get(m.status, m.status) }}
-                                        </span>
-                                        {% if m.tontine_status == 'ROUGE' %}
-                                        <span class="badge badge-danger">🔴 En rouge</span>
-                                        {% elif m.tontine_status == 'ORANGE' %}
-                                        <span class="badge badge-warning">🟠 Avertissement</span>
-                                        {% else %}
-                                        <span class="badge badge-success">🟢 En règle</span>
-                                        {% endif %}
-                                    </div>
+                                <td class="d-none d-md-table-cell nowrap"><a href="tel:{{ m.phone }}" class="text-secondary"><i class="fas fa-phone-alt mr-1 small"></i> {{ m.phone }}</a></td>
+                                <td class="d-none d-xl-table-cell"><small>{{ m.city or '—' }}</small></td>
+                                <td class="d-none d-xl-table-cell"><small>{{ m.registration_date.strftime('%d/%m/%y') }}</small></td>
+                                <td class="font-weight-bold text-success text-right">{{ (m.total_tontine_paid)|fcfa }} F</td>
+                                <td class="font-weight-bold text-right" style="color: var(--hl-green-700)">{{ (m.savings_balance)|fcfa }} F</td>
+                                <td class="nowrap">
+                                    {% set acc = {'ACTIF': 'Actif', 'SUSPENDU': 'Suspendu', 'EXCLU': 'Exclu', 'PENDING': 'En attente du bureau', 'INACTIF': 'Inactif'}.get(m.status, m.status) %}
+                                    {% set sit = {'ROUGE': ('🔴', 'En rouge (suspendu) : a manqué plusieurs paiements'), 'ORANGE': ('🟠', 'Avertissement : a manqué un paiement')}.get(m.tontine_status, ('🟢', 'En règle : paie à temps')) %}
+                                    <a tabindex="0" role="button" class="btn btn-sm btn-light border etat-voir" data-toggle="popover" data-trigger="focus"
+                                       data-placement="left" title="{{ m.full_name }}"
+                                       data-content="Compte : {{ acc }}. Tontine : {{ sit[1] }}."
+                                       aria-label="Voir la situation de {{ m.full_name }}">
+                                        <span aria-hidden="true">{{ sit[0] }}</span>{% if m.status != 'ACTIF' %} <span class="badge badge-{{ m.get_status_color() }}">{{ acc }}</span>{% endif %} Voir
+                                    </a>
                                 </td>
-                                <td>
+                                <td class="actions">
                                     <div class="btn-group btn-group-sm">
                                         <a href="{{ url_for('member_detail', member_id=m.id) }}" class="btn btn-outline-info" title="Voir détails">
                                             <i class="fas fa-eye"></i>
@@ -142,7 +139,7 @@
                                             {% if current_user.role == 'PRESIDENT' %}
                                             <form action="{{ url_for('reactivate_member', member_id=m.id) }}" method="POST" style="display:inline;">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Réactiver ce membre ?')" title="Réactiver">
+                                                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Remettre ce membre dans la liste ?')" title="Réactiver">
                                                     <i class="fas fa-undo"></i>
                                                 </button>
                                             </form>
@@ -160,7 +157,7 @@
                                             
                                             <!-- Désactivation pour les membres actifs -->
                                             {% if current_user.role == 'PRESIDENT' and m.id != current_user.id %}
-                                            <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteMemberModal{{ m.id }}" title="Désactiver">
+                                            <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteMemberModal{{ m.id }}" title="Retirer">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                             {% endif %}
@@ -334,7 +331,7 @@
                     </div>
                     
                     <hr>
-                    <h6 class="font-weight-bold">Configuration tontine</h6>
+                    <h6 class="font-weight-bold">Réglages de la tontine</h6>
                     
                     
                     <hr>
@@ -386,11 +383,11 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title">Confirmer la désactivation</h5>
+                <h5 class="modal-title">Confirmer le retrait</h5>
                 <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Êtes-vous sûr de vouloir désactiver ce membre ?</p>
+                <p>Voulez-vous vraiment retirer ce membre ? Ses paiements restent enregistrés.</p>
                 <p class="font-weight-bold">{{ m.full_name }}</p>
                 <p class="text-muted small">Le membre ne pourra plus se connecter ni participer aux activités de la tontine.</p>
             </div>
@@ -399,7 +396,7 @@
                 <form action="{{ url_for('delete_member', member_id=m.id) }}" method="POST" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-trash"></i> Désactiver
+                        <i class="fas fa-trash"></i> Retirer
                     </button>
                 </form>
             </div>

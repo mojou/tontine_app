@@ -9,7 +9,7 @@
             <h1 class="h2 mb-0">
                 <i class="fas fa-exchange-alt text-primary mr-2"></i> {{ title }}
             </h1>
-            <p class="text-muted mb-0">Enregistrez une nouvelle transaction financière</p>
+            <p class="text-muted mb-0">Écrivez ce que le membre a payé ou reçu</p>
         </div>
         <a href="{{ url_for('transactions') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left mr-1"></i> Retour
@@ -21,7 +21,7 @@
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white py-3">
                     <i class="fas fa-info-circle text-primary mr-2"></i>
-                    <span class="font-weight-bold">Formulaire de transaction</span>
+                    <span class="font-weight-bold">Le paiement</span>
                 </div>
                 <div class="card-body">
                     <form method="POST" id="transactionForm">
@@ -39,14 +39,14 @@
                                     <div class="invalid-feedback">{{ error }}</div>
                                 {% endfor %}
                             {% endif %}
-                            <small class="form-text text-muted">Sélectionnez le membre concerné par cette transaction</small>
+                            <small class="form-text text-muted">Choisissez le membre</small>
                         </div>
                         
-                        <!-- Rubrique de cotisation (remplit type et montant) -->
+                        <!-- Cotisation (remplit type et montant) -->
                         {% if rubriques %}
                         <div class="form-group">
                             <label class="font-weight-bold" for="rubrique">
-                                <i class="fas fa-list-ul mr-1 text-muted"></i> Rubrique de cotisation
+                                <i class="fas fa-list-ul mr-1 text-muted"></i> Cotisation
                             </label>
                             <select name="contribution_type_id" id="rubrique" class="form-control">
                                 <option value="">-- Aucune (choisir le type ci-dessous) --</option>
@@ -57,11 +57,11 @@
                                 </option>
                                 {% endfor %}
                             </select>
-                            <small class="form-text text-muted">La rubrique fixe la nature de l'opération et propose son montant. <a href="{{ url_for('cotisations') }}">Gérer les rubriques</a></small>
+                            <small class="form-text text-muted">Choisissez la cotisation : son montant s'écrit tout seul. <a href="{{ url_for('cotisations') }}">Voir les cotisations</a></small>
                         </div>
                         {% endif %}
 
-                        <!-- Type de transaction -->
+                        <!-- Sorte de paiement -->
                         <div class="form-group">
                             <label class="font-weight-bold">
                                 <i class="fas fa-tag mr-1 text-muted"></i> {{ form.type.label }}
@@ -74,7 +74,7 @@
                                 {% endfor %}
                             {% endif %}
                             <small class="form-text text-muted" id="typeHelp">
-                                <span id="typeHelpText">Choisissez le type d'opération financière</span>
+                                <span id="typeHelpText">Choisissez ce que le membre paie ou reçoit</span>
                             </small>
                         </div>
                         
@@ -113,7 +113,7 @@
                             {% endif %}
                             <small class="form-text text-muted">
                                 <i class="fas fa-info-circle"></i> 
-                                <span id="paymentHelp">Mode de paiement utilisé pour cette transaction</span>
+                                <span id="paymentHelp">Comment le membre a payé</span>
                             </small>
                         </div>
                         {% endif %}
@@ -121,12 +121,12 @@
                         <!-- Référence du paiement mobile -->
                         <div class="form-group">
                             <label class="font-weight-bold" for="payment_reference">
-                                <i class="fas fa-mobile-alt mr-1 text-muted"></i> Référence de paiement mobile
+                                <i class="fas fa-mobile-alt mr-1 text-muted"></i> Numéro du paiement (reçu par SMS)
                             </label>
                             <input type="text" name="payment_reference" id="payment_reference" class="form-control" maxlength="60"
                                    value="{{ transaction.payment_reference if transaction and transaction.payment_reference else '' }}"
-                                   placeholder="Ex : identifiant de la transaction Orange Money / MTN MoMo / Wave">
-                            <small class="form-text text-muted">Facultatif : permet de retrouver le paiement en cas de litige.</small>
+                                   placeholder="Ex : le numéro reçu par SMS (Orange Money, MTN MoMo, Wave)">
+                            <small class="form-text text-muted">Pas obligatoire : aide à retrouver le paiement en cas de problème.</small>
                         </div>
 
                         <!-- Description -->
@@ -140,7 +140,7 @@
                                     <div class="invalid-feedback">{{ error }}</div>
                                 {% endfor %}
                             {% endif %}
-                            <small class="form-text text-muted">Description détaillée de la transaction (optionnelle)</small>
+                            <small class="form-text text-muted">Explication (pas obligatoire)</small>
                         </div>
                         
                         <!-- Date de transaction (si disponible dans le formulaire) -->
@@ -228,7 +228,7 @@
                         {% endfor %}
                     </ul>
                     {% if rubriques %}
-                    <p class="small text-muted mb-0 mt-2">Les montants proposés viennent des rubriques de la tontine
+                    <p class="small text-muted mb-0 mt-2">Les montants proposés sont ceux des cotisations de la tontine
                         (<a href="{{ url_for('cotisations') }}">Cotisations</a>) ; ils restent modifiables.</p>
                     {% endif %}
                 </div>
@@ -261,7 +261,7 @@ $(document).ready(function() {
     function updateTypeHelp() {
         var type = $('#transactionType').val();
         var outflow = OUTFLOWS.indexOf(type) !== -1;
-        $('#typeHelpText').text(HINTS[type] || "Choisissez le type d'opération financière");
+        $('#typeHelpText').text(HINTS[type] || "Choisissez ce que le membre paie ou reçoit");
         $('#typeHelpText').parent().toggleClass('text-danger', outflow).toggleClass('text-muted', !outflow);
     }
     $('#transactionType').on('change', updateTypeHelp);

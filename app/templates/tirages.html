@@ -5,7 +5,10 @@
 
 {% block content %}
 <div class="fade-in">
-    <p class="text-muted">L'ordre de passage des bénéficiaires est tiré au sort et chaque tirage est conservé ici pour la transparence.</p>
+    <p class="text-muted">
+        {% if current_tontine.draw_is_manual %}Le tirage se fait en réunion ; le bureau écrit ensuite l'ordre de passage ici.
+        {% else %}L'ordre de passage est tiré au sort par l'application.{% endif %}
+        Chaque tirage est gardé ici, et tout le monde peut le voir.</p>
 
     {% if cycles %}
     <div class="row">
@@ -16,7 +19,7 @@
                     <h5>Cycle #{{ cycle.cycle_number }} <span class="badge badge-success">En cours</span></h5>
                     <p class="small text-muted mb-2">{{ cycle.beneficiaries_count }}/{{ cycle.total_members }} bénéficiaires · {{ (cycle.total_amount|float)|fcfa }} FCFA par tour</p>
                     <a href="{{ url_for('tirage_cycle', cycle_id=cycle.id) }}" class="btn btn-sm btn-primary">
-                        <i class="fas fa-dice"></i> {{ 'Lancer / voir le tirage' if can_draw else "Voir l'ordre de passage" }}
+                        <i class="fas fa-dice"></i> {% if not can_draw %}Voir l'ordre de passage{% elif current_tontine.draw_is_manual %}Écrire / voir l'ordre de passage{% else %}Lancer / voir le tirage{% endif %}
                     </a>
                 </div>
             </div>
@@ -38,7 +41,7 @@
                     <td>#{{ d.cycle.cycle_number }}</td>
                     <td>{{ d.results|length }}</td>
                     <td>{{ d.drawer.username if d.drawer else '—' }}</td>
-                    <td class="small text-muted">{{ d.notes or '' }}</td>
+                    <td class="small text-muted">{% if d.is_manual %}<span class="badge badge-secondary">Tirage en réunion</span> {% endif %}{{ d.notes or '' }}</td>
                     <td><a href="{{ url_for('tirage_cycle', cycle_id=d.cycle_id, reveal=d.id) }}" class="btn btn-sm btn-outline-primary">Voir</a></td>
                 </tr>
                 {% endfor %}

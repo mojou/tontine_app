@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}Séances - {{ current_tontine.name }}{% endblock %}
-{% block page_title %}<i class="fas fa-clipboard-check"></i> Séances de cotisation{% endblock %}
+{% block page_title %}<i class="fas fa-clipboard-check"></i> Séances{% endblock %}
 
 {% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
 
 {% block content %}
 <div class="fade-in">
+    {% include '_onglets_seances.html' %}
     <p class="text-muted">À chaque réunion, ouvrez une feuille de séance : les montants attendus sont préremplis pour chaque membre, il suffit de cocher ce qui est payé.</p>
 
     {% if can_manage %}
@@ -21,11 +22,11 @@
                         <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
                     </div>
                     <div class="form-group col-md-9">
-                        <label for="title">Intitulé (facultatif)</label>
+                        <label for="title">Nom de la séance (pas obligatoire)</label>
                         <input type="text" class="form-control" id="title" name="title" maxlength="120" placeholder="Ex : Réunion mensuelle d'octobre">
                     </div>
                 </div>
-                <label class="font-weight-bold small">Cotisations encaissées pendant la séance</label>
+                <label class="font-weight-bold small">Argent reçu pendant la séance</label>
                 <div class="row">
                     {% if cycles %}
                     <div class="col-md-6">
@@ -39,7 +40,7 @@
                     </div>
                     {% endif %}
                     <div class="col-md-6">
-                        <div class="small text-muted mb-1">Rubriques</div>
+                        <div class="small text-muted mb-1">Cotisations</div>
                         {% for r in rubriques %}
                         <div class="custom-control custom-checkbox">
                             <input type="checkbox" class="custom-control-input" id="col_r{{ r.id }}" name="columns" value="r{{ r.id }}"
@@ -60,7 +61,7 @@
         {% if seances %}
         <div class="table-container">
             <table class="table mb-0">
-                <thead><tr><th>Date</th><th>Séance</th><th class="text-right">Encaissé</th><th>Statut</th><th></th></tr></thead>
+                <thead><tr><th>Date</th><th>Séance</th><th class="text-right">Reçu</th><th>État</th><th></th></tr></thead>
                 <tbody>
                 {% for s in seances %}
                 <tr>

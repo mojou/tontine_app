@@ -30,8 +30,8 @@ def body(r):
 
 pres = app.test_client()
 pres.post('/inscription', data={'name': 'Tontine Fiche', 'slug': 'fiche', 'first_name': 'Hélène', 'last_name': 'Mballa',
-                                'email': 'h@fiche.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Helene2026',
-                                'password_confirm': 'Helene2026'})
+                                'email': 'h@fiche.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Mbalmayo2026',
+                                'password_confirm': 'Mbalmayo2026'})
 pres.post('/members/add', data={'first_name': 'Paul', 'last_name': 'Ndongo', 'email': 'paul@fiche.cm', 'phone': '699111111',
                                 'username': 'paul', 'role': 'MEMBRE', 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})
 with app.app_context():
@@ -44,7 +44,7 @@ h = body(r)
 check(r.status_code == 200, 'page de saisie accessible')
 script = h[h.rindex('<script>'):]
 check('5100' not in script and '20200' not in script, "le formulaire n'impose plus d'anciens montants figés (5 100 / 10 200 / 20 200)")
-check("rendu en fin d'exercice" in h and "PAS le fonds de caisse" in h, "le formulaire explique la différence épargne / fonds de caisse")
+check("on le lui rend en fin d'année" in h and "PAS le fonds de caisse" in h, "le formulaire explique la différence épargne / fonds de caisse")
 
 for typ, amount, desc in [('TONTINE', 12000, 'Tour 1'), ('EPARGNE', 5000, ''), ('FONDS_CAISSE', 5000, 'Fonds annuel')]:
     pres.post('/transactions/add', data={'member_id': paul, 'type': typ, 'amount': amount, 'payment_mode': 'ESPECE',
@@ -56,20 +56,20 @@ with app.app_context():
 # ---------------------------------------------------------------- fiche membre
 h = body(pres.get(f'/members/{paul}'))
 check('<th>Détail</th>' in h, 'le tableau des transactions a une colonne « Détail »')
-check("rendu en fin d'exercice" in h, "une épargne sans description affiche son explication")
+check("on le lui rend en fin d'année" in h, "une épargne sans description affiche son explication")
 check('Tour 1' in h and 'Saisi par helene' in h, 'la description et l\'auteur de la saisie sont affichés')
 summary = h[h.index('id="fundSummary"'):] if 'id="fundSummary"' in h else ''
-check('Épargne personnelle (restituable)' in summary and '5 000 FCFA' in summary and '12 000 FCFA' in summary,
+check('Épargne personnelle (on la lui rend)' in summary and '5 000 FCFA' in summary and '12 000 FCFA' in summary,
       'la fiche sépare tontine, fonds de caisse et épargne restituable')
 
 # ---------------------------------------------------------------- registre de caisse
 pres.post('/transactions/add', data={'member_id': paul, 'type': 'PRESENCE', 'amount': 1050, 'payment_mode': 'WAVE',
                                      'description': 'Présence'})
 h = body(pres.get('/transactions'))
-summary = h[h.index('id="ledgerSummary"'):h.index('Historique des transactions')]
+summary = h[h.index('id="ledgerSummary"'):h.index('Tous ses paiements')]
 check('Tontine / Épargne' not in h, "le registre n'affiche plus la carte trompeuse « Tontine / Épargne »")
 check('Cotisations tontine' in summary and '12 000 FCFA' in summary, 'carte tontine = cotisations tontine seules')
-check('Épargne des membres (restituable)' in summary and '5 000 FCFA' in summary, "carte épargne séparée (5 000)")
+check('Épargne des membres (on la leur rend)' in summary and '5 000 FCFA' in summary, "carte épargne séparée (5 000)")
 check('Total des sorties' in summary and 'Prêts + Aides' not in h, 'carte « Total des sorties » correctement nommée')
 check('>Wave</span>' in h, 'la colonne Mode affiche Wave (et non « Espèce »)')
 

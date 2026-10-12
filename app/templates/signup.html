@@ -73,7 +73,7 @@
                                 <small class="text-muted">Lettres minuscules, chiffres et tirets.</small>
                             </div>
                             <div class="form-group col-md-5">
-                                <label for="location">Ville / lieu <span class="text-muted small">(facultatif)</span></label>
+                                <label for="location">Ville / lieu <span class="text-muted small">(pas obligatoire)</span></label>
                                 <input type="text" class="form-control" id="location" name="location" maxlength="120" value="{{ form_data.get('location', '') }}">
                             </div>
                         </div>
@@ -91,7 +91,7 @@
                         <div class="group-title">3. Votre connexion</div>
                         <div class="form-group">
                             <label for="username">Identifiant</label>
-                            <input type="text" class="form-control" id="username" name="username" maxlength="80" required autocomplete="username" value="{{ form_data.get('username', '') }}" placeholder="Ex : helene">
+                            <input type="text" class="form-control" id="username" name="username" maxlength="80" required autocomplete="username" value="{{ form_data.get('username', '') }}" placeholder="Ex : helene" autocapitalize="none" autocorrect="off" spellcheck="false">
                         </div>
                         <div class="form-row">
                             <div class="form-group col-md-6"><label for="password">Mot de passe <span class="text-muted small">(8 caractères min.)</span></label><input type="password" class="form-control" id="password" name="password" minlength="8" required autocomplete="new-password"></div>

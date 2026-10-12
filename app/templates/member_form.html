@@ -89,7 +89,8 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label>Nom d'utilisateur *</label>
-                                    <input type="text" name="username" class="form-control" required>
+                                    <input type="text" name="username" class="form-control" required autocapitalize="none" autocorrect="off" spellcheck="false">
+                                    <small class="text-muted">Sans majuscules ni espaces (ex. patrick.talla). Les majuscules tapées à la connexion sont ignorées.</small>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -111,7 +112,9 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label>Mot de passe *</label>
-                                    <input type="password" name="password" class="form-control" required minlength="6">
+                                    <input type="password" name="password" class="form-control" required minlength="8" autocomplete="new-password">
+                                    <small class="text-muted">Mot de passe <strong>provisoire</strong> : au moins 8 caractères avec lettres et chiffres.
+                                        Le membre devra le changer à sa première connexion.</small>
                                 </div>
                             </div>
                             <div class="col-md-6">

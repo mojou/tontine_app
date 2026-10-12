@@ -26,8 +26,8 @@ def check(cond, msg):
 
 c = app.test_client()
 c.post('/inscription', data={'name': 'Tontine Rappel', 'slug': 'rappel', 'first_name': 'Hélène', 'last_name': 'Mbarga',
-                             'email': 'h@rap.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Helene2026',
-                             'password_confirm': 'Helene2026'})
+                             'email': 'h@rap.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Mbalmayo2026',
+                             'password_confirm': 'Mbalmayo2026'})
 for fn in ('Paul', 'Rose', 'Jean', 'Awa'):
     c.post('/members/add', data={'first_name': fn, 'last_name': 'Tchoua', 'email': f'{fn.lower()}@rap.cm', 'phone': '699111111',
                                  'username': fn.lower(), 'role': 'MEMBRE', 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})

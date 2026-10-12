@@ -43,7 +43,7 @@ check(out == 'a<br>\n&lt;b&gt;x&lt;/b&gt;', f'nl2br : vrais sauts de ligne, HTML
 # ---------------------------------------------------------------- données
 c = app.test_client()
 c.post('/inscription', data={'name': 'Audit', 'slug': 'audit', 'first_name': 'Hélène', 'last_name': 'Abo', 'email': 'h@au.cm',
-                             'phone': '699000000', 'username': 'helene', 'password': 'Helene2026', 'password_confirm': 'Helene2026'})
+                             'phone': '699000000', 'username': 'helene', 'password': 'Mbalmayo2026', 'password_confirm': 'Mbalmayo2026'})
 for fn in ('Paul', 'Rose'):
     c.post('/members/add', data={'first_name': fn, 'last_name': 'Bami', 'email': f'{fn.lower()}@au.cm', 'phone': '699111111',
                                  'username': fn.lower(), 'role': 'MEMBRE', 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})

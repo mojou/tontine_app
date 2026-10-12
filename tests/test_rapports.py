@@ -28,8 +28,8 @@ def check(cond, msg):
 # Tontine avec des données variées
 c = app.test_client()
 c.post('/inscription', data={'name': 'Tontine Rapports', 'slug': 'rapports', 'first_name': 'Hélène', 'last_name': 'Ekané',
-                             'email': 'h@rap.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Helene2026',
-                             'password_confirm': 'Helene2026'})
+                             'email': 'h@rap.cm', 'phone': '699000000', 'username': 'helene', 'password': 'Mbalmayo2026',
+                             'password_confirm': 'Mbalmayo2026'})
 c.post('/members/add', data={'first_name': 'Paul', 'last_name': 'Éboa', 'email': 'paul@rap.cm', 'phone': '699111111',
                              'username': 'paul', 'role': 'MEMBRE', 'password': 'Passw0rd1', 'confirm_password': 'Passw0rd1'})
 c.post('/parametres', data={'name': 'Tontine Rapports', 'presence_amount': '1050', 'fonds_caisse_amount': '5000',

@@ -76,7 +76,7 @@
                     </div>
                     <div class="card-body">
                         {{ form.agenda_items(class="form-control", rows=5, placeholder="1. Point 1\n2. Point 2\n3. Point 3") }}
-                        <small class="text-muted">Saisissez chaque point sur une nouvelle ligne.</small>
+                        <small class="text-muted">Écrivez chaque point sur une nouvelle ligne.</small>
                         {% if form.agenda_items.errors %}
                             {% for error in form.agenda_items.errors %}
                                 <small class="text-danger">{{ error }}</small>
@@ -306,7 +306,7 @@
                                 <div class="form-group">
                                     {{ form.next_meeting_date.label }}
                                     {{ form.next_meeting_date(class="form-control", type="date") }}
-                                    <small class="text-muted">Optionnel - Date de la prochaine réunion</small>
+                                    <small class="text-muted">Date de la prochaine réunion (pas obligatoire)</small>
                                     {% if form.next_meeting_date.errors %}
                                         {% for error in form.next_meeting_date.errors %}
                                             <small class="text-danger">{{ error }}</small>
