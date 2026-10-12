@@ -120,7 +120,7 @@ from models import (
     Aide, TontineCycleDetail, CycleBeneficiary, MeetingAttendanceDetail,
     ContributionPlanning, CycleReport, CaisseBalance,
     Poll, PollOption, PollVote, TontineDraw, TontineDrawResult, GalleryPhoto, Tontine,
-    ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest, BillingPayment, SasPayEvent,
+    ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest, BillingPayment, SasPayEvent, PaymentCurrency,
     LoginAttempt, AidType
 )
 import finance
@@ -168,6 +168,7 @@ def load_user(user_id):
 # Pages accessibles au super-admin (qui n'appartient à aucune tontine)
 SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine',
                         'superadmin_billing_payment', 'superadmin_billing_offer', 'superadmin_delete_tontine',
+                        'superadmin_payment_currency',
                         'logout', 'static', 'index', 'tontine_home', 'login', 'signup', 'guide', 'administration_login',
                         'superadmin_reset_president', 'reset_password'}
 # Pages publiques qui fixent elles-mêmes la tontine (via l'URL ou le formulaire)
@@ -736,6 +737,7 @@ def index():
 def _pricing():
     """Tarifs affichés publiquement (mêmes règles que la facturation : billing.py)"""
     return {'free': billing.FREE_MEMBERS, 'price': billing.PRICE_PER_MEMBER, 'grace': billing.GRACE_DAYS,
+            'countries': [c[1] for c in saspay.COUNTRIES],
             'examples': [(n, billing.monthly_price(n)) for n in (5, 10, 11, 15, 20, 30)]}
 
 
@@ -4595,7 +4597,15 @@ def _superadmin_render(tontines, counts, form_data):
         recent = BillingPayment.query.filter(BillingPayment.status != 'EN_ATTENTE').order_by(
             BillingPayment.validated_at.desc()).limit(10).all()
         due_total = sum(i['monthly'] for i in billing_info.values() if i['plan'] == 'PAYANT')
+        currency_rows = {r.code: r for r in PaymentCurrency.query.all()}
+        currencies = [{'code': cur, 'name': saspay.CURRENCY_NAMES.get(cur, cur),
+                       'countries': ', '.join(c[1] for c in saspay.COUNTRIES if c[2] == cur),
+                       'fcfa': cur in saspay.FCFA_CURRENCIES, 'row': currency_rows.get(cur),
+                       'env_url': (app.config.get('SASPAY_PAYMENT_URL_XOF') if cur == 'XOF' else app.config.get('SASPAY_PAYMENT_URL'))
+                       if cur in saspay.FCFA_CURRENCIES else ''}
+                      for cur in saspay.CURRENCIES]
         return render_template('superadmin.html', tontines=tontines, counts=counts, form_data=form_data,
+                               currencies=currencies, price_per_member=billing.PRICE_PER_MEMBER,
                                billing_info=billing_info, pending_payments=pending, recent_payments=recent,
                                monthly_total=due_total)
 
@@ -4944,7 +4954,10 @@ def abonnement():
             abort(403)
         months = request.form.get('months', type=int) or 0
         reference = (request.form.get('reference') or '').strip()
-        if not 1 <= months <= billing.MAX_MONTHS:
+        option = _option_for(payment_options(info['members']), (request.form.get('country') or app.config['SASPAY_COUNTRY']).upper())
+        if option is None:
+            flash("Ce pays n'est pas proposé pour le paiement.", 'danger')
+        elif not 1 <= months <= billing.MAX_MONTHS:
             flash(f"Choisissez entre 1 et {billing.MAX_MONTHS} mois.", 'danger')
         elif not info['monthly']:
             flash("Votre tontine ne paie rien actuellement : aucun paiement à déclarer.", 'info')
@@ -4953,14 +4966,15 @@ def abonnement():
         elif BillingPayment.query.filter(db.func.lower(BillingPayment.reference) == reference.lower()).first():
             flash("Cette référence a déjà été déclarée.", 'warning')
         else:
-            amount = Decimal(info['monthly']) * months
+            amount = option['monthly'] * months
             payment = BillingPayment(months=months, members_count=info['members'],
-                                     monthly_amount=Decimal(info['monthly']), amount=amount, provider='SASPAY',
-                                     reference=reference, status='EN_ATTENTE', declared_by=current_user.id)
+                                     monthly_amount=option['monthly'], amount=amount, provider='SASPAY',
+                                     reference=reference, status='EN_ATTENTE', declared_by=current_user.id,
+                                     currency=option['currency'], country=option['code'])
             db.session.add(payment)
             db.session.commit()
             log_activity(current_user.id, current_user.role,
-                         f"Paiement d'abonnement déclaré : {_fmt(amount)} FCFA ({months} mois), réf. {reference}",
+                         f"Paiement d'abonnement déclaré : {_fmt(amount)} {option['currency']} ({months} mois), réf. {reference}",
                          request.remote_addr)
             # SasPay a peut-être déjà confirmé ce paiement (notification arrivée avant la saisie)
             event = _find_saspay_event(reference)
@@ -4970,20 +4984,47 @@ def abonnement():
             elif why:
                 flash(why, 'danger')
             else:
-                flash(f"Paiement de {_fmt(amount)} FCFA enregistré. Il est validé automatiquement dès que SasPay le "
+                flash(f"Paiement de {_fmt(amount)} {option['currency']} enregistré. Il est validé automatiquement dès que SasPay le "
                       "confirme (en général quelques secondes) : actualisez la page.", 'info')
         return redirect(url_for('abonnement'))
     payments = BillingPayment.query.order_by(BillingPayment.id.desc()).all()
-    pay_url = app.config.get('SASPAY_PAYMENT_URL') or ''
-    if pay_url:
-        pay_url = pay_url.replace('{montant}', str(int(info['monthly']))).replace('{reference}', tontine.slug)
-    return render_template('abonnement.html', info=info, payments=payments, pay_url=pay_url, max_months=billing.MAX_MONTHS,
+    options = payment_options(info['members'])
+    for o in options:
+        o['url'] = o['url'].replace('{montant}', str(int(o['monthly']))).replace('{reference}', tontine.slug)
+    return render_template('abonnement.html', info=info, payments=payments, options=options,
+                           default_country=app.config['SASPAY_COUNTRY'],
+                           max_months=billing.MAX_MONTHS,
                            can_pay=current_user.role in BILLING_MANAGERS, checkout_enabled=bool(app.config.get('SASPAY_SECRET_KEY')))
 
 
 # ------------------------------------------------------------
 # SASPAY : validation automatique des paiements d'abonnement
 # ------------------------------------------------------------
+def payment_options(members):
+    """Pays où l'on peut payer l'abonnement : [{code, name, currency, prefix, networks, price, monthly, url}]
+    (seulement les devises actives : FCFA par défaut, les autres quand le super-admin a fixé un prix)"""
+    rows = {r.code: r for r in PaymentCurrency.query.all()}
+    env_urls = {'XAF': app.config.get('SASPAY_PAYMENT_URL') or '', 'XOF': app.config.get('SASPAY_PAYMENT_URL_XOF') or ''}
+    options = []
+    for code, name, currency, prefix, networks in saspay.COUNTRIES:
+        row = rows.get(currency)
+        if currency in saspay.FCFA_CURRENCIES:   # FCFA : toujours proposé, au prix de la plateforme
+            price = Decimal(billing.PRICE_PER_MEMBER)
+        elif row is not None and row.is_active and row.price_per_member:
+            price = Decimal(str(row.price_per_member))
+        else:
+            continue
+        url = (row.payment_url if row is not None and row.payment_url else '') \
+            or env_urls.get(currency, '')   # chaque devise a SON lien (un lien XAF ne sert pas au Bénin)
+        options.append({'code': code, 'name': name, 'currency': currency, 'prefix': prefix, 'networks': networks,
+                        'price': price, 'monthly': price * members, 'url': url})
+    return options
+
+
+def _option_for(options, country):
+    return next((o for o in options if o['code'] == country), None)
+
+
 def validate_billing_payment(payment, auto=False, note=None):
     """Valide un paiement d'abonnement : la période payée s'ajoute à la suite de la précédente"""
     with tenant_bypass():
@@ -5016,11 +5057,13 @@ def _apply_saspay_event(payment, event):
         return False, "Ce paiement SasPay a déjà servi à régler un autre abonnement."
     if (event.status or '').upper() != 'SUCCESS':
         return False, None
-    if event.currency and event.currency.upper() != app.config['SASPAY_CURRENCY'].upper():
-        return False, f"Paiement SasPay en {event.currency} : la devise attendue est {app.config['SASPAY_CURRENCY']}."
+    expected = (payment.currency or 'XAF').upper()
+    if event.currency and not saspay.same_currency(event.currency, expected):
+        return False, f"Paiement SasPay en {event.currency} : la devise attendue est {expected}."
     if event.amount is None or Decimal(str(event.amount)) < Decimal(str(payment.amount)):
-        return False, (f"Montant reçu par SasPay ({_fmt(event.amount or 0)} FCFA) inférieur au montant dû "
-                       f"({_fmt(payment.amount)} FCFA) : paiement non validé.")
+        cur = (payment.currency or 'XAF').upper()
+        return False, (f"Montant reçu par SasPay ({_fmt(event.amount or 0)} {cur}) inférieur au montant dû "
+                       f"({_fmt(payment.amount)} {cur}) : paiement non validé.")
     event.used_by_payment_id = payment.id
     validate_billing_payment(payment, auto=True, note=f"Confirmé par SasPay ({event.transaction_id})")
     return True, None
@@ -5087,9 +5130,14 @@ def abonnement_payer():
     if not 1 <= months <= billing.MAX_MONTHS or not info['monthly']:
         flash(f"Choisissez entre 1 et {billing.MAX_MONTHS} mois.", 'danger')
         return redirect(url_for('abonnement'))
-    amount = Decimal(info['monthly']) * months
-    payment = BillingPayment(months=months, members_count=info['members'], monthly_amount=Decimal(info['monthly']),
-                             amount=amount, provider='SASPAY_CHECKOUT', reference=f"GF-{tontine.id}-{uuid.uuid4().hex[:10]}",
+    option = _option_for(payment_options(info['members']), (request.form.get('country') or app.config['SASPAY_COUNTRY']).upper())
+    if option is None:
+        flash("Ce pays n'est pas proposé pour le paiement.", 'danger')
+        return redirect(url_for('abonnement'))
+    country, currency = option['code'], option['currency']
+    amount = option['monthly'] * months
+    payment = BillingPayment(months=months, members_count=info['members'], monthly_amount=option['monthly'],
+                             currency=currency, country=country, amount=amount, provider='SASPAY_CHECKOUT', reference=f"GF-{tontine.id}-{uuid.uuid4().hex[:10]}",
                              status='EN_ATTENTE', declared_by=current_user.id)
     db.session.add(payment)
     db.session.commit()
@@ -5097,7 +5145,7 @@ def abonnement_payer():
     try:
         session_ = saspay.create_checkout_session(
             app.config['SASPAY_API_BASE'], app.config['SASPAY_SECRET_KEY'],
-            amount=f"{amount:.2f}", currency=app.config['SASPAY_CURRENCY'], country=app.config['SASPAY_COUNTRY'],
+            amount=f"{amount:.2f}", currency=currency, country=country,
             description=f"Abonnement {app.config['APP_NAME']} - {tontine.name} - {months} mois",
             customer_email=(member.email if member and member.email else current_user.email) or tontine.contact_email,
             customer_name=member.full_name if member else current_user.username,
@@ -5112,7 +5160,7 @@ def abonnement_payer():
         return redirect(url_for('abonnement'))
     payment.checkout_session_id = str(session_.get('id') or '')[:80]
     db.session.commit()
-    log_activity(current_user.id, current_user.role, f"Paiement en ligne SasPay lancé : {_fmt(amount)} FCFA ({months} mois)",
+    log_activity(current_user.id, current_user.role, f"Paiement en ligne SasPay lancé : {_fmt(amount)} {currency} ({months} mois)",
                  request.remote_addr)
     return redirect(session_.get('checkout_url') or url_for('abonnement'))
 
@@ -5166,6 +5214,35 @@ def superadmin_billing_payment(payment_id):
     log_activity(current_user.id, current_user.role, message, request.remote_addr)
     flash(message, 'success' if action == 'valider' else 'info')
     return redirect(url_for('superadmin'))
+
+
+@app.route('/superadmin/paiement-pays', methods=['POST'])
+@login_required
+@superadmin_required
+def superadmin_payment_currency():
+    """Prix par membre et lien de paiement SasPay pour chaque devise"""
+    code = (request.form.get('code') or '').upper()
+    if code not in saspay.CURRENCIES:
+        abort(400)
+    row = db.session.get(PaymentCurrency, code) or PaymentCurrency(code=code)
+    url = (request.form.get('payment_url') or '').strip()
+    if url and not re.match(r'^https://[^\s"<>]{4,290}$', url):
+        flash("Lien de paiement invalide : il doit commencer par https://", 'danger')
+        return redirect(url_for('superadmin') + '#paiementPays')
+    row.payment_url = url or None
+    if code in saspay.FCFA_CURRENCIES:
+        row.price_per_member, row.is_active = None, True
+    else:
+        price = _parse_decimal(request.form.get('price_per_member') or '', 0, 10 ** 9)
+        row.price_per_member = price if price else None
+        row.is_active = bool(price) and request.form.get('is_active') == 'on'
+    db.session.add(row)
+    db.session.commit()
+    state = 'active' if (code in saspay.FCFA_CURRENCIES or row.is_active) else 'désactivée'
+    log_activity(current_user.id, current_user.role, f"Paiement en {code} : prix {row.price_per_member or '-'}, {state}",
+                 request.remote_addr)
+    flash(f"Devise {code} enregistrée ({state}).", 'success')
+    return redirect(url_for('superadmin') + '#paiementPays')
 
 
 @app.route('/superadmin/tontines/<int:tontine_id>/abonnement', methods=['POST'])

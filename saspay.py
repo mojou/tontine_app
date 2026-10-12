@@ -21,6 +21,44 @@ import urllib.error
 import urllib.request
 from decimal import Decimal, InvalidOperation
 
+# Pays couverts par SasPay (https://docs.saspay.me/api-reference/reference/formats, octobre 2026) :
+# (code ISO, nom, devise, indicatif, opérateurs Mobile Money actifs)
+COUNTRIES = [
+    ('BJ', 'Bénin', 'XOF', '+229', 'Celtiis Cash, Moov Money, MTN MoMo'),
+    ('BF', 'Burkina Faso', 'XOF', '+226', 'Moov, Orange'),
+    ('CI', "Côte d'Ivoire", 'XOF', '+225', 'Moov Money, MTN MoMo, Orange Money, Wave'),
+    ('ML', 'Mali', 'XOF', '+223', 'Mobi Cash, Moov Money, Orange Money'),
+    ('NE', 'Niger', 'XOF', '+227', 'Airtel'),
+    ('SN', 'Sénégal', 'XOF', '+221', 'Free Money, Orange Money, Wave, Wizall'),
+    ('TG', 'Togo', 'XOF', '+228', 'Moov Money, Togocel Money'),
+    ('CM', 'Cameroun', 'XAF', '+237', 'MTN MoMo, Orange Money'),
+    ('CD', 'RD Congo', 'CDF', '+243', 'Airtel, Orange, Vodacom'),
+    ('GH', 'Ghana', 'GHS', '+233', 'MTN MoMo, Airtel/Tigo, Vodafone'),
+    ('GN', 'Guinée', 'GNF', '+224', 'MTN MoMo'),
+    ('KE', 'Kenya', 'KES', '+254', 'M-Pesa'),
+    ('MW', 'Malawi', 'MWK', '+265', 'Airtel Money, TNM Mpamba'),
+    ('NG', 'Nigeria', 'NGN', '+234', 'Airtel Money, MTN'),
+    ('RW', 'Rwanda', 'RWF', '+250', 'Airtel, MTN MoMo'),
+    ('TZ', 'Tanzanie', 'TZS', '+255', 'Airtel, Halopesa, M-Pesa, Tigo'),
+    ('UG', 'Ouganda', 'UGX', '+256', 'Airtel, MTN MoMo'),
+    ('ZM', 'Zambie', 'ZMW', '+260', 'Airtel, MTN MoMo, Zamtel'),
+]
+# XAF (Afrique centrale) et XOF (Afrique de l'Ouest) ont la même valeur : 1 XAF = 1 XOF.
+# Les prix en FCFA s'y appliquent tels quels ; les autres devises ont un prix fixé par le super-admin.
+FCFA_CURRENCIES = {'XAF', 'XOF'}
+COUNTRY_CURRENCY = {c[0]: c[2] for c in COUNTRIES}
+CURRENCIES = sorted({c[2] for c in COUNTRIES}, key=lambda cur: (cur not in FCFA_CURRENCIES, cur))
+CURRENCY_NAMES = {'XOF': "franc CFA (Afrique de l'Ouest)", 'XAF': 'franc CFA (Afrique centrale)', 'CDF': 'franc congolais',
+                  'GHS': 'cedi', 'GNF': 'franc guinéen', 'KES': 'shilling kényan', 'MWK': 'kwacha malawite',
+                  'NGN': 'naira', 'RWF': 'franc rwandais', 'TZS': 'shilling tanzanien', 'UGX': 'shilling ougandais',
+                  'ZMW': 'kwacha zambien'}
+
+
+def same_currency(a, b):
+    a, b = (a or '').upper(), (b or '').upper()
+    return a == b or (a in FCFA_CURRENCIES and b in FCFA_CURRENCIES)
+
+
 SIGNATURE_MAX_AGE = 300            # secondes : une notification plus vieille est refusée
 PAID_SESSION_STATUSES = {'PAID', 'SUCCESS', 'COMPLETED'}
 

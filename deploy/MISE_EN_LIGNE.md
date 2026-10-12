@@ -91,8 +91,11 @@ cd ~/tontine_app && source venv/bin/activate && git pull && pip install -r requi
 - **Sauvegarde quotidienne** (recommandé) : onglet **Tasks** → une tâche par jour :
   `cd ~/tontine_app && venv/bin/python backup.py`
 - **SasPay (paiement de l'abonnement, validé automatiquement)** — dans https://app.saspay.me :
-  1. **Liens de paiement** : créez un lien à **montant libre**, devise **XAF**, nommé « Abonnement Ghelia Finance ».
-     Collez son adresse dans le fichier WSGI, ligne `SASPAY_PAYMENT_URL`.
+  1. **Liens de paiement** : pour chaque devise utilisée, créez un lien à **montant libre** dans cette devise
+     (XAF pour le Cameroun, XOF pour Bénin / Côte d'Ivoire / Sénégal / Togo / Burkina / Mali / Niger, etc.).
+     Collez chaque lien dans l'espace super-admin, section **« Pays de paiement SasPay »**
+     (https://germainbob.pythonanywhere.com/administration). Le franc CFA (XAF et XOF, même valeur) est toujours
+     proposé ; pour les autres devises (cedi, naira, shilling…), fixez aussi le **prix par membre** et cochez « Proposer ».
   2. **Webhooks** : créez un webhook, environnement **live**, adresse
      `https://germainbob.pythonanywhere.com/webhooks/saspay`, abonné à **transaction.success**.
      Copiez le **signing secret** (affiché une seule fois) dans la ligne `SASPAY_WEBHOOK_SECRET`.

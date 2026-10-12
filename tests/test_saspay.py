@@ -124,6 +124,58 @@ with app.app_context(), tenant_bypass():
 r = pres.post('/abonnement', data={'months': '1', 'reference': 'TXN-20261010-0001'}, follow_redirects=True)
 check('déjà été déclarée' in text(r), 'une référence déjà utilisée ne peut pas resservir')
 
+# ---------------------------------------------------------------- payeur au Bénin / en Côte d'Ivoire (XOF)
+webhook(v, tx('t-6', 'TXN-BENIN-6', monthly, currency='XOF'))
+r = pres.post('/abonnement', data={'months': '1', 'country': 'BJ', 'reference': 'TXN-BENIN-6'}, follow_redirects=True)
+with app.app_context(), tenant_bypass():
+    p6 = BillingPayment.query.filter_by(reference='TXN-BENIN-6').one()
+    check(p6.status == 'VALIDE' and p6.currency == 'XOF' and p6.country == 'BJ' and 'Paiement confirmé par SasPay' in text(r),
+          'payé depuis le Bénin en XOF (même valeur que le XAF) : validé automatiquement')
+
+# ---------------------------------------------------------------- les 18 pays couverts par SasPay
+app.config['SASPAY_PAYMENT_URL_XOF'] = 'https://pay.saspay.me/l/ghelia-xof'
+raw = pres.get('/abonnement').get_data(as_text=True)
+fcfa_countries = ['Bénin', 'Burkina Faso', "Côte d'Ivoire", 'Mali', 'Niger', 'Sénégal', 'Togo', 'Cameroun']
+check(all(f'{c} (XO' in html.unescape(raw) or f'{c} (XAF)' in html.unescape(raw) for c in fcfa_countries),
+      'les 8 pays du franc CFA couverts par SasPay sont proposés')
+check('Ghana (GHS)' not in raw and 'Gabon' not in raw, "pays sans prix fixé (Ghana) ou non couverts par SasPay (Gabon) : non proposés")
+check('value="BJ" data-currency="XOF"' in raw and 'data-url="https://pay.saspay.me/l/ghelia-xof"' in raw,
+      'le Bénin utilise le lien de paiement en XOF')
+app.config['SASPAY_PAYMENT_URL_XOF'] = ''
+
+with app.app_context(), tenant_bypass():
+    from models import User  # noqa: E402
+    su = User.query.filter_by(role='SUPERADMIN').first()
+    su.set_password('Super2026x')
+    su_name = su.username
+    db.session.commit()
+sa = app.test_client()
+sa.post('/login', data={'tontine': m.PLATFORM_LOGIN, 'username': su_name, 'password': 'Super2026x'})
+h = text(sa.get('/superadmin'))
+check('Pays de paiement SasPay' in h and 'GHS' in h and 'NGN' in h and 'KES' in h and 'ZMW' in h,
+      'super-admin : réglage des 12 devises (dont cedi, naira, shilling kényan, kwacha)')
+sa.post('/superadmin/paiement-pays', data={'code': 'GHS', 'price_per_member': '4', 'payment_url': 'https://pay.saspay.me/l/ghelia-ghs',
+                                           'is_active': 'on'})
+raw = pres.get('/abonnement').get_data(as_text=True)
+check('Ghana (GHS)' in raw and f'data-monthly="{12 * 4}"' in raw, 'Ghana proposé après réglage : 12 membres × 4 GHS = 48 GHS / mois')
+r = pres.post('/abonnement', data={'months': '2', 'country': 'GH', 'reference': 'TXN-GHANA-1'}, follow_redirects=True)
+with app.app_context(), tenant_bypass():
+    pg = BillingPayment.query.filter_by(reference='TXN-GHANA-1').one()
+    check(pg.currency == 'GHS' and pg.amount == 96, f'paiement depuis le Ghana : 2 mois = 96 GHS ({pg.amount} {pg.currency})')
+webhook(v, tx('t-7', 'TXN-GHANA-1', 96, currency='XAF'))
+with app.app_context(), tenant_bypass():
+    check(db.session.get(BillingPayment, pg.id).status == 'EN_ATTENTE', 'devise différente (XAF reçu pour un paiement en GHS) : non validé')
+webhook(v, tx('t-8', 'TXN-GHANA-1', 96, currency='GHS'))
+with app.app_context(), tenant_bypass():
+    check(db.session.get(BillingPayment, pg.id).status == 'VALIDE', 'SasPay confirme 96 GHS : validé automatiquement')
+r = sa.post('/superadmin/paiement-pays', data={'code': 'NGN', 'price_per_member': '300', 'payment_url': 'http://pas-https'},
+            follow_redirects=True)
+check('Lien de paiement invalide' in text(r), 'lien de paiement non sécurisé (http) refusé')
+check(pres.post('/superadmin/paiement-pays', data={'code': 'NGN', 'price_per_member': '1'}).status_code in (302, 403),
+      'un président ne peut pas régler les devises')
+r = pres.post('/abonnement', data={'months': '1', 'country': 'NG', 'reference': 'TXN-NIGERIA'}, follow_redirects=True)
+check("n'est pas proposé" in text(r), 'pays non activé (Nigeria) : paiement refusé')
+
 # ---------------------------------------------------------------- mode 2 : paiement en un clic (SasPay simulé)
 import urllib.request  # noqa: E402
 calls = []
@@ -157,7 +209,9 @@ check('Payer maintenant avec SasPay' not in text(pres.get('/abonnement')), 'sans
 app.config['SASPAY_SECRET_KEY'] = 'sk_test_simule'
 real = urllib.request.urlopen
 urllib.request.urlopen = fake_urlopen
-check('Payer maintenant avec SasPay' in text(pres.get('/abonnement')), 'avec la clé : bouton « Payer maintenant avec SasPay »')
+h = text(pres.get('/abonnement'))
+check('Payer maintenant avec SasPay' in h and "Côte d'Ivoire (XOF)" in h and 'Cameroun (XAF)' in h,
+      'avec la clé : bouton « Payer maintenant » et choix du pays (XAF / XOF)')
 r = pres.post('/abonnement/payer', data={'months': '2'})
 sent = json.loads(calls[-1].data.decode()) if calls else {}
 check(r.status_code == 302 and r.headers['Location'] == 'https://pay.saspay.me/checkout/abc', 'redirection vers la page de paiement SasPay')
@@ -170,6 +224,13 @@ r = pres.get(f'/abonnement/retour/{pay3.id}', follow_redirects=True)
 with app.app_context(), tenant_bypass():
     check(db.session.get(BillingPayment, pay3.id).status == 'VALIDE' and 'Paiement confirmé' in text(r),
           'retour de SasPay : paiement vérifié auprès de SasPay et validé')
+pres.post('/abonnement/payer', data={'months': '1', 'country': 'CI'})
+sent_ci = json.loads(calls[-1].data.decode())
+check(sent_ci.get('country') == 'CI' and sent_ci.get('currency') == 'XOF', "paiement en un clic depuis la Côte d'Ivoire : session en XOF")
+with app.app_context(), tenant_bypass():
+    for p_ in BillingPayment.query.filter(BillingPayment.provider == 'SASPAY_CHECKOUT', BillingPayment.status == 'EN_ATTENTE').all():
+        p_.status = 'REFUSE'
+    db.session.commit()
 # notification avec l'identifiant du paiement (metadata) : validation même si le président ne revient pas sur le site
 pres.post('/abonnement/payer', data={'months': '1'})
 with app.app_context(), tenant_bypass():

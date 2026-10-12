@@ -52,45 +52,60 @@
             <div class="card" id="payerAbonnement">
                 <div class="card-header bg-primary"><i class="fas fa-mobile-alt"></i> Payer l'abonnement</div>
                 <div class="card-body">
+                    {% if options %}
+                    <div class="form-group">
+                        <label class="small font-weight-bold" for="payCountry">Pays du paiement (Mobile Money)</label>
+                        <select id="payCountry" class="form-control">
+                            {% for o in options %}
+                            <option value="{{ o.code }}" data-currency="{{ o.currency }}" data-monthly="{{ o.monthly|int }}" data-url="{{ o.url }}"
+                                    data-networks="{{ o.networks }}" {% if o.code == default_country %}selected{% endif %}>{{ o.name }} ({{ o.currency }})</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted" id="payNetworks"></small>
+                    </div>
+                    <div class="form-group">
+                        <label class="small font-weight-bold" for="payMonths">Nombre de mois</label>
+                        <select id="payMonths" class="form-control">
+                            {% for n in range(1, max_months + 1) %}<option value="{{ n }}">{{ n }} mois</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="text-center mb-3">
+                        <div class="small text-muted">Montant à payer</div>
+                        <div class="h4 font-weight-bold mb-0" id="payTotal" style="color: var(--hl-green)">—</div>
+                        <div class="small text-muted" id="payDetail"></div>
+                    </div>
+
                     {% if checkout_enabled %}
-                    {# Paiement en un clic : montant calculé, validation automatique #}
-                    <form method="POST" action="{{ url_for('abonnement_payer') }}" id="payerEnUnClic">
+                    <form method="POST" action="{{ url_for('abonnement_payer') }}" id="payerEnUnClic" class="pay-form">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="form-group">
-                            <label class="small font-weight-bold">Nombre de mois</label>
-                            <select name="months" class="form-control">
-                                {% for n in range(1, max_months + 1) %}<option value="{{ n }}">{{ n }} mois · {{ (n * info.monthly)|fcfa }} FCFA</option>{% endfor %}
-                            </select>
-                        </div>
+                        <input type="hidden" name="country" value="{{ default_country }}"><input type="hidden" name="months" value="1">
                         <button type="submit" class="btn btn-gold btn-block"><i class="fas fa-lock"></i> Payer maintenant avec SasPay</button>
-                        <p class="small text-muted mt-2 mb-0">Mobile Money ou carte. L'accès est rétabli automatiquement dès que le paiement est confirmé.</p>
+                        <p class="small text-muted mt-2 mb-0">L'accès est rétabli automatiquement dès que le paiement est confirmé.</p>
                     </form>
                     <hr>
-                    <p class="small text-muted mb-2">Vous avez déjà payé avec le lien SasPay ? Collez la référence :</p>
+                    <p class="small text-muted mb-2">Vous avez déjà payé avec un lien SasPay ? Collez la référence :</p>
                     {% else %}
                     <ol class="small pl-3">
-                        <li>Payez avec <strong>SasPay</strong> le montant indiqué ci-dessous.</li>
+                        <li>Payez avec <strong>SasPay</strong> le montant indiqué.</li>
                         <li>Collez ici la <strong>référence de la transaction</strong> (reçu ou SMS SasPay).</li>
                         <li>Dès que SasPay confirme le paiement, l'abonnement est <strong>validé automatiquement</strong>.</li>
                     </ol>
-                    {% if pay_url %}
-                    <a href="{{ pay_url }}" target="_blank" rel="noopener" class="btn btn-gold btn-block mb-3"><i class="fas fa-external-link-alt"></i> Payer avec SasPay</a>
+                    <a href="#" target="_blank" rel="noopener" class="btn btn-gold btn-block mb-3" id="payLink"><i class="fas fa-external-link-alt"></i> Payer avec SasPay</a>
+                    <p class="small text-warning mb-3" id="payNoLink" style="display:none">Le lien de paiement de ce pays n'est pas encore disponible.</p>
                     {% endif %}
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('abonnement') }}" id="declarerReference">
+                    <form method="POST" action="{{ url_for('abonnement') }}" id="declarerReference" class="pay-form">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="form-group">
-                            <label class="small font-weight-bold">Nombre de mois payés</label>
-                            <select name="months" id="months" class="form-control">
-                                {% for n in range(1, max_months + 1) %}<option value="{{ n }}" data-amount="{{ n * info.monthly }}">{{ n }} mois · {{ (n * info.monthly)|fcfa }} FCFA</option>{% endfor %}
-                            </select>
-                        </div>
+                        <input type="hidden" name="country" value="{{ default_country }}"><input type="hidden" name="months" value="1">
                         <div class="form-group">
                             <label class="small font-weight-bold">Référence de la transaction SasPay</label>
                             <input type="text" name="reference" class="form-control" maxlength="80" required placeholder="Ex : TXN-20261010-000512">
                         </div>
                         <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-check"></i> Valider mon paiement</button>
                     </form>
+                    <p class="small text-muted mt-3 mb-0">Le franc CFA d'Afrique centrale (XAF) et celui d'Afrique de l'Ouest (XOF) ont la même valeur.</p>
+                    {% else %}
+                    <p class="text-muted mb-0">Le paiement en ligne n'est pas encore ouvert. Contactez l'administrateur de la plateforme.</p>
+                    {% endif %}
                 </div>
             </div>
             {% elif info.plan == 'PAYANT' %}
@@ -109,7 +124,7 @@
                 <tr>
                     <td>{{ p.declared_at.strftime('%d/%m/%Y') if p.declared_at else '—' }}</td>
                     <td>{{ p.months }}</td>
-                    <td class="text-right">{{ p.amount|fcfa }} FCFA</td>
+                    <td class="text-right">{{ p.amount|fcfa }} {{ 'FCFA' if (p.currency or 'XAF') in ('XAF', 'XOF') else p.currency }}</td>
                     <td><code>{{ p.reference }}</code></td>
                     <td>{% if p.period_start %}{{ p.period_start.strftime('%d/%m/%Y') }} → {{ p.period_end.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
                     <td><span class="badge badge-{{ p.status_color }}">{{ p.status_display if p.status != 'EN_ATTENTE' else 'En attente de confirmation SasPay' }}</span>
@@ -124,4 +139,26 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var country = document.getElementById('payCountry'), months = document.getElementById('payMonths');
+    if (!country) { return; }
+    function fmt(n) { return n.toLocaleString('fr-FR').replace(/ | /g, ' '); }
+    function update() {
+        var o = country.options[country.selectedIndex], n = parseInt(months.value, 10);
+        var cur = o.dataset.currency, label = (cur === 'XAF' || cur === 'XOF') ? 'FCFA' : cur;
+        var monthly = parseInt(o.dataset.monthly, 10);
+        document.getElementById('payTotal').textContent = fmt(monthly * n) + ' ' + label;
+        document.getElementById('payDetail').textContent = n + ' mois × ' + fmt(monthly) + ' ' + label + ' (' + cur + ')';
+        document.getElementById('payNetworks').textContent = 'Opérateurs : ' + o.dataset.networks;
+        var link = document.getElementById('payLink'), none = document.getElementById('payNoLink');
+        if (link) { link.style.display = o.dataset.url ? '' : 'none'; link.href = o.dataset.url || '#'; none.style.display = o.dataset.url ? 'none' : ''; }
+        document.querySelectorAll('.pay-form').forEach(function (f) { f.country.value = o.value; f.months.value = n; });
+    }
+    country.addEventListener('change', update); months.addEventListener('change', update); update();
+})();
+</script>
 {% endblock %}

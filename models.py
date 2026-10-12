@@ -1271,6 +1271,8 @@ class BillingPayment(TenantMixin, db.Model):
     note = db.Column(db.String(255), nullable=True)
     auto_validated = db.Column(db.Boolean, nullable=True, default=False)   # validé par SasPay (sans l'admin)
     checkout_session_id = db.Column(db.String(80), nullable=True)          # paiement en un clic
+    currency = db.Column(db.String(3), nullable=True, default='XAF')       # devise du paiement (NULL = XAF)
+    country = db.Column(db.String(2), nullable=True)                       # pays du paiement (code ISO)
 
     tontine = db.relationship('Tontine', foreign_keys='BillingPayment.tontine_id')
     declarer = db.relationship('User', foreign_keys=[declared_by])
@@ -1282,6 +1284,21 @@ class BillingPayment(TenantMixin, db.Model):
     @property
     def status_color(self):
         return self.STATUSES.get(self.status, (self.status, 'secondary'))[1]
+
+
+# ============================================================
+# DEVISES DE PAIEMENT DE L'ABONNEMENT (réglées par le super-admin)
+# ============================================================
+class PaymentCurrency(db.Model):
+    """Prix par membre et lien SasPay pour une devise. FCFA (XAF/XOF) : prix de la plateforme ;
+    autres devises : actives seulement quand le super-admin a fixé un prix"""
+    __tablename__ = 'payment_currencies'
+
+    code = db.Column(db.String(3), primary_key=True)
+    price_per_member = db.Column(db.Numeric(14, 2), nullable=True)
+    payment_url = db.Column(db.String(300), nullable=True)
+    is_active = db.Column(db.Boolean, default=False)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
 
 # ============================================================

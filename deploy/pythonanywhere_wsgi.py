@@ -26,8 +26,10 @@ os.environ.setdefault('SESSION_COOKIE_SECURE', 'True')
 os.environ['BREVO_API_KEY'] = 'COLLEZ_ICI_LA_CLE_BREVO'
 
 # ---- SasPay : abonnements payés et validés automatiquement (sans intervention de l'administrateur)
-# Lien de paiement SasPay (public, montant libre, devise XAF)
-os.environ.setdefault('SASPAY_PAYMENT_URL', 'COLLEZ_ICI_LE_LIEN_DE_PAIEMENT')
+# Liens de paiement SasPay (publics, montant libre) : un en XAF (Cameroun, Gabon, Congo…)
+# et, si vous avez des tontines en Afrique de l'Ouest, un en XOF (Bénin, Côte d'Ivoire, Sénégal…)
+os.environ.setdefault('SASPAY_PAYMENT_URL', 'COLLEZ_ICI_LE_LIEN_XAF')
+os.environ.setdefault('SASPAY_PAYMENT_URL_XOF', '')
 # Secret de signature du webhook SasPay (adresse : https://germainbob.pythonanywhere.com/webhooks/saspay)
 os.environ['SASPAY_WEBHOOK_SECRET'] = 'COLLEZ_ICI_LE_SIGNING_SECRET'
 # Paiement en un clic : clé secrète sk_live_… — à remplir SEULEMENT quand PythonAnywhere aura autorisé api.saspay.me

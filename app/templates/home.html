@@ -258,7 +258,7 @@
                     <ul>
                         <li><i class="fas fa-check"></i> Tout ce qui est dans « Gratuit »</li>
                         <li><i class="fas fa-check"></i> Membres illimités</li>
-                        <li><i class="fas fa-check"></i> Paiement Mobile Money via SasPay</li>
+                        <li><i class="fas fa-check"></i> Mobile Money via SasPay dans {{ pricing.countries|length }} pays africains</li>
                         <li><i class="fas fa-check"></i> De 1 à 12 mois d'avance</li>
                         <li><i class="fas fa-check"></i> {{ pricing.grace }} jours de délai si vous oubliez</li>
                     </ul>
@@ -295,7 +295,8 @@
         {% set faqs = [
             ("C'est vraiment gratuit ?", "Oui, sans limite de durée, tant que votre tontine compte " ~ pricing.free ~ " membres actifs ou moins. Toutes les fonctionnalités sont incluses."),
             ("Comment est calculé le prix au-delà de " ~ pricing.free ~ " membres ?", pricing.price ~ " FCFA par membre actif et par mois, pour tous les membres. Exemple : 15 membres = 15 × " ~ pricing.price ~ " = " ~ ((15 * pricing.price)|fcfa|replace(' ', ' ')) ~ " FCFA par mois. Si vous redescendez à " ~ pricing.free ~ " membres ou moins, la tontine redevient gratuite."),
-            ("Comment payer l'abonnement ?", "Le président ou le trésorier paie par Mobile Money avec SasPay, puis recopie la référence de la transaction dans la page « Abonnement ». Le paiement est validé par l'administrateur de la plateforme. On peut payer de 1 à 12 mois d'avance."),
+            ("Depuis quels pays peut-on payer ?", "Par Mobile Money avec SasPay, depuis " ~ (pricing.countries|length) ~ " pays : " ~ (pricing.countries|join(', ')) ~ ". En franc CFA (XAF ou XOF), le prix est le même partout ; dans les autres pays, il est affiché dans la monnaie locale."),
+            ("Comment payer l'abonnement ?", "Le président ou le trésorier choisit son pays dans la page « Abonnement », paie par Mobile Money avec SasPay et colle la référence de la transaction. Le paiement est validé automatiquement dès que SasPay le confirme. On peut payer de 1 à 12 mois d'avance."),
             ("Que se passe-t-il si on oublie de payer ?", "Vous avez " ~ pricing.grace ~ " jours de délai. Ensuite la tontine passe en lecture seule : tout reste consultable, rien n'est supprimé, et tout se débloque dès que le paiement est validé."),
             ("Pourquoi dois-je confirmer mon adresse e-mail ?", "Pour protéger la plateforme contre les fausses inscriptions. Après la création de votre tontine, cliquez sur le lien reçu par e-mail dans les 3 heures ; sans confirmation, l'inscription est supprimée et il faut la refaire."),
             ("Mes données sont-elles visibles par d'autres tontines ?", "Non. Chaque tontine est totalement séparée : seuls ses membres y ont accès, et chacun ne voit que ce que son rôle lui permet (le bureau gère, les membres consultent)."),

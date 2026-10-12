@@ -70,7 +70,7 @@ check('11 × 200 = 2 200 FCFA / mois' in h and 'Payante' in h, '11 membres : 11 
 grace_end = (date.today() + timedelta(days=6)).strftime('%d/%m/%Y')
 check(f'Abonnement à régler avant le {grace_end}' in text(pres.get('/dashboard')), f'bandeau : 7 jours de grâce (jusqu\'au {grace_end})')
 check('Payer avec SasPay' in h, 'bouton « Payer avec SasPay »')
-check('href="https://pay.example/ghelia?montant=2200&amp;ref=grande"' in pres.get('/abonnement').get_data(as_text=True),
+check('data-url="https://pay.example/ghelia?montant=2200&amp;ref=grande"' in pres.get('/abonnement').get_data(as_text=True),
       'lien SasPay rempli avec le montant et la référence de la tontine')
 membre = app.test_client()
 membre.post('/login', data={'tontine': 'grande', 'username': 'membre3', 'password': 'Passw0rd1'})
