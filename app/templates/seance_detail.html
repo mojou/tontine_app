@@ -77,6 +77,7 @@
                             <input type="checkbox" class="pay-box mr-1" name="pay_{{ key }}" aria-label="Payé">
                             <input type="number" class="form-control form-control-sm amt" name="amt_{{ key }}" min="0" step="1"
                                    value="{{ cell.expected|int if cell.expected and cell.expected > 0 else '' }}" placeholder="montant">
+                            {% if cell.arrears and cell.arrears > 0 %}<div class="small text-danger">dont {{ fcfa(cell.arrears) }} de retard</div>{% endif %}
                         </td>
                         {% else %}
                         <td class="text-muted small">attendu {{ fcfa(cell.expected) if cell.expected else 'libre' }}</td>
@@ -169,6 +170,7 @@
                     {% elif can_pay_out %}
                     {% set payout_missing = p.missing %}
                     {% set payout_late = p.late %}
+                    {% set payout_shortfall = p.shortfall %}
                     <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="expected_turn" value="{{ p.turn }}">

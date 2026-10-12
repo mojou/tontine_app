@@ -53,6 +53,7 @@
             {# ---------------- Versement du tour ---------------- #}
             {% set payout_missing = contrib.missing %}
             {% set payout_late = contrib.rows | selectattr('gap', 'lt', 0) | list %}
+            {% set payout_shortfall = contrib.current_total %}
             {% if next_steps %}
             {# ---------------- Cycle terminé : prochaines étapes ---------------- #}
             {% set steps_done = next_steps | selectattr('done') | list | length %}
@@ -218,7 +219,7 @@
                         <div class="flex-grow-1">
                             <strong>{{ b.member_name }}</strong> <small class="text-muted">· {{ b.benefit_date.strftime('%d/%m/%Y') }}</small>
                             <div class="small text-muted">
-                                Brut {{ fcfa(b.gross_amount) }}{% if b.bid_amount %} − mise {{ fcfa(b.bid_amount) }}{% endif %}{% if b.sanctions_deducted and b.sanctions_deducted > 0 %} − amendes {{ fcfa(b.sanctions_deducted) }}{% endif %}
+                                Brut {{ fcfa(b.gross_amount) }}{% if b.bid_amount %} − mise {{ fcfa(b.bid_amount) }}{% endif %}{% if b.sanctions_deducted and b.sanctions_deducted > 0 %} − amendes {{ fcfa(b.sanctions_deducted) }}{% endif %}{% if b.pending_amount and b.pending_amount > 0 %} − <span class="text-danger">reste à recevoir {{ fcfa(b.pending_amount) }} (retards)</span>{% endif %}
                                 = <strong style="color: var(--hl-green)">{{ fcfa(b.net_amount) }} FCFA</strong>
                                 {% if b.transaction_id %} · réf. {{ b.transaction_id }}{% endif %}
                             </div>

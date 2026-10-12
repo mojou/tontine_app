@@ -46,6 +46,7 @@ SUITES = [
     ('test_parcours.py', 'pa.db', 'Parcours utilisateur (tous les rôles)'),
     ('test_amendes_retard.py', 'am.db', 'Amendes de retard de cotisation'),
     ('test_ecarts_cycle.py', 'ec.db', 'Écarts de cycle et régularisation'),
+    ('test_cycle_retards.py', 'cr.db', 'Cycle : montant composé, cagnotte réduite, retards'),
     ('test_confirmation_email.py', 'ce.db', "Confirmation e-mail à l'inscription"),
     ('test_abonnement.py', 'ab.db', 'Abonnement, paiements, offres, suppression'),
     ('test_production.py', 'pr.db', 'Réglages de mise en ligne (https, IP)'),

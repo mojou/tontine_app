@@ -149,6 +149,41 @@
             </div>
         </div>
 
+        {# ---------------- Amende de retard au versement de la cagnotte ---------------- #}
+        {% set p_mode = tontine.cycle_penalty_mode or 'PERCENT' %}
+        <div class="card mt-4" id="amende-cycle">
+            <div class="card-header"><i class="fas fa-gavel" style="color: var(--hl-gold)"></i> Amende quand un membre ne paie pas sa part du tour</div>
+            <div class="card-body">
+                <p class="small text-muted">Le jour du tour, si un membre n'a pas payé, la cagnotte est versée réduite et sa part est reversée
+                    au bénéficiaire quand il paie. Choisissez l'amende que votre réunion applique :</p>
+                <form method="POST" action="{{ url_for('cycle_penalty_settings') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="custom-control custom-radio mb-2">
+                        <input type="radio" class="custom-control-input penalty-mode" id="penPercent" name="cycle_penalty_mode" value="PERCENT"
+                               {% if p_mode == 'PERCENT' %}checked{% endif %}>
+                        <label class="custom-control-label" for="penPercent"><strong>Un pourcentage</strong> de la part non payée
+                            <span class="text-muted small">(ex. 10 % : 2 500 FCFA pour une part de 25 000)</span></label>
+                    </div>
+                    <div class="custom-control custom-radio mb-3">
+                        <input type="radio" class="custom-control-input penalty-mode" id="penFixed" name="cycle_penalty_mode" value="FIXED"
+                               {% if p_mode == 'FIXED' %}checked{% endif %}>
+                        <label class="custom-control-label" for="penFixed"><strong>Un montant fixe</strong> par échec
+                            <span class="text-muted small">(ex. 1 000 FCFA, quel que soit le montant de la part)</span></label>
+                    </div>
+                    <div class="form-inline">
+                        <label class="small font-weight-bold mr-2" for="penValue">Valeur</label>
+                        <input type="number" class="form-control form-control-sm mr-2" id="penValue" name="cycle_penalty_value" min="0" step="1"
+                               style="width: 140px"
+                               value="{{ (tontine.cycle_penalty_value|int) if tontine.cycle_penalty_value is not none else (10 if p_mode == 'PERCENT' else '') }}">
+                        <span class="mr-3" id="penUnit">{{ '%' if p_mode == 'PERCENT' else 'FCFA' }}</span>
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+                    </div>
+                    <small class="text-muted d-block mt-2">Mettez 0 pour ne pas mettre d'amende. Règle actuelle :
+                        <strong>{{ late_penalty_label or 'aucune amende' }}</strong>.</small>
+                </form>
+            </div>
+        </div>
+
         {# ---------------- Aides sociales ---------------- #}
         <div class="card mt-4" id="aides">
             <div class="card-header"><i class="fas fa-hand-holding-heart" style="color: var(--hl-gold)"></i> Aides sociales : conditions et barème</div>
@@ -231,4 +266,18 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Amende de retard : l'unité suit le mode choisi (pourcentage ou montant fixe)
+document.querySelectorAll('.penalty-mode').forEach(function (r) {
+    r.addEventListener('change', function () {
+        var percent = document.getElementById('penPercent').checked, input = document.getElementById('penValue');
+        document.getElementById('penUnit').textContent = percent ? '%' : 'FCFA';
+        input.max = percent ? 100 : '';
+        if (percent && (!input.value || +input.value > 100)) { input.value = 10; }
+    });
+});
+</script>
 {% endblock %}

@@ -12,14 +12,26 @@
     </div>
 </div>
 {% if payout_missing and payout_missing > 0 %}
-<div class="alert alert-danger small py-2 mb-2">
+{% set short = payout_shortfall or 0 %}
+<div class="alert alert-danger small py-2 mb-2 late-choice">
     <i class="fas fa-exclamation-triangle"></i>
-    <strong>{{ (payout_missing|float)|fcfa }} FCFA de cotisations n'ont pas été enregistrées</strong>
+    <strong>{{ (payout_missing|float)|fcfa|replace(' ', ' ') }} FCFA de cotisations ne sont pas payés</strong>
     pour ce cycle{% if payout_late %} :
-    {% for r in payout_late %}{{ r.member.full_name }} ({{ ((-r.gap)|float)|fcfa }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}.
-    <div class="custom-control custom-checkbox mt-1">
-        <input type="checkbox" class="custom-control-input" id="offline{{ cycle.id }}" name="confirm_offline">
-        <label class="custom-control-label" for="offline{{ cycle.id }}">Ces cotisations ont été encaissées hors application : les enregistrer maintenant</label>
+    {% for r in payout_late %}{{ r.member.full_name }} ({{ ((-r.gap)|float)|fcfa|replace(' ', ' ') }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}.
+    <div class="mt-2 font-weight-bold">Que faire ?</div>
+    {% if short > 0 %}
+    <div class="custom-control custom-radio mt-1">
+        <input type="radio" class="custom-control-input" id="reduite{{ cycle.id }}" name="late_mode" value="reduite" required>
+        <label class="custom-control-label" for="reduite{{ cycle.id }}">
+            <strong>Verser la cagnotte réduite</strong> : {{ ((cycle.total_amount - short)|float)|fcfa|replace(' ', ' ') }} FCFA au lieu de
+            {{ (cycle.total_amount|float)|fcfa|replace(' ', ' ') }}. {% if late_penalty_label %}Les retardataires reçoivent une <strong>{{ late_penalty_label }}</strong>
+            {% endif %}et leur part sera reversée au bénéficiaire dès qu'ils paieront.</label>
+    </div>
+    {% endif %}
+    <div class="custom-control custom-radio mt-1">
+        <input type="radio" class="custom-control-input" id="offline{{ cycle.id }}" name="late_mode" value="hors_app" required>
+        <label class="custom-control-label" for="offline{{ cycle.id }}">L'argent a <strong>réellement été reçu</strong> hors de l'application :
+            l'enregistrer maintenant</label>
     </div>
 </div>
 {% endif %}

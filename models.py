@@ -29,6 +29,10 @@ class Tontine(db.Model):
     pending_confirmation = db.Column(db.Boolean, nullable=True, default=False)
     confirmed_at = db.Column(db.DateTime, nullable=True)
     # Abonnement à la plateforme (voir billing.py)
+    # Cycle : amende quand un membre n'a pas payé sa part au versement de la cagnotte
+    # mode « PERCENT » (pourcentage de la part non payée) ou « FIXED » (montant fixe en FCFA)
+    cycle_penalty_mode = db.Column(db.String(10), nullable=True, default='PERCENT')
+    cycle_penalty_value = db.Column(db.Numeric(12, 2), nullable=True)   # NULL = valeur par défaut (10 %)
     billing_offered = db.Column(db.Boolean, nullable=True, default=False)   # version payante offerte sans limite
     free_until = db.Column(db.Date, nullable=True)                          # mois gratuits offerts jusqu'au
     paid_until = db.Column(db.Date, nullable=True)                          # payé jusqu'au
@@ -699,6 +703,7 @@ class CycleBeneficiary(TenantMixin, db.Model):
     transaction_id = db.Column(db.String(100), nullable=True)
     participant_id = db.Column(db.Integer, db.ForeignKey('cycle_participants.id'), nullable=True)
     bid_amount = db.Column(db.Numeric(10, 2), nullable=True)   # mise d'enchère retenue
+    pending_amount = db.Column(db.Numeric(10, 2), nullable=True)   # cagnotte réduite : part encore due au bénéficiaire
 
     cycle_detail = db.relationship('TontineCycleDetail', back_populates='benefits', foreign_keys=[cycle_id])
 
@@ -1284,6 +1289,31 @@ class BillingPayment(TenantMixin, db.Model):
     @property
     def status_color(self):
         return self.STATUSES.get(self.status, (self.status, 'secondary'))[1]
+
+
+# ============================================================
+# CAGNOTTE RÉDUITE : part d'un retardataire due à un bénéficiaire
+# ============================================================
+class CycleShortfall(TenantMixin, db.Model):
+    """Le jour du tour, un membre n'a pas payé sa part : le bénéficiaire a reçu moins.
+    Quand le membre paie son retard, sa part est reversée à ce bénéficiaire."""
+    __tablename__ = 'cycle_shortfalls'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cycle_id = db.Column(db.Integer, db.ForeignKey('tontine_cycle_details.id'), nullable=False)
+    beneficiary_id = db.Column(db.Integer, db.ForeignKey('cycle_beneficiaries.id'), nullable=False)
+    member_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=False)   # le retardataire
+    turn = db.Column(db.Integer, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    settled_amount = db.Column(db.Numeric(12, 2), default=Decimal('0.00'))
+    created_at = db.Column(db.DateTime, default=utcnow)
+    settled_at = db.Column(db.DateTime, nullable=True)
+
+    member = db.relationship('Member', foreign_keys=[member_id])
+
+    @property
+    def remaining(self):
+        return Decimal(str(self.amount)) - Decimal(str(self.settled_amount or 0))
 
 
 # ============================================================

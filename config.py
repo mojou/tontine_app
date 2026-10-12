@@ -83,6 +83,9 @@ class Config:
     REQUIRE_EMAIL_CONFIRMATION = os.environ.get('REQUIRE_EMAIL_CONFIRMATION', 'True').lower() == 'true'
     EMAIL_CONFIRMATION_HOURS = int(os.environ.get('EMAIL_CONFIRMATION_HOURS', '3'))
     # Abonnement : lien de paiement SasPay (facultatif). {montant} et {reference} sont remplacés.
+    # Cycle : un membre qui n'a pas payé sa part au versement de la cagnotte reçoit une amende
+    # de ce pourcentage de sa part manquante (à régler à la réunion suivante)
+    CYCLE_LATE_PENALTY_PERCENT = int(os.environ.get('CYCLE_LATE_PENALTY_PERCENT', '10'))
     SASPAY_PAYMENT_URL = os.environ.get('SASPAY_PAYMENT_URL', '')          # lien en XAF (Afrique centrale)
     SASPAY_PAYMENT_URL_XOF = os.environ.get('SASPAY_PAYMENT_URL_XOF', '')  # lien en XOF (Bénin, Côte d'Ivoire…)
     # Notifications SasPay (webhooks) : secret de signature, réglé UNIQUEMENT sur l'hébergeur

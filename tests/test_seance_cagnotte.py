@@ -71,7 +71,7 @@ with app.app_context():
 h = body(c.get(f'/seances/{sid}'))
 check('id="cagnottes"' in h and 'Cagnottes du jour' in h, 'la feuille de séance affiche les cagnottes du jour')
 check(f'Tour 1 : {first_label}' in h, f'le bénéficiaire prévu du tirage est proposé ({first_label})')
-check("40 000 FCFA de cotisations n'ont pas été enregistrées" in h and 'name="confirm_offline"' in h,
+check('40 000 FCFA de cotisations ne sont pas payés' in h and 'name="late_mode" value="hors_app"' in h,
       "alerte tant que les cotisations du tour ne sont pas enregistrées")
 
 # ---------------------------------------------------------------- versement refusé sans les cotisations
@@ -89,7 +89,7 @@ for mid in mem.values():
     form[f'amt_{mid}_c{tirage}'] = '10000'
 c.post(f'/seances/{sid}', data=form)
 h = body(c.get(f'/seances/{sid}'))
-check("n'ont pas été enregistrées" not in h.split(f'data-cycle="{tirage}"')[1].split('data-cycle=')[0], 'plus d\'alerte une fois les 4 parts encaissées')
+check('ne sont pas payés' not in h.split(f'data-cycle="{tirage}"')[1].split('data-cycle=')[0], 'plus d\'alerte une fois les 4 parts encaissées')
 
 # ---------------------------------------------------------------- droits
 censeur = app.test_client()
