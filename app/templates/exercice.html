@@ -8,14 +8,16 @@
 {% block content %}
 <div class="fade-in">
     <p class="text-muted">
-        En fin d'année, chaque membre récupère son <strong>épargne</strong> et reçoit une <strong>part des bénéfices</strong>
-        de la caisse, proportionnelle à son épargne.
+        En fin d'année, chaque membre récupère son <strong>épargne</strong> et reçoit sa part des <strong>intérêts des emprunts</strong>,
+        selon ses <strong>parts</strong> : 1 part = 1 000 FCFA restés 1 mois dans la caisse (un versement de janvier compte 12 mois,
+        de décembre 1 mois).
+        <a href="{{ url_for('savings_report_page', year=year, include_sanctions='on' if include_sanctions else none, include_auctions='on' if include_auctions else none) }}"><i class="fas fa-table"></i> Voir le rapport mois par mois</a>
     </p>
 
     {% if closure %}
     <div class="alert alert-success">
-        <i class="fas fa-check-circle"></i> Exercice {{ year }} clôturé le {{ closure.executed_at.strftime('%d/%m/%Y') }} :
-        {{ fcfa(closure.savings_returned) }} FCFA d'épargne restitués et {{ fcfa(closure.profit_distributed) }} FCFA de bénéfices
+        <i class="fas fa-check-circle"></i> Année {{ year }} fermée le {{ closure.executed_at.strftime('%d/%m/%Y') }} :
+        {{ fcfa(closure.savings_returned) }} FCFA d'épargne rendus et {{ fcfa(closure.profit_distributed) }} FCFA de bénéfices
         partagés entre {{ closure.beneficiaries }} membre(s).{% if closure.notes %} <em>{{ closure.notes }}</em>{% endif %}
     </div>
     {% endif %}
@@ -31,10 +33,14 @@
                     </select>
                 </div>
                 <div class="form-group col-md-6">
-                    <div class="small">Mises d'enchères : <strong>{{ fcfa(preview.auctions) }}</strong> · Intérêts d'emprunts remboursés : <strong>{{ fcfa(preview.interests) }}</strong></div>
+                    <div class="small">Intérêts des emprunts remboursés en {{ year }} : <strong>{{ fcfa(preview.interests) }}</strong></div>
                     <div class="custom-control custom-checkbox mt-1">
                         <input type="checkbox" class="custom-control-input" id="include_sanctions" name="include_sanctions" {% if include_sanctions %}checked{% endif %}>
                         <label class="custom-control-label small" for="include_sanctions">Ajouter les amendes payées ({{ fcfa(preview.sanctions) if include_sanctions else '…' }})</label>
+                    </div>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="include_auctions" name="include_auctions" {% if include_auctions %}checked{% endif %}>
+                        <label class="custom-control-label small" for="include_auctions">Ajouter les enchères ({{ fcfa(preview.auctions) if include_auctions else '…' }})</label>
                     </div>
                     <div class="small text-muted">Proposition : {{ fcfa(preview.proposed) }} FCFA · Caisse générale disponible : {{ fcfa(preview.caisse_balance) }} FCFA</div>
                 </div>
@@ -54,12 +60,13 @@
         {% if preview.savers %}
         <div class="table-container">
             <table class="table mb-0">
-                <thead><tr><th>Membre</th><th class="text-right">Épargne</th><th class="text-right">Part</th><th class="text-right">Bénéfices</th><th class="text-right">Total à remettre</th></tr></thead>
+                <thead><tr><th>Membre</th><th class="text-right">Épargne au 31/12</th><th class="text-right">Parts</th><th class="text-right">Part en %</th><th class="text-right">Intérêts</th><th class="text-right">Total à remettre</th></tr></thead>
                 <tbody>
                 {% for s in preview.savers %}
                 <tr>
                     <td>{{ s.member.full_name }}</td>
                     <td class="text-right">{{ fcfa(s.savings) }}</td>
+                    <td class="text-right">{{ '{:,.1f}'.format(s.parts|float).replace(',', ' ').replace('.', ',') }}</td>
                     <td class="text-right">{{ '%.1f'|format(s.ratio) }} %</td>
                     <td class="text-right" style="color: var(--hl-gold-dark)">+ {{ fcfa(s.profit) }}</td>
                     <td class="text-right font-weight-bold" style="color: var(--hl-green)">{{ fcfa(s.total) }}</td>
@@ -68,7 +75,8 @@
                 </tbody>
                 <tfoot>
                     <tr class="font-weight-bold" style="background: var(--hl-green-100)">
-                        <td>Total</td><td class="text-right">{{ fcfa(preview.total_savings) }}</td><td class="text-right">100 %</td>
+                        <td>Total</td><td class="text-right">{{ fcfa(preview.total_savings) }}</td>
+                        <td class="text-right">{{ '{:,.1f}'.format(preview.total_parts|float).replace(',', ' ').replace('.', ',') }}</td><td class="text-right">100 %</td>
                         <td class="text-right">{{ fcfa(preview.distributed) }}</td><td class="text-right">{{ fcfa(preview.total_savings + preview.distributed) }}</td>
                     </tr>
                 </tfoot>
@@ -86,9 +94,10 @@
         <input type="hidden" name="year" value="{{ year }}">
         <input type="hidden" name="pool_amount" value="{{ preview.pool|int }}">
         {% if include_sanctions %}<input type="hidden" name="include_sanctions" value="on">{% endif %}
+        {% if include_auctions %}<input type="hidden" name="include_auctions" value="on">{% endif %}
         <div class="card-body">
-            <h5>Clôturer l'exercice {{ year }}</h5>
-            <p class="small text-muted">Crée, pour chaque membre, la restitution de son épargne et le versement de sa part des bénéfices. Une seule clôture par exercice.</p>
+            <h5>Fermer l'année {{ year }}</h5>
+            <p class="small text-muted">Enregistre, pour chaque membre, son épargne rendue et sa part des intérêts. Une seule fois par année.</p>
             <div class="form-row">
                 <div class="form-group col-md-4">
                     <select name="payment_mode" class="form-control">
@@ -100,8 +109,8 @@
                 </div>
             </div>
             <button type="submit" class="btn btn-gold"
-                    onclick="return confirm('Clôturer l\'exercice {{ year }} et enregistrer les {{ preview.savers|length }} remboursements ? Cette opération ne se fait qu\'une fois.');">
-                <i class="fas fa-check-double"></i> Clôturer et enregistrer les versements
+                    onclick="return confirm('Fermer l\'année {{ year }} et enregistrer les {{ preview.savers|length }} versements ? Cela ne se fait qu\'une fois.');">
+                <i class="fas fa-check-double"></i> Fermer l'année et enregistrer les versements
             </button>
         </div>
     </form>

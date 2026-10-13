@@ -39,6 +39,8 @@ SUITES = [
     ('test_connexion.py', 'cx.db', 'Connexion (majuscules, espaces, sécurité)'),
     ('test_securite.py', 'sx.db', 'Sécurité des comptes (mot de passe provisoire, sessions, en-têtes)'),
     ('test_tirage_manuel.py', 'tm.db', 'Tirage automatique ou écrit à la main'),
+    ('test_caisse_annee.py', 'ca.db', "Caisse : chiffres de l'année choisie"),
+    ('test_epargne_interets.py', 'ei.db', "Rapport d'épargne : parts et intérêts"),
     ('test_sanctions.py', 'sa.db', 'Sanctions + contrôle de toutes les pages'),
     ('test_aides.py', 'ai.db', 'Aides sociales (règles, barème, versement)'),
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),

@@ -558,7 +558,25 @@
 
         // Boutons « Voir » : petite bulle d'explication (au toucher sur tablette/téléphone, au clic sur PC)
         $('[data-toggle="popover"]').popover({container: 'body'});
-        
+
+        // Versement d'une cagnotte (page du cycle et feuille de séance)
+        // Choix obligatoire (cagnotte réduite / reçu hors application) : message clair là où il faut choisir
+        document.querySelectorAll('.payout-form').forEach(function(form) {
+            form.addEventListener('invalid', function(e) {
+                e.preventDefault();
+                var box = form.querySelector('.late-choice');
+                if (box && !box.querySelector('.choice-needed')) {
+                    box.insertAdjacentHTML('beforeend', '<div class="choice-needed mt-2 p-2 bg-white border border-danger rounded font-weight-bold">'
+                        + '<i class="fas fa-hand-point-up"></i> Cochez une des options ci-dessus, puis cliquez à nouveau sur le bouton de versement.</div>');
+                }
+                (box || form).scrollIntoView({behavior: 'smooth', block: 'center'});
+            }, true);
+            form.addEventListener('submit', function(e) {     // la confirmation vient APRÈS la vérification des choix
+                if (!confirm(form.dataset.confirm)) e.preventDefault();
+            });
+            $(form).find('input[name=late_mode]').on('change', function() { $(form).find('.choice-needed').remove(); });
+        });
+
         // Auto-hide alerts after 5 seconds
         setTimeout(function() {
             $('.alert').fadeOut('slow');

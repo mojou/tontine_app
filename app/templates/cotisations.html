@@ -34,24 +34,40 @@
 
     {# ---------------- Situation des fonds ---------------- #}
     {% if is_bureau %}
+    {% set fin = "aujourd'hui" if is_current_year else 'au 31/12/' ~ year %}
+    <p class="small text-muted mb-2"><i class="fas fa-calendar-alt"></i> Chiffres de l'année <strong>{{ year }}</strong> :
+        ce qu'il y avait au 1<sup>er</sup> janvier, ce qui est entré et sorti pendant l'année, et ce qui reste {{ fin }}.</p>
     <div class="row mb-2">
         <div class="col-6 col-lg mb-3">
             <div class="fund-card total">
-                <div class="label">Total en caisse</div>
-                <div class="value">{{ fcfa(total_balance) }}</div>
-                <div class="small">FCFA en caisse</div>
+                <div class="label">Total en caisse {{ fin }}</div>
+                <div class="value">{% if total_balance < 0 %}Manque {{ fcfa(-total_balance) }}{% else %}{{ fcfa(total_balance) }}{% endif %}</div>
+                <div class="small">Au 1<sup>er</sup> janvier : {{ fcfa(total_opening) }}</div>
+                <div class="small">Entré en {{ year }} : {{ fcfa(total_in) }}</div>
+                <div class="small">Sorti en {{ year }} : {{ fcfa(total_out) }}</div>
             </div>
         </div>
         {% for f in funds %}
         <div class="col-6 col-lg mb-3">
             <div class="fund-card">
                 <div class="label">{{ f.label }}</div>
-                <div class="value {% if f.balance < 0 %}text-danger{% endif %}">{{ fcfa(f.balance) }}</div>
-                <div class="small text-muted">+{{ fcfa(f['in']) }} / −{{ fcfa(f['out']) }}</div>
+                {% if f.balance < 0 %}
+                <div class="value text-danger" title="Plus d'argent est sorti de cette caisse qu'il n'en est entré : vérifiez les paiements.">Manque {{ fcfa(-f.balance) }}</div>
+                {% else %}
+                <div class="value">{{ fcfa(f.balance) }}</div>
+                {% endif %}
+                <div class="small text-muted">Au 1<sup>er</sup> janvier : {{ fcfa(f.opening) }}</div>
+                <div class="small text-success">Entré : {{ fcfa(f['in']) }}</div>
+                <div class="small text-danger">Sorti : {{ fcfa(f['out']) }}</div>
             </div>
         </div>
         {% endfor %}
     </div>
+    {% if funds|selectattr('balance', 'lt', 0)|list %}
+    <div class="alert alert-warning small"><i class="fas fa-exclamation-triangle"></i>
+        « <strong>Manque</strong> » : plus d'argent est sorti de cette caisse qu'il n'en est entré. Souvent un paiement
+        reçu qui n'a pas été écrit dans l'application : vérifiez le Journal des mouvements.</div>
+    {% endif %}
     {% endif %}
 
     {# ---------------- Rubriques ---------------- #}
@@ -135,7 +151,7 @@
                 <tr>
                     <td><a href="{{ url_for('member_detail', member_id=mm.id) }}">{{ mm.full_name }}</a></td>
                     {% for c in categories %}
-                    <td class="text-right {{ 'text-muted' if not row.get(c) }}">{{ fcfa(row.get(c, 0)) if row.get(c) else '–' }}</td>
+                    <td class="text-right {{ 'text-muted' if not row.get(c) }}">{{ fcfa(row.get(c, 0)) if row.get(c) else '0' }}</td>
                     {% endfor %}
                     <td class="text-right font-weight-bold">{{ fcfa(row.values()|sum) }}</td>
                     <td>

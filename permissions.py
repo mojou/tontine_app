@@ -86,6 +86,7 @@ MENU_ITEMS = {
         {'name': 'Historique des actions', 'icon': 'fas fa-history', 'url': 'audit_logs'},
         {'name': 'Mots de passe perdus', 'icon': 'fas fa-key', 'url': 'password_requests'},
         {'name': 'Caisse', 'icon': 'fas fa-cash-register', 'url': 'cotisations'},
+        {'name': "Rapport d'épargne", 'icon': 'fas fa-piggy-bank', 'url': 'savings_report_page'},
         {'name': 'Séances', 'icon': 'fas fa-clipboard-check', 'url': 'seances'},
         {'name': "Fin d'année", 'icon': 'fas fa-calendar-check', 'url': 'exercise'},
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
@@ -109,6 +110,7 @@ MENU_ITEMS = {
         {'name': 'Historique des actions', 'icon': 'fas fa-history', 'url': 'audit_logs'},
         {'name': 'Mots de passe perdus', 'icon': 'fas fa-key', 'url': 'password_requests'},
         {'name': 'Caisse', 'icon': 'fas fa-cash-register', 'url': 'cotisations'},
+        {'name': "Rapport d'épargne", 'icon': 'fas fa-piggy-bank', 'url': 'savings_report_page'},
         {'name': 'Séances', 'icon': 'fas fa-clipboard-check', 'url': 'seances'},
         {'name': "Fin d'année", 'icon': 'fas fa-calendar-check', 'url': 'exercise'},
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
@@ -127,6 +129,7 @@ MENU_ITEMS = {
         {'name': 'Aides sociales', 'icon': 'fas fa-heart', 'url': 'aides'},
         {'name': 'Rapports', 'icon': 'fas fa-chart-line', 'url': 'reports'},
         {'name': 'Caisse', 'icon': 'fas fa-cash-register', 'url': 'cotisations'},
+        {'name': "Rapport d'épargne", 'icon': 'fas fa-piggy-bank', 'url': 'savings_report_page'},
         {'name': 'Séances', 'icon': 'fas fa-clipboard-check', 'url': 'seances'},
         {'name': "Fin d'année", 'icon': 'fas fa-calendar-check', 'url': 'exercise'},
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
@@ -142,6 +145,7 @@ MENU_ITEMS = {
         {'name': 'Sanctions', 'icon': 'fas fa-gavel', 'url': 'sanctions'},
         {'name': 'Rapports', 'icon': 'fas fa-chart-line', 'url': 'reports'},
         {'name': 'Caisse', 'icon': 'fas fa-cash-register', 'url': 'cotisations'},
+        {'name': "Rapport d'épargne", 'icon': 'fas fa-piggy-bank', 'url': 'savings_report_page'},
         {'name': 'Cycles Tontine', 'icon': 'fas fa-sync-alt', 'url': 'tontine_cycles'},
         {'name': 'Séances', 'icon': 'fas fa-clipboard-check', 'url': 'seances'},
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
@@ -171,6 +175,7 @@ MENU_ITEMS = {
         {'name': 'Annonces', 'icon': 'fas fa-bullhorn', 'url': 'annonces'},
         {'name': 'Procès-verbaux', 'icon': 'fas fa-file-signature', 'url': 'meetings'},
         {'name': 'Caisse', 'icon': 'fas fa-cash-register', 'url': 'cotisations'},
+        {'name': 'Mon épargne', 'icon': 'fas fa-piggy-bank', 'url': 'savings_report_page'},
         {'name': 'Cycles Tontine', 'icon': 'fas fa-sync-alt', 'url': 'tontine_cycles'},
         {'name': 'Avals', 'icon': 'fas fa-handshake', 'url': 'avals'},
         {'name': 'Votes', 'icon': 'fas fa-vote-yea', 'url': 'votes'},
@@ -187,7 +192,7 @@ MENU_ITEMS = {
 # Rubriques du menu, dans l'ordre d'affichage : chaque page est rangée avec celles qui lui ressemblent
 MENU_SECTIONS = [
     ('', ['dashboard']),
-    ('Argent', ['seances', 'cotisations', 'transactions', 'loans', 'avals', 'exercise']),
+    ('Argent', ['seances', 'cotisations', 'transactions', 'savings_report_page', 'loans', 'avals', 'exercise']),
     ('Tontine', ['tontine_cycles', 'tirages']),
     ('Vie du groupe', ['members', 'sanctions', 'aides', 'meetings', 'annonces', 'votes']),
     ('Administration', ['reports', 'abonnement', 'tontine_settings', 'password_requests', 'audit_logs', 'gallery_admin', 'superadmin']),
@@ -198,6 +203,7 @@ _SECTION_OF = {url: (rank, title, pos) for rank, (title, urls) in enumerate(MENU
 # Pages regroupées sous une même entrée du menu (onglets) : l'entrée reste allumée sur chacune d'elles
 MENU_GROUPS = {
     'cotisations': ['transactions', 'add_transaction', 'edit_transaction', 'view_transaction'],
+    'savings_report_page': ['savings_statement'],
     'seances': ['seance_detail', 'meetings', 'meeting_detail', 'add_meeting', 'edit_meeting', 'manage_attendance'],
     'meetings': ['meeting_detail', 'add_meeting', 'edit_meeting', 'manage_attendance'],
 }

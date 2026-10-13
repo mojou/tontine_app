@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}{{ "Relevé d'épargne " ~ year ~ ' - ' ~ member.full_name if single else "Relevés d'épargne " ~ year }}{% endblock %}
+{% block page_title %}<i class="fas fa-file-invoice-dollar"></i> {{ "Relevé d'épargne" if single else "Relevés d'épargne" }} {{ year }}{% endblock %}
+
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
+{% macro taux(v) %}{{ '{:.2f}'.format(v|float).replace('.', ',') }} %{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .releve td, .releve th { white-space: nowrap; }
+    .releve tr.vide td { color: #aaa; }
+    .releve tr.report td { background: #fbf8ef; }
+    .releve-total { font-size: 1.15rem; }
+    @media print {
+        @page { size: A4 portrait; margin: 12mm; }
+        .sidebar, .navbar-custom, .no-print, .alert, .scroll-hint { display: none !important; }
+        .content { margin: 0 !important; width: 100% !important; }
+        .main-content { padding: 0 !important; }
+        .card { box-shadow: none !important; border: 1px solid #ccc !important; }
+        .table-responsive { overflow: visible !important; }
+        .releve-membre { page-break-after: always; }
+        .releve-membre:last-child { page-break-after: auto; }
+        .releve td, .releve th { padding: 3px 6px !important; font-size: 11px !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3 no-print">
+        <a href="{{ url_for('savings_report_page', year=year, include_sanctions='on' if include_sanctions else none, include_auctions='on' if include_auctions else none, pool_amount=override|int if override is not none else none) }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Rapport d'épargne {{ year }}</a>
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print"></i> Imprimer / PDF</button>
+    </div>
+
+    <p class="small text-muted no-print">
+        <strong>Taux d'intérêt du mois</strong> : ce que rapporte l'argent épargné ce mois-là. L'argent versé en janvier reste
+        12 mois dans la caisse et rapporte le plus ; celui de décembre reste 1 mois. <strong>À percevoir</strong> = montant + intérêt.
+        Taux = mois comptés × valeur d'une part ({{ '{:,.2f}'.format(report.part_value|float).replace(',', ' ').replace('.', ',') }} FCFA) ÷ 1 000.
+    </p>
+
+    {% for row in rows %}
+    <div class="card releve-membre">
+        <div class="card-header d-flex justify-content-between flex-wrap">
+            <span><strong>{{ row.member.full_name }}</strong> · {{ current_tontine.name }}</span>
+            <span>Année {{ year }}</span>
+        </div>
+        <p class="scroll-hint small text-muted px-3 pt-2 mb-0"><i class="fas fa-arrows-alt-h"></i> Faites glisser le tableau pour tout voir.</p>
+        <div class="table-responsive">
+            <table class="table table-sm releve mb-0">
+                <thead>
+                    <tr>
+                        <th>Mois</th>
+                        <th class="text-right">Montant épargné</th>
+                        <th class="text-right">Taux d'intérêt</th>
+                        <th class="text-right">Intérêt</th>
+                        <th class="text-right">À percevoir</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for l in row.monthly %}
+                {% set net = l.deposit - l.withdrawal %}
+                <tr class="{{ 'report' if l.is_opening else ('vide' if not net else '') }}">
+                    <td>{{ l.label }}</td>
+                    <td class="text-right {{ 'text-success font-weight-bold' if net > 0 }} {{ 'text-danger' if net < 0 }}">
+                        {% if net < 0 %}retrait {{ fcfa(-net) }}{% else %}{{ fcfa(net) }}{% endif %}</td>
+                    <td class="text-right" title="{{ l.counted }} mois dans la caisse">{{ taux(l.rate) }}
+                        <span class="d-block small text-muted">{{ l.counted }} mois</span></td>
+                    <td class="text-right {{ 'font-weight-bold' if l.interest > 0 }} {{ 'text-danger' if l.interest < 0 }}">
+                        {{ ('moins ' ~ fcfa(-l.interest)) if l.interest < 0 else fcfa(l.interest) }}</td>
+                    <td class="text-right {{ 'font-weight-bold' if net }}">
+                        {% if net < 0 %}moins {{ fcfa(-(net + l.interest)) }}{% else %}{{ fcfa(net + l.interest) }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="font-weight-bold" style="background: var(--hl-green-100)">
+                        <td>Total {{ year }}</td>
+                        <td class="text-right">{{ fcfa(row.savings) }}</td>
+                        <td class="text-right" title="Intérêts ÷ épargne">moyen {{ taux(row.avg_rate) }}</td>
+                        <td class="text-right" style="color: var(--hl-gold-dark, #a07a10)">{{ fcfa(row.profit) }}</td>
+                        <td class="text-right" style="color: var(--hl-green)">{{ fcfa(row.total) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="card-body">
+            <table class="table table-sm mb-0 releve-total" style="max-width: 520px">
+                <tr><td>Épargne au 31/12/{{ year }}</td><td class="text-right">{{ fcfa(row.savings) }} FCFA</td></tr>
+                <tr><td>Intérêts gagnés</td><td class="text-right" style="color: var(--hl-gold-dark, #a07a10)">{{ fcfa(row.profit) }} FCFA</td></tr>
+                <tr class="font-weight-bold" style="background: var(--hl-green-100)"><td>Somme totale à percevoir</td>
+                    <td class="text-right" style="color: var(--hl-green)">{{ fcfa(row.total) }} FCFA</td></tr>
+            </table>
+            <p class="small text-muted mt-2 mb-0">Les montants des mois sont arrondis à l'affichage ; la somme totale est le montant exact remis.</p>
+        </div>
+    </div>
+    {% else %}
+    <div class="card"><div class="card-body text-muted">Aucune épargne en {{ year }}.</div></div>
+    {% endfor %}
+</div>
+{% endblock %}

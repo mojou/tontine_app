@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Rapport d'épargne {{ year }} - {{ current_tontine.name }}{% endblock %}
+{% block page_title %}<i class="fas fa-piggy-bank"></i> Rapport d'épargne {{ year }}{% endblock %}
+
+{% macro fcfa(v) %}{{ (v|float)|fcfa }}{% endmacro %}
+{% macro parts(v) %}{{ '{:,.1f}'.format(v|float).replace(',', ' ').replace('.', ',') }}{% endmacro %}
+
+{% block extra_css %}
+<style>
+    .rapport td, .rapport th { white-space: nowrap; }
+    .rapport thead th { vertical-align: bottom; }
+    .rapport td.mois { font-size: .82rem; }
+    .rapport .vers { display: block; font-size: .7rem; color: #28a745; }
+    .rapport .retr { display: block; font-size: .7rem; color: #dc3545; }
+    .calc-box { background: var(--hl-cream, #faf7ef); border-radius: 12px; padding: 14px 18px; }
+    .calc-box .big { font-size: 1.25rem; font-weight: 800; color: var(--hl-green); }
+    @media print {
+        @page { size: A4 landscape; margin: 10mm; }
+        .sidebar, .navbar-custom, .no-print, .scroll-hint, .alert { display: none !important; }
+        .content { margin: 0 !important; width: 100% !important; }
+        .main-content { padding: 0 !important; }
+        .card { box-shadow: none !important; border: 1px solid #ccc !important; }
+        .table-responsive { overflow: visible !important; }
+        .rapport td, .rapport th { padding: 2px 4px !important; font-size: 9px !important; }
+        .print-title { display: block !important; }
+    }
+    .print-title { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <h4 class="print-title">{{ current_tontine.name }} — Rapport d'épargne {{ year }}</h4>
+
+    <form method="GET" class="card no-print">
+        <div class="card-body">
+            <div class="form-row align-items-end">
+                <div class="form-group col-6 col-md-2">
+                    <label for="year">Année</label>
+                    <select name="year" id="year" class="form-control">
+                        {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                    </select>
+                </div>
+                {% if full %}
+                <div class="form-group col-12 col-md-4">
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="include_sanctions" name="include_sanctions" {% if include_sanctions %}checked{% endif %}>
+                        <label class="custom-control-label" for="include_sanctions">Ajouter les amendes payées</label>
+                    </div>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="include_auctions" name="include_auctions" {% if include_auctions %}checked{% endif %}>
+                        <label class="custom-control-label" for="include_auctions">Ajouter les enchères</label>
+                    </div>
+                </div>
+                <div class="form-group col-6 col-md-3">
+                    <label for="pool_amount">Montant à partager <span class="text-muted small">(pas obligatoire)</span></label>
+                    <input type="number" class="form-control" id="pool_amount" name="pool_amount" min="0" step="1"
+                           value="{{ override|int if override is not none else '' }}" placeholder="{{ report.proposed|int }}">
+                </div>
+                {% endif %}
+                <div class="form-group col-6 col-md-3">
+                    <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-calculator"></i> Calculer</button>
+                    <button type="button" class="btn btn-outline-secondary btn-block mt-2" onclick="window.print()"><i class="fas fa-print"></i> Imprimer / PDF</button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {# ---------------- Comment c'est calculé ---------------- #}
+    <div class="card">
+        <div class="card-header"><i class="fas fa-calculator"></i> Comment c'est calculé</div>
+        <div class="card-body">
+            <p class="mb-2">Chaque versement d'épargne donne des <strong>parts</strong> : <strong>1 part = 1 000 FCFA restés 1 mois</strong>
+                dans la caisse. Un versement de janvier compte 12 mois, de février 11 mois… de décembre 1 mois
+                (le mois du versement compte en entier). Un retrait enlève les mois qui restent.
+                Les intérêts sont partagés selon les parts : <strong>plus on épargne tôt, plus on gagne</strong>.</p>
+            <div class="row">
+                <div class="col-md-4 mb-2"><div class="calc-box h-100">
+                    <div class="small text-muted">Intérêts des emprunts remboursés en {{ year }}</div>
+                    <div class="big">{{ fcfa(report.interests) }} FCFA</div>
+                    {% if report.sanctions %}<div class="small">+ amendes : {{ fcfa(report.sanctions) }} FCFA</div>{% endif %}
+                    {% if report.auctions %}<div class="small">+ enchères : {{ fcfa(report.auctions) }} FCFA</div>{% endif %}
+                    {% if override is not none %}<div class="small text-warning">Montant choisi à la main</div>{% endif %}
+                    <div class="small mt-1">À partager : <strong>{{ fcfa(report.pool) }} FCFA</strong></div>
+                </div></div>
+                <div class="col-md-4 mb-2"><div class="calc-box h-100">
+                    <div class="small text-muted">Total des parts de tous les épargnants</div>
+                    <div class="big">{{ parts(report.total_parts) }} parts</div>
+                </div></div>
+                <div class="col-md-4 mb-2"><div class="calc-box h-100">
+                    <div class="small text-muted">Valeur d'une part</div>
+                    <div class="big">{{ '{:,.2f}'.format(report.part_value|float).replace(',', ' ').replace('.', ',') }} FCFA</div>
+                    <div class="small">= {{ fcfa(report.pool) }} ÷ {{ parts(report.total_parts) }}</div>
+                </div></div>
+            </div>
+            {% if full and report.loans_detail %}
+            <a class="small no-print" data-toggle="collapse" href="#detailEmprunts"><i class="fas fa-list"></i> Voir les intérêts emprunt par emprunt</a>
+            <div class="collapse" id="detailEmprunts">
+                <table class="table table-sm mt-2 mb-0">
+                    <thead><tr><th>Emprunt</th><th>Membre</th><th class="text-right">Remboursé en {{ year }}</th><th class="text-right">Dont intérêts</th></tr></thead>
+                    <tbody>
+                    {% for e in report.loans_detail %}
+                    <tr><td>#{{ e.loan.id }} ({{ fcfa(e.loan.amount) }} F)</td><td>{{ e.loan.member_name }}</td>
+                        <td class="text-right">{{ fcfa(e.repaid) }}</td><td class="text-right">{{ fcfa(e.interest) }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ---------------- Tableau de janvier à décembre ---------------- #}
+    <div class="card">
+        <div class="card-header"><i class="fas fa-table"></i> Épargne de chaque membre à la fin de chaque mois · {{ year }}</div>
+        {% if report.rows %}
+        <p class="scroll-hint small text-muted px-3 pt-2 mb-0"><i class="fas fa-arrows-alt-h"></i> Faites glisser le tableau pour voir tous les mois.</p>
+        <div class="table-responsive">
+            <table class="table table-sm rapport table-sticky-first mb-0">
+                <thead>
+                    <tr>
+                        <th>Membre</th>
+                        {% for m in report.months_label %}<th class="text-right">{{ m }}</th>{% endfor %}
+                        <th class="text-right">Parts</th>
+                        <th class="text-right">Part en %</th>
+                        <th class="text-right">Intérêts</th>
+                        <th class="text-right">Épargne au 31/12</th>
+                        <th class="text-right">Total à remettre</th>
+                        <th class="no-print"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in report.rows %}
+                <tr>
+                    <td><strong>{{ r.member.full_name }}</strong>{% if r.opening > 0 %}<span class="d-block small text-muted">au 1er janv. : {{ fcfa(r.opening) }}</span>{% endif %}</td>
+                    {% for i in range(12) %}
+                    <td class="text-right mois">{{ fcfa(r.months[i]) }}
+                        {% if r.deposits[i] %}<span class="vers">+{{ fcfa(r.deposits[i]) }} versé</span>{% endif %}
+                        {% if r.withdrawals[i] %}<span class="retr">{{ fcfa(r.withdrawals[i]) }} retiré</span>{% endif %}
+                    </td>
+                    {% endfor %}
+                    <td class="text-right font-weight-bold">{{ parts(r.parts) }}</td>
+                    <td class="text-right">{{ '%.1f'|format(r.ratio) }} %</td>
+                    <td class="text-right font-weight-bold" style="color: var(--hl-gold-dark, #a07a10)">{{ fcfa(r.profit) }}</td>
+                    <td class="text-right">{{ fcfa(r.savings) }}</td>
+                    <td class="text-right font-weight-bold" style="color: var(--hl-green)">{{ fcfa(r.total) }}</td>
+                    <td class="no-print"><a href="{{ url_for('savings_statement', member_id=r.member.id, year=year, include_sanctions='on' if include_sanctions else none, include_auctions='on' if include_auctions else none, pool_amount=override|int if override is not none else none) }}" class="btn btn-sm btn-outline-primary">Relevé mois par mois</a></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+                {% if full %}
+                <tfoot>
+                    <tr class="font-weight-bold" style="background: var(--hl-green-100)">
+                        <td>Total</td>
+                        {% for i in range(12) %}<td class="text-right mois">{{ fcfa(report.month_totals[i]) }}</td>{% endfor %}
+                        <td class="text-right">{{ parts(report.total_parts) }}</td>
+                        <td class="text-right">100 %</td>
+                        <td class="text-right">{{ fcfa(report.distributed) }}</td>
+                        <td class="text-right">{{ fcfa(report.total_savings) }}</td>
+                        <td class="text-right">{{ fcfa(report.total_savings + report.distributed) }}</td>
+                        <td class="no-print"></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+        {% if full and report.pool > report.distributed %}
+        <p class="small text-muted px-3 py-2 mb-0">Les {{ fcfa(report.pool - report.distributed) }} FCFA qui restent (arrondis) restent dans la caisse.</p>
+        {% endif %}
+        {% else %}
+        <div class="card-body text-muted">Aucune épargne en {{ year }}.</div>
+        {% endif %}
+    </div>
+
+    {% if full %}
+    <div class="no-print mb-4">
+        <a href="{{ url_for('savings_statements_all', year=year, include_sanctions='on' if include_sanctions else none, include_auctions='on' if include_auctions else none, pool_amount=override|int if override is not none else none) }}" class="btn btn-primary mb-2"><i class="fas fa-print"></i> Relevés de tous les membres (mois par mois)</a>
+        <a href="{{ url_for('exercise', year=year) }}" class="btn btn-outline-primary"><i class="fas fa-calendar-check"></i> Aller à la fin d'année (rendre l'épargne et verser les intérêts)</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

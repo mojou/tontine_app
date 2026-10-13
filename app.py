@@ -1789,6 +1789,7 @@ def repay_loan(loan_id):
         type='REMBOURSEMENT',
         amount=payment_amount,
         description=f"Remboursement emprunt #{loan.id}",
+        loan_id=loan.id,
         date=date.today(),
         created_by=current_user.id,
         payment_mode=_payment_mode_from_form(),
@@ -4229,7 +4230,7 @@ def call_aval(guarantee_id):
     db.session.add(Transaction(
         member_id=guarantee.member_id, type='REMBOURSEMENT', amount=amount, date=date.today(),
         description=f"Paiement en tant qu'avaliste de {loan.member_name} (emprunt #{loan.id})",
-        created_by=current_user.id, payment_mode=payment_mode,
+        loan_id=loan.id, created_by=current_user.id, payment_mode=payment_mode,
     ))
     loan.amount_paid = Decimal(str(loan.amount_paid or 0)) + amount
     guarantee.called_amount = Decimal(str(guarantee.called_amount or 0)) + amount
@@ -4290,14 +4291,23 @@ def cotisations():
     by_type = dict(db.session.query(Transaction.type, db.func.sum(Transaction.amount))
                    .filter(*in_year).group_by(Transaction.type).all())
 
-    # Situation des fonds (depuis l'origine)
-    all_time = dict(db.session.query(Transaction.type, db.func.sum(Transaction.amount)).group_by(Transaction.type).all())
+    # Situation de chaque caisse POUR L'ANNÉE CHOISIE : ce qu'il y avait au 1er janvier, ce qui est entré
+    # et sorti pendant l'année, ce qui reste au 31 décembre (ou aujourd'hui pour l'année en cours)
+    before = dict(db.session.query(Transaction.type, db.func.sum(Transaction.amount))
+                  .filter(Transaction.date < start).group_by(Transaction.type).all())
+
+    def _fund_sum(sums, code, outflow):
+        return sum(float(v or 0) for t, v in sums.items() if finance.fund_of(t) == code and finance.is_outflow(t) == outflow)
+
     funds = []
     for code, label in finance.FUNDS.items():
-        entrees = sum(float(v or 0) for t, v in all_time.items() if finance.fund_of(t) == code and not finance.is_outflow(t))
-        sorties = sum(float(v or 0) for t, v in all_time.items() if finance.fund_of(t) == code and finance.is_outflow(t))
-        funds.append({'code': code, 'label': label, 'in': entrees, 'out': sorties, 'balance': entrees - sorties})
+        opening = _fund_sum(before, code, False) - _fund_sum(before, code, True)
+        entrees, sorties = _fund_sum(by_type, code, False), _fund_sum(by_type, code, True)
+        funds.append({'code': code, 'label': label, 'opening': opening, 'in': entrees, 'out': sorties,
+                      'balance': opening + entrees - sorties})
     total_balance = sum(f['balance'] for f in funds)
+    total_opening = sum(f['opening'] for f in funds)
+    total_in, total_out = sum(f['in'] for f in funds), sum(f['out'] for f in funds)
 
     # État par membre (catégories de cotisation) pour l'année
     categories = [c for c in finance.CONTRIBUTION_CATEGORIES
@@ -4327,9 +4337,14 @@ def cotisations():
             if gaps:
                 missing[mm.id] = gaps
 
-    years = list(range(date.today().year, date.today().year - 5, -1))
+    # Années proposées : celles où il y a eu des paiements, plus l'année en cours
+    first = db.session.query(db.func.min(Transaction.date)).scalar()
+    first_year = (getattr(first, 'year', None) or int(str(first)[:4])) if first else date.today().year
+    years = list(range(max(date.today().year, year), min(first_year, year) - 1, -1))
     return render_template('cotisations.html', rubriques=rubriques, by_rubrique=by_rubrique, by_type=by_type,
-                           funds=funds, total_balance=total_balance, categories=categories, members=members_list,
+                           funds=funds, total_balance=total_balance, total_opening=total_opening,
+                           total_in=total_in, total_out=total_out, is_current_year=(year == date.today().year),
+                           categories=categories, members=members_list,
                            matrix=matrix, missing=missing, year=year, years=years, is_bureau=is_bureau,
                            can_manage=current_user.role in RUBRIQUE_MANAGERS,
                            category_choices=[(c, finance.type_label(c)) for c in finance.CONTRIBUTION_CATEGORIES],
@@ -4588,7 +4603,9 @@ def seance_detail(seance_id):
             flash(f"{created} paiement(s) enregistré(s) pour {total:,.0f} FCFA.".replace(',', ' '), 'success')
         else:
             flash('Aucun nouveau paiement coché.', 'info')
-        return redirect(url_for('seance_detail', seance_id=seance.id))
+        # Enregistrement demandé depuis « Verser la cagnotte » : on revient sur les cagnottes, à jour
+        anchor = '#cagnottes' if request.form.get('then') == 'cagnottes' else ''
+        return redirect(url_for('seance_detail', seance_id=seance.id) + anchor)
 
     dues = _seance_cycle_dues(seance, columns)
     rows = []
@@ -4737,41 +4754,165 @@ def close_seance(seance_id):
 # ============================================================
 # FIN D'EXERCICE : RESTITUTION DE L'ÉPARGNE ET PARTAGE DES BÉNÉFICES
 # ============================================================
-# Pratique courante : en fin d'année, chaque membre récupère son épargne et
-# reçoit une part des bénéfices de la caisse (mises d'enchères, intérêts
-# d'emprunts, éventuellement amendes), au prorata de son épargne.
+# Pratique de la tontine : chaque emprunt se rembourse avec des intérêts (10 %). En fin d'année, ces
+# intérêts sont partagés entre les épargnants SELON LE MONTANT ÉPARGNÉ ET LE TEMPS où l'argent est resté
+# dans la caisse : 1 part = 1 000 FCFA restés 1 mois. Un versement de janvier compte 12 mois, de février
+# 11 mois... de décembre 1 mois (le mois du versement compte en entier). Un retrait enlève les mois
+# restants. Concrètement : parts d'un membre = somme de ses soldes d'épargne de fin de mois / 1 000.
 
-def _exercise_preview(year, include_sanctions, override_amount=None):
+SAVINGS_PART_UNIT = Decimal('1000')
+MONTHS_FR = ['Janv.', 'Févr.', 'Mars', 'Avril', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.']
+MONTHS_FULL_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre',
+                  'Novembre', 'Décembre']
+
+
+def _closure_restitution_label(year):
+    return f"Restitution de l'épargne - exercice {year}"
+
+
+def _loan_of_transaction(tx, cache):
+    """Emprunt d'un remboursement : lien direct, sinon « emprunt #12 » dans la description (anciens paiements)"""
+    loan_id = tx.loan_id
+    if not loan_id:
+        found = re.search(r'emprunt #(\d+)', tx.description or '')
+        loan_id = int(found.group(1)) if found else None
+    if loan_id not in cache:
+        cache[loan_id] = Loan.query.filter_by(id=loan_id).first() if loan_id else None
+    return cache[loan_id]
+
+
+def loan_interest_received(start, end):
+    """Intérêts d'emprunt réellement reçus entre deux dates : chaque remboursement contient sa part
+    d'intérêt (intérêt de l'emprunt / total à rembourser). Retourne (total, liste par emprunt)."""
+    cache, per_loan = {}, {}
+    for tx in Transaction.query.filter(Transaction.type == 'REMBOURSEMENT', Transaction.date >= start,
+                                       Transaction.date <= end).all():
+        loan = _loan_of_transaction(tx, cache)
+        if not loan or not loan.total_amount:
+            continue
+        part = Decimal(str(tx.amount)) * Decimal(str(loan.interest or 0)) / Decimal(str(loan.total_amount))
+        entry = per_loan.setdefault(loan.id, {'loan': loan, 'repaid': Decimal('0'), 'interest': Decimal('0')})
+        entry['repaid'] += Decimal(str(tx.amount))
+        entry['interest'] += part
+    total = sum((e['interest'] for e in per_loan.values()), Decimal('0')).quantize(Decimal('1'), rounding='ROUND_DOWN')
+    return total, sorted(per_loan.values(), key=lambda e: e['loan'].id)
+
+
+def savings_report(year, include_sanctions=False, include_auctions=False, override_amount=None, member_id=None):
+    """Rapport d'épargne de janvier à décembre : solde de chaque membre à la fin de chaque mois, parts
+    (1 part = 1 000 FCFA restés 1 mois), part des intérêts et total à remettre."""
     start, end = date(year, 1, 1), date(year, 12, 31)
+    closure_label = _closure_restitution_label(year)
+    kinds = ['EPARGNE', 'RETRAIT_EPARGNE']
+
+    opening = {}
+    for mid, kind, total in (db.session.query(Transaction.member_id, Transaction.type, db.func.sum(Transaction.amount))
+                             .filter(Transaction.type.in_(kinds), Transaction.date < start)
+                             .group_by(Transaction.member_id, Transaction.type).all()):
+        opening[mid] = opening.get(mid, Decimal('0')) + Decimal(str(total or 0)) * (-1 if kind == 'RETRAIT_EPARGNE' else 1)
+    moves = {}
+    for tx in (Transaction.query.filter(Transaction.type.in_(kinds), Transaction.date >= start, Transaction.date <= end)
+               .order_by(Transaction.date, Transaction.id).all()):
+        # La restitution faite à la fermeture de CETTE année n'enlève pas de mois : l'argent est resté toute l'année
+        if tx.type == 'RETRAIT_EPARGNE' and (tx.description or '').startswith(closure_label):
+            continue
+        moves.setdefault(tx.member_id, []).append(tx)
+
+    members_q = Member.query.order_by(Member.last_name, Member.first_name)
+    if member_id:
+        members_q = members_q.filter(Member.id == member_id)
+    rows = []
+    for member in members_q.all():
+        start_balance = opening.get(member.id, Decimal('0'))
+        member_moves = moves.get(member.id, [])
+        if start_balance <= 0 and not member_moves:
+            continue
+        deposits, withdrawals, months, lines = [Decimal('0')] * 12, [Decimal('0')] * 12, [], []
+        if start_balance > 0:
+            lines.append({'date': start, 'label': f"Épargne au 1er janvier (venue de {year - 1})", 'amount': start_balance,
+                          'months': 12, 'parts': start_balance * 12 / SAVINGS_PART_UNIT})
+        for tx in member_moves:
+            i = tx.date.month - 1
+            amount = Decimal(str(tx.amount))
+            counted = 12 - i
+            if tx.type == 'EPARGNE':
+                deposits[i] += amount
+                lines.append({'date': tx.date, 'label': 'Versement', 'amount': amount, 'months': counted,
+                              'parts': amount * counted / SAVINGS_PART_UNIT})
+            else:
+                withdrawals[i] += amount
+                lines.append({'date': tx.date, 'label': 'Retrait', 'amount': -amount, 'months': counted,
+                              'parts': -amount * counted / SAVINGS_PART_UNIT})
+        balance = start_balance
+        for i in range(12):
+            balance += deposits[i] - withdrawals[i]
+            months.append(max(balance, Decimal('0')))
+        parts = sum(months, Decimal('0')) / SAVINGS_PART_UNIT
+        rows.append({'member': member, 'opening': start_balance, 'deposits': deposits, 'withdrawals': withdrawals,
+                     'months': months, 'parts': parts, 'savings': max(balance, Decimal('0')), 'lines': lines})
+
+    interests, loans_detail = loan_interest_received(start, end)
 
     def year_sum(types):
         return Decimal(str(db.session.query(db.func.sum(Transaction.amount)).filter(
             Transaction.type.in_(types), Transaction.date >= start, Transaction.date <= end).scalar() or 0))
-
-    auctions = year_sum(['ENCHERE'])
-    interests = Decimal(str(db.session.query(db.func.sum(Loan.interest)).filter(
-        Loan.status == 'REMBOURSE', Loan.request_date >= start, Loan.request_date <= end).scalar() or 0))
+    auctions = year_sum(['ENCHERE']) if include_auctions else Decimal('0')
     sanctions_total = year_sum(['SANCTION']) if include_sanctions else Decimal('0')
-    proposed = auctions + interests + sanctions_total
+    proposed = interests + auctions + sanctions_total
     pool = override_amount if override_amount is not None else proposed
 
-    savers = []
-    for member in Member.query.filter_by(is_active=True).order_by(Member.last_name).all():
-        balance = member.savings_balance
-        if balance > 0:
-            savers.append({'member': member, 'savings': balance})
-    total_savings = sum((s['savings'] for s in savers), Decimal('0'))
-    for s in savers:
-        share = (pool * s['savings'] / total_savings).quantize(Decimal('1'), rounding='ROUND_DOWN') if total_savings else Decimal('0')
-        s['ratio'] = float(s['savings'] / total_savings * 100) if total_savings else 0
-        s['profit'] = share
-        s['total'] = s['savings'] + share
-    caisse = sum((Decimal(str(v or 0)) * (-1 if finance.is_outflow(t) else 1)
-                  for t, v in db.session.query(Transaction.type, db.func.sum(Transaction.amount)).group_by(Transaction.type).all()
-                  if finance.fund_of(t) == 'CAISSE'), Decimal('0'))
-    return {'auctions': auctions, 'interests': interests, 'sanctions': sanctions_total, 'proposed': proposed,
-            'pool': pool, 'savers': savers, 'total_savings': total_savings,
-            'distributed': sum((s['profit'] for s in savers), Decimal('0')), 'caisse_balance': caisse}
+    # Valeur d'une part : calculée sur TOUS les épargnants, même quand on n'affiche qu'un membre
+    all_parts = (sum((r['parts'] for r in rows), Decimal('0')) if not member_id else
+                 sum((r['parts'] for r in savings_report(year, include_sanctions, include_auctions,
+                                                         override_amount)['rows']), Decimal('0')))
+    part_value = (pool / all_parts) if all_parts else Decimal('0')
+    for r in rows:
+        r['ratio'] = float(r['parts'] / all_parts * 100) if all_parts else 0
+        r['profit'] = (pool * r['parts'] / all_parts).quantize(Decimal('1'), rounding='ROUND_DOWN') if all_parts else Decimal('0')
+        r['total'] = r['savings'] + r['profit']
+        # Relevé mois par mois : ce qui est épargné dans le mois rapporte « taux du mois » (mois comptés x valeur d'une
+        # part / 1 000) : janvier compte 12 mois, décembre 1 mois
+        monthly = []
+        if r['opening'] > 0:
+            monthly.append({'label': f"Report de {year - 1}", 'deposit': r['opening'], 'withdrawal': Decimal('0'),
+                            'balance': r['opening'], 'counted': 12, 'is_opening': True})
+        for i in range(12):
+            monthly.append({'label': MONTHS_FULL_FR[i], 'deposit': r['deposits'][i], 'withdrawal': r['withdrawals'][i],
+                            'balance': r['months'][i], 'counted': 12 - i, 'is_opening': False})
+        for line in monthly:
+            line['rate'] = float(line['counted'] * part_value / SAVINGS_PART_UNIT * 100)
+            line['interest'] = (line['deposit'] - line['withdrawal']) * line['counted'] * part_value / SAVINGS_PART_UNIT
+        r['monthly'] = monthly
+        r['deposited'] = r['opening'] + sum(r['deposits'], Decimal('0'))
+        r['withdrawn'] = sum(r['withdrawals'], Decimal('0'))
+        r['avg_rate'] = float(r['profit'] / r['savings'] * 100) if r['savings'] else 0.0
+    return {
+        'year': year, 'rows': rows, 'months_label': MONTHS_FR,
+        'month_totals': [sum((r['months'][i] for r in rows), Decimal('0')) for i in range(12)],
+        'deposit_totals': [sum((r['deposits'][i] for r in rows), Decimal('0')) for i in range(12)],
+        'total_parts': all_parts, 'part_value': part_value,
+        'interests': interests, 'loans_detail': loans_detail, 'auctions': auctions, 'sanctions': sanctions_total,
+        'proposed': proposed, 'pool': pool,
+        'total_savings': sum((r['savings'] for r in rows), Decimal('0')),
+        'distributed': sum((r['profit'] for r in rows), Decimal('0')),
+    }
+
+
+def _caisse_balance():
+    return sum((Decimal(str(v or 0)) * (-1 if finance.is_outflow(t) else 1)
+                for t, v in db.session.query(Transaction.type, db.func.sum(Transaction.amount)).group_by(Transaction.type).all()
+                if finance.fund_of(t) == 'CAISSE'), Decimal('0'))
+
+
+def _exercise_preview(year, include_sanctions, override_amount=None, include_auctions=False):
+    report = savings_report(year, include_sanctions, include_auctions, override_amount)
+    savers = [r for r in report['rows'] if r['savings'] > 0 or r['profit'] > 0]
+    return {'auctions': report['auctions'], 'interests': report['interests'], 'sanctions': report['sanctions'],
+            'proposed': report['proposed'], 'pool': report['pool'], 'savers': savers,
+            'total_savings': sum((s['savings'] for s in savers), Decimal('0')),
+            'distributed': sum((s['profit'] for s in savers), Decimal('0')),
+            'total_parts': report['total_parts'], 'part_value': report['part_value'],
+            'caisse_balance': _caisse_balance()}
 
 
 @app.route('/exercice', methods=['GET', 'POST'])
@@ -4780,10 +4921,11 @@ def _exercise_preview(year, include_sanctions, override_amount=None):
 def exercise():
     year = _year_arg(request.values)
     include_sanctions = request.values.get('include_sanctions') == 'on'
+    include_auctions = request.values.get('include_auctions') == 'on'
     override = None
     if request.values.get('pool_amount') not in (None, ''):
         override = _parse_decimal(request.values.get('pool_amount'), 0, 1_000_000_000)
-    preview = _exercise_preview(year, include_sanctions, override)
+    preview = _exercise_preview(year, include_sanctions, override, include_auctions)
     closure = ExerciseClosure.query.filter_by(year=year).first()
 
     if request.method == 'POST' and request.form.get('action') == 'execute':
@@ -4801,12 +4943,13 @@ def exercise():
             return redirect(url_for('exercise', year=year))
         payment_mode = _payment_mode_from_form()
         for s in preview['savers']:
-            db.session.add(Transaction(member_id=s['member'].id, type='RETRAIT_EPARGNE', amount=s['savings'], date=date.today(),
-                                       description=f"Restitution de l'épargne - exercice {year}",
-                                       created_by=current_user.id, payment_mode=payment_mode))
+            if s['savings'] > 0:
+                db.session.add(Transaction(member_id=s['member'].id, type='RETRAIT_EPARGNE', amount=s['savings'],
+                                           date=date.today(), description=_closure_restitution_label(year),
+                                           created_by=current_user.id, payment_mode=payment_mode))
             if s['profit'] > 0:
                 db.session.add(Transaction(member_id=s['member'].id, type='PARTAGE', amount=s['profit'], date=date.today(),
-                                           description=f"Part des bénéfices - exercice {year} ({s['ratio']:.1f} %)",
+                                           description=f"Part des intérêts - année {year} ({s['parts']:,.1f} parts)".replace(',', ' '),
                                            created_by=current_user.id, payment_mode=payment_mode))
         db.session.add(ExerciseClosure(year=year, savings_returned=preview['total_savings'],
                                        profit_distributed=preview['distributed'], beneficiaries=len(preview['savers']),
@@ -4821,8 +4964,60 @@ def exercise():
 
     years = list(range(date.today().year, date.today().year - 5, -1))
     return render_template('exercice.html', year=year, years=years, preview=preview, closure=closure,
-                           include_sanctions=include_sanctions, override=override,
+                           include_sanctions=include_sanctions, include_auctions=include_auctions, override=override,
                            can_execute=current_user.role in ('PRESIDENT', 'TRESORIER'))
+
+
+SAVINGS_REPORT_ROLES = ['PRESIDENT', 'TRESORIER', 'SECRETAIRE', 'CENSEUR']
+
+
+def _savings_report_options():
+    override = None
+    if request.args.get('pool_amount') not in (None, ''):
+        override = _parse_decimal(request.args.get('pool_amount'), 0, 1_000_000_000)
+    return {'year': _year_arg(request.args), 'include_sanctions': request.args.get('include_sanctions') == 'on',
+            'include_auctions': request.args.get('include_auctions') == 'on', 'override': override}
+
+
+@app.route('/epargne/rapport')
+@login_required
+def savings_report_page():
+    """Rapport d'épargne de janvier à décembre : soldes de fin de mois, parts, intérêts et total par membre.
+    Le bureau voit tout le monde ; un membre ne voit que sa ligne (et la valeur d'une part)."""
+    opts = _savings_report_options()
+    full = current_user.role in SAVINGS_REPORT_ROLES
+    if not full:   # un membre : directement son relevé mois par mois
+        if not current_user.member_id:
+            abort(403)
+        return redirect(url_for('savings_statement', member_id=current_user.member_id, year=opts['year']))
+    report = savings_report(opts['year'], opts['include_sanctions'], opts['include_auctions'], opts['override'])
+    years = list(range(date.today().year, date.today().year - 5, -1))
+    return render_template('epargne_rapport.html', report=report, years=years, full=full, **opts)
+
+
+@app.route('/epargne/releve/<int:member_id>')
+@login_required
+def savings_statement(member_id):
+    """Relevé d'épargne d'un membre : chaque versement / retrait, ses mois comptés, ses parts et son intérêt"""
+    if current_user.role not in SAVINGS_REPORT_ROLES and current_user.member_id != member_id:
+        abort(403)
+    member = db.get_or_404(Member, member_id)
+    opts = _savings_report_options()
+    report = savings_report(opts['year'], opts['include_sanctions'], opts['include_auctions'], opts['override'],
+                            member_id=member.id)
+    row = report['rows'][0] if report['rows'] else None
+    return render_template('epargne_releve.html', rows=[row] if row else [], member=member, report=report,
+                           single=True, **opts)
+
+
+@app.route('/epargne/releves')
+@login_required
+@role_required(SAVINGS_REPORT_ROLES)
+def savings_statements_all():
+    """Relevés de tous les membres, à imprimer d'un coup (un membre par page)"""
+    opts = _savings_report_options()
+    report = savings_report(opts['year'], opts['include_sanctions'], opts['include_auctions'], opts['override'])
+    return render_template('epargne_releve.html', rows=report['rows'], member=None, report=report, single=False, **opts)
 
 
 # ============================================================

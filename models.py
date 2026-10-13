@@ -379,6 +379,8 @@ class Transaction(TenantMixin, db.Model):
     seance_id = db.Column(db.Integer, db.ForeignKey('seances.id'), nullable=True)
     # Référence du paiement mobile (Orange Money, MTN MoMo, Wave...)
     payment_reference = db.Column(db.String(60), nullable=True)
+    # Remboursement : emprunt concerné (sert à calculer les intérêts réellement reçus dans l'année)
+    loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=True)
 
     @property
     def is_outflow(self):

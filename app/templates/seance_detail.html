@@ -36,8 +36,9 @@
         </div>
     </div>
 
-    <form method="POST">
+    <form method="POST" id="sheetForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="then" id="sheetThen" value="">
         <div class="card">
             {% if can_manage %}
             <div class="card-header d-flex align-items-center flex-wrap">
@@ -171,7 +172,8 @@
                     {% set payout_missing = p.missing %}
                     {% set payout_late = p.late %}
                     {% set payout_shortfall = p.shortfall %}
-                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
+                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}" class="payout-form"
+                          data-confirm="Confirmer le versement de la cagnotte du tour {{ p.turn }} ({{ cycle.display_name }}) ?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="expected_turn" value="{{ p.turn }}">
                         <input type="hidden" name="seance_id" value="{{ seance.id }}">
@@ -197,8 +199,7 @@
                         </div>
                         {% endif %}
                         {% include "_payout_fields.html" %}
-                        <button type="submit" class="btn btn-gold btn-sm"
-                                onclick="return confirm('Confirmer le versement de la cagnotte du tour {{ p.turn }} ({{ cycle.display_name }}) ?');">
+                        <button type="submit" class="btn btn-gold btn-sm payout-btn">
                             <i class="fas fa-check"></i> Verser la cagnotte du tour {{ p.turn }}
                         </button>
                     </form>
@@ -226,5 +227,18 @@ $('#checkAll').on('click', function() { $('.pay-box').prop('checked', true); });
 $('#uncheckAll').on('click', function() { $('.pay-box').prop('checked', false); });
 // Saisir un montant coche automatiquement la case
 $('.sheet .amt').on('input', function() { $(this).siblings('.pay-box').prop('checked', !!$(this).val()); });
+
+// Séance et cycle reliés : des paiements cochés mais pas encore enregistrés comptent pour la cagnotte.
+// Le bouton de versement les enregistre d'abord, puis la page revient ici, à jour.
+$('.payout-btn').on('click', function(e) {
+    var n = $('.sheet .pay-box:checked').length;
+    if (!n) return;          // rien en attente : vérification des choix puis confirmation habituelles
+    e.preventDefault();
+    if (confirm(n + " paiement(s) coché(s) dans la feuille ne sont pas encore enregistrés. "
+                + "Je les enregistre d'abord ; la page se met à jour, puis vous pourrez verser la cagnotte.")) {
+        $('#sheetThen').val('cagnottes');
+        $('#sheetForm').trigger('submit');
+    }
+});
 </script>
 {% endblock %}

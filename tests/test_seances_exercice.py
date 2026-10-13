@@ -121,9 +121,9 @@ with app.app_context():
 with app.test_request_context():
     from flask import g
     g.tenant_id = tid
-    prev = m._exercise_preview(year, False)
+    prev = m._exercise_preview(year, False, None, include_auctions=True)   # enchère de 4 000 ajoutée (case cochée)
     shares = {s['member'].first_name: (float(s['savings']), float(s['profit'])) for s in prev['savers']}
-check(shares == {'Paul': (30000.0, 3000.0), 'Rose': (10000.0, 1000.0)}, f'bénéfices 4 000 répartis 75/25 : {shares}')
+check(shares == {'Paul': (30000.0, 3000.0), 'Rose': (10000.0, 1000.0)}, f'enchère de 4 000 partagée 75/25 (épargnes du même jour) : {shares}')
 member_c = app.test_client()
 member_c.post('/login', data={'tontine': 'bonaberi', 'username': 'paul', 'password': 'Passw0rd1'})
 check(member_c.get('/exercice').status_code == 302, 'un membre ne voit pas la clôture')
@@ -140,7 +140,7 @@ with app.app_context():
 c.post('/exercice', data={'action': 'execute', 'year': year, 'pool_amount': '4000', 'payment_mode': 'ESPECE'})
 with app.app_context():
     check(ExerciseClosure.query.filter_by(tontine_id=tid).count() == 1, 'double clôture impossible')
-check('clôturé' in body(c.get(f'/exercice?year={year}')), 'exercice affiché comme clôturé')
+check('Année {} fermée'.format(year) in body(c.get(f'/exercice?year={year}')), 'année affichée comme fermée')
 
 for url in ['/cotisations', '/transactions', '/transactions/add', '/dashboard', '/tontine-cycles', f'/tontine-cycles/{cyc[1000]}',
             '/seances', f'/seances/{sid}', '/exercice', '/parametres']:

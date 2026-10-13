@@ -87,8 +87,13 @@ form = {'payment_mode': 'ESPECE'}
 for mid in mem.values():
     form[f'pay_{mid}_c{tirage}'] = 'on'
     form[f'amt_{mid}_c{tirage}'] = '10000'
-c.post(f'/seances/{sid}', data=form)
+form['then'] = 'cagnottes'      # comme « Verser la cagnotte » avec des paiements cochés pas encore enregistrés
+r = c.post(f'/seances/{sid}', data=form)
+check(r.status_code == 302 and r.headers['Location'].endswith(f'/seances/{sid}#cagnottes'),
+      'paiements cochés enregistrés d\'abord, puis retour directement sur les cagnottes')
 h = body(c.get(f'/seances/{sid}'))
+check('payout-form' in h and 'payout-btn' in h and "onclick=\"return confirm('Confirmer le versement" not in h,
+      'la confirmation du versement vient après la vérification des choix (plus de confirmation avant)')
 check('ne sont pas payés' not in h.split(f'data-cycle="{tirage}"')[1].split('data-cycle=')[0], 'plus d\'alerte une fois les 4 parts encaissées')
 
 # ---------------------------------------------------------------- droits

@@ -91,7 +91,8 @@
                     {% if cycle.is_auction %}
                     <h5><i class="fas fa-gavel" style="color: var(--hl-gold)"></i> Enchère du tour {{ cycle.beneficiaries_count + 1 }}</h5>
                     <p class="small text-muted">Les mains qui n'ont pas encore reçu la cagnotte enchérissent en séance. Le plus offrant reçoit la cagnotte moins sa mise ; la mise va en caisse et sera partagée en fin d'année.</p>
-                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
+                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}" class="payout-form"
+                          data-confirm="Verser la cagnotte au gagnant de l'enchère ?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="expected_turn" value="{{ cycle.beneficiaries_count + 1 }}">
                         <div class="form-row">
@@ -108,17 +109,18 @@
                             </div>
                         </div>
                         {% include "_payout_fields.html" %}
-                        <button type="submit" class="btn btn-gold" onclick="return confirm('Verser la cagnotte au gagnant de l\'enchère ?');"><i class="fas fa-hand-holding-usd"></i> Verser la cagnotte</button>
+                        <button type="submit" class="btn btn-gold"><i class="fas fa-hand-holding-usd"></i> Verser la cagnotte</button>
                     </form>
                     {% elif next_participant %}
                     <h5><i class="fas fa-hand-holding-usd" style="color: var(--hl-gold)"></i> Tour {{ next_participant.position }} : {{ next_participant.label }}</h5>
                     <p class="mb-2">Cagnotte : <strong>{{ fcfa(cycle.total_amount) }} FCFA</strong>
                         {% if pending_sanctions > 0 %}<br><span class="text-danger small">Amendes impayées : {{ fcfa(pending_sanctions) }} FCFA (retenues si la case est cochée)</span>{% endif %}</p>
-                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}">
+                    <form method="POST" action="{{ url_for('register_benefit', cycle_id=cycle.id) }}" class="payout-form"
+                          data-confirm="Confirmer le versement de la cagnotte à {{ next_participant.label }} ?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="expected_turn" value="{{ cycle.beneficiaries_count + 1 }}">
                         {% include "_payout_fields.html" %}
-                        <button type="submit" class="btn btn-gold" onclick="return confirm('Confirmer le versement de la cagnotte à {{ next_participant.label }} ?');"><i class="fas fa-check"></i> Verser la cagnotte</button>
+                        <button type="submit" class="btn btn-gold"><i class="fas fa-check"></i> Verser la cagnotte</button>
                     </form>
                     {% elif cycle.needs_draw %}
                     <h5><i class="fas fa-dice"></i> Ordre de passage à tirer</h5>
