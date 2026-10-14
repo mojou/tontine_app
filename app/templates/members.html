@@ -156,7 +156,7 @@
                                             {% endif %}
                                             
                                             <!-- Désactivation pour les membres actifs -->
-                                            {% if current_user.role == 'PRESIDENT' and m.id != current_user.id %}
+                                            {% if current_user.role == 'PRESIDENT' and m.id != current_user.member_id %}
                                             <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteMemberModal{{ m.id }}" title="Retirer">
                                                 <i class="fas fa-trash"></i>
                                             </button>
@@ -364,7 +364,7 @@
                     
                     <div class="alert alert-info mt-3">
                         <i class="fas fa-info-circle"></i>
-                        <small>Le membre sera en attente de validation par le trésorier.</small>
+                        <small>Le mot de passe est <strong>provisoire</strong> (8 caractères au moins, avec des lettres et des chiffres) : à sa première connexion, le membre en choisira un autre que lui seul connaît.</small>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">

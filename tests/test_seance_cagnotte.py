@@ -71,8 +71,8 @@ with app.app_context():
 h = body(c.get(f'/seances/{sid}'))
 check('id="cagnottes"' in h and 'Cagnottes du jour' in h, 'la feuille de séance affiche les cagnottes du jour')
 check(f'Tour 1 : {first_label}' in h, f'le bénéficiaire prévu du tirage est proposé ({first_label})')
-check('40 000 FCFA de cotisations ne sont pas payés' in h and 'name="late_mode" value="hors_app"' in h,
-      "alerte tant que les cotisations du tour ne sont pas enregistrées")
+check('Qui a payé sa part ?' in h and 'name="payers_form"' in h and h.count('class="custom-control-input payer-box"') >= 4,
+      "tant que les parts ne sont pas enregistrées : « Qui a payé sa part ? » avec les membres à cocher")
 
 # ---------------------------------------------------------------- versement refusé sans les cotisations
 r = c.post(f'/tontine-cycles/{tirage}/register-benefit', data={'expected_turn': 1, 'seance_id': sid, 'payment_mode': 'ESPECE'})

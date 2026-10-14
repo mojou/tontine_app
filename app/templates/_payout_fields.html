@@ -11,27 +11,29 @@
         <input type="text" name="payment_reference" class="form-control form-control-sm" maxlength="60" placeholder="Ex : MP241008.1234.A56789">
     </div>
 </div>
-{% if payout_missing and payout_missing > 0 %}
-{% set short = payout_shortfall or 0 %}
-<div class="alert alert-danger small py-2 mb-2 late-choice">
-    <i class="fas fa-exclamation-triangle"></i>
-    <strong>{{ (payout_missing|float)|fcfa|replace(' ', ' ') }} FCFA de cotisations ne sont pas payés</strong>
-    pour ce cycle{% if payout_late %} :
-    {% for r in payout_late %}{{ r.member.full_name }} ({{ ((-r.gap)|float)|fcfa|replace(' ', ' ') }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}.
-    <div class="mt-2 font-weight-bold">Que faire ?</div>
-    {% if short > 0 %}
-    <div class="custom-control custom-radio mt-1">
-        <input type="radio" class="custom-control-input" id="reduite{{ cycle.id }}" name="late_mode" value="reduite" required>
-        <label class="custom-control-label" for="reduite{{ cycle.id }}">
-            <strong>Verser la cagnotte réduite</strong> : {{ ((cycle.total_amount - short)|float)|fcfa|replace(' ', ' ') }} FCFA au lieu de
-            {{ (cycle.total_amount|float)|fcfa|replace(' ', ' ') }}. {% if late_penalty_label %}Les retardataires reçoivent une <strong>{{ late_penalty_label }}</strong>
-            {% endif %}et leur part sera reversée au bénéficiaire dès qu'ils paieront.</label>
+{% if payout_missing and payout_missing > 0 and payout_late %}
+{# Une seule étape : on coche ceux qui ont payé leur part ; leur paiement est enregistré avec le versement #}
+<input type="hidden" name="payers_form" value="1">
+<div class="border rounded p-2 mb-2 payers-box" style="background: var(--hl-cream, #faf7ef)" data-gross="{{ cycle.total_amount|int }}">
+    <div class="font-weight-bold mb-1"><i class="fas fa-users"></i> Qui a payé sa part ?</div>
+    <div class="small text-muted mb-2">Tous sont cochés : <strong>décochez ceux qui n'ont pas payé</strong>. Les parts cochées sont
+        enregistrées avec le versement — pas besoin de « Régulariser ».</div>
+    {% for r in payout_late %}
+    <div class="custom-control custom-checkbox mb-1">
+        <input type="checkbox" class="custom-control-input payer-box" id="paid{{ cycle.id }}_{{ r.member.id }}"
+               name="paid_{{ r.member.id }}" checked data-due="{{ r.current_due|int }}">
+        <label class="custom-control-label" for="paid{{ cycle.id }}_{{ r.member.id }}">
+            <strong>{{ r.member.full_name }}</strong> paie {{ ((-r.gap)|float)|fcfa|replace(' ', ' ') }} FCFA
+            {% if -r.gap > r.current_due %}<span class="small text-danger">(dont {{ ((-r.gap - r.current_due)|float)|fcfa|replace(' ', ' ') }} de retard)</span>{% endif %}
+        </label>
     </div>
-    {% endif %}
-    <div class="custom-control custom-radio mt-1">
-        <input type="radio" class="custom-control-input" id="offline{{ cycle.id }}" name="late_mode" value="hors_app" required>
-        <label class="custom-control-label" for="offline{{ cycle.id }}">L'argent a <strong>réellement été reçu</strong> hors de l'application :
-            l'enregistrer maintenant</label>
+    {% endfor %}
+    <div class="mt-2 p-2 bg-white rounded border">
+        À remettre au bénéficiaire : <strong class="payers-net" style="color: var(--hl-green)">{{ (cycle.total_amount|float)|fcfa|replace(' ', ' ') }}</strong> FCFA
+        <div class="small text-danger payers-warning" style="display: none">
+            Les parts non payées sont retirées de la cagnotte ; elles seront reversées au bénéficiaire dès que les
+            retardataires paieront{% if late_penalty_label %}, et ils reçoivent une <strong>{{ late_penalty_label }}</strong>{% endif %}.
+        </div>
     </div>
 </div>
 {% endif %}

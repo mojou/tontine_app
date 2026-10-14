@@ -118,6 +118,21 @@ check(hd.get('X-Content-Type-Options') == 'nosniff' and hd.get('Referrer-Policy'
 check('https://pay.saspay.me' in hd.get('Content-Security-Policy', ''), 'la redirection vers la page de paiement SasPay reste permise')
 check(pat.get('/dashboard').headers.get('Cache-Control') == 'no-store', 'pages personnelles jamais gardées en cache')
 
+# ---------------------------------------------------------------- déconnexion avec « Se souvenir de moi »
+for remember in (False, True):
+    c = app.test_client()
+    data = {'tontine': 'sure', 'username': 'germain', 'password': 'Fotsing2026'}
+    if remember:
+        data['remember'] = 'y'
+    c.post('/login', data=data)
+    h = c.get('/dashboard').get_data(as_text=True)
+    if not remember:
+        check('topbar-logout' in h, 'bouton « Déconnexion » toujours visible en haut de page (téléphone, tablette, PC)')
+    c.get('/logout')
+    r = c.get('/dashboard')
+    check(r.status_code == 302 and '/login' in r.headers['Location'],
+          'déconnexion effective' + (' même avec « Se souvenir de moi » coché' if remember else ''))
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

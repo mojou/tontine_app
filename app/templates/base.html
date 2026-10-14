@@ -483,6 +483,11 @@
                     <div class="user-avatar">
                         {{ current_user.username[0]|upper }}
                     </div>
+                    {# Toujours visible (téléphone, tablette, PC) : pas besoin de chercher au bas du menu #}
+                    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger topbar-logout" title="Se déconnecter"
+                       aria-label="Se déconnecter">
+                        <i class="fas fa-sign-out-alt"></i><span class="d-none d-md-inline ml-1">Déconnexion</span>
+                    </a>
                 </div>
                 {% else %}
                 <div class="user-info">
@@ -559,6 +564,18 @@
         // Boutons « Voir » : petite bulle d'explication (au toucher sur tablette/téléphone, au clic sur PC)
         $('[data-toggle="popover"]').popover({container: 'body'});
 
+        // Versement d'une cagnotte : « Qui a payé sa part ? » -> montant à remettre recalculé en direct
+        function updatePayers(box) {
+            var gross = parseInt(box.dataset.gross || '0', 10), missing = 0;
+            box.querySelectorAll('.payer-box').forEach(function(cb) { if (!cb.checked) missing += parseInt(cb.dataset.due || '0', 10); });
+            box.querySelector('.payers-net').textContent = new Intl.NumberFormat('fr-FR').format(Math.max(gross - missing, 0));
+            box.querySelector('.payers-warning').style.display = missing > 0 ? 'block' : 'none';
+        }
+        document.querySelectorAll('.payers-box').forEach(function(box) {
+            box.addEventListener('change', function() { updatePayers(box); });
+            updatePayers(box);
+        });
+
         // Versement d'une cagnotte (page du cycle et feuille de séance)
         // Choix obligatoire (cagnotte réduite / reçu hors application) : message clair là où il faut choisir
         document.querySelectorAll('.payout-form').forEach(function(form) {
@@ -609,12 +626,25 @@
             return true;
         });
         
-        // Show loading spinner on form submit
-        $('form').on('submit', function() {
-            var btn = $(this).find('button[type="submit"]');
+        // Envoi d'un formulaire : « Chargement… » et boutons bloqués (évite le double clic).
+        // Un bouton désactivé n'envoie plus sa valeur (ex. « J'accepte » / « Je refuse ») : on la recopie d'abord.
+        $(document).on('click', 'form button[type="submit"][name]', function() {
+            $(this.form).data('submitter', this);
+        });
+        $('form').on('submit', function(e) {
+            if (e.isDefaultPrevented()) return;          // envoi annulé (confirmation refusée, choix manquant)
+            var form = this;
+            var submitter = (e.originalEvent && e.originalEvent.submitter) || $(form).data('submitter');
+            if (submitter && submitter.name) {
+                $(form).find('input.submitter-copy').remove();
+                $('<input type="hidden" class="submitter-copy">').attr('name', submitter.name).val(submitter.value).appendTo(form);
+            }
+            var btn = $(form).find('button[type="submit"]');
             if (btn.length) {
-                btn.html('<span class="loading-spinner mr-2"></span> Chargement...');
-                btn.prop('disabled', true);
+                setTimeout(function() {                   // après la lecture du formulaire par le navigateur
+                    btn.html('<span class="loading-spinner mr-2"></span> Chargement...');
+                    btn.prop('disabled', true);
+                }, 0);
             }
         });
     </script>

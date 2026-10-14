@@ -690,8 +690,10 @@ def change_password():
 @login_required
 def logout():
     tontine = current_tontine()
-    logout_user()
+    # Vider la session AVANT logout_user : celui-ci y note l'ordre d'effacer le cookie « Se souvenir de moi ».
+    # Dans l'ordre inverse, l'ordre était perdu et la personne restait connectée après la déconnexion.
     session.clear()
+    logout_user()
     flash('Vous avez été déconnecté.', 'info')
     if tontine:
         return redirect(url_for('tontine_home', slug=tontine.slug))
@@ -990,6 +992,28 @@ def member_detail(member_id):
                            can_edit=can_edit,
                            can_change_role=can_change_role)
 
+def _free_identifiers_of_retired(username, email):
+    """Un membre retiré garde son historique mais libère son identifiant et son e-mail (renommés « …ancienN »),
+    pour que le bureau puisse recréer la personne. Retourne un message, ou None si rien n'était bloqué."""
+    renamed = []
+    old_user = find_user(username, g.tenant_id)
+    if old_user and not old_user.is_active:
+        old_user.username = f"{normalize_username(username)}.ancien{old_user.id}"[:80]
+        renamed.append(f"l'identifiant « {username} » devient « {old_user.username} »")
+    mail = (email or '').strip().lower()
+    if mail:
+        for old_member in Member.query.filter(db.func.lower(Member.email) == mail, Member.is_active == False).all():  # noqa: E712
+            old_member.email = f"ancien{old_member.id}.{old_member.email}"[:120]
+            renamed.append(f"l'e-mail de {old_member.full_name} est libéré")
+        for old_account in User.query.filter(User.tontine_id == g.tenant_id, db.func.lower(User.email) == mail,
+                                             User.is_active == False).all():  # noqa: E712
+            old_account.email = f"ancien{old_account.id}.{old_account.email}"[:120]
+    if not renamed:
+        return None
+    db.session.flush()
+    return "Ancien membre retiré : " + ' ; '.join(renamed) + ". Son historique est conservé."
+
+
 @app.route('/members/add', methods=['GET', 'POST'])
 @login_required
 @role_required(['PRESIDENT', 'SECRETAIRE'])
@@ -1014,23 +1038,34 @@ def add_member():
         password = form.password.data
         confirm_password = form.confirm_password.data
         
-        # Vérification supplémentaire des mots de passe
-        if password_problems(password, username):
-            flash(password_error_message(password_problems(password, username)), 'danger')
+        # Mot de passe donné par le bureau : s'il est provisoire (à changer à la 1re connexion), seules la longueur
+        # et le mélange lettres/chiffres sont exigés — « Marie2026 » pour « marie » est accepté ; le membre choisira
+        # ensuite un mot de passe qui respecte toute la règle.
+        provisional = app.config['FORCE_PASSWORD_CHANGE']
+        problems = password_problems(password, None if provisional else username)
+        if problems:
+            flash(password_error_message(problems) + " Le membre n'a PAS été créé.", 'danger')
             return render_template('member_form.html', form=form, title="Ajouter un membre")
         if password != confirm_password:
-            flash('Les mots de passe ne correspondent pas.', 'danger')
+            flash("Les deux mots de passe ne sont pas identiques. Le membre n'a PAS été créé.", 'danger')
             return render_template('member_form.html', title="Ajouter un membre", form=form)
-        
-        # Vérification des doublons
-        existing_member = Member.query.filter_by(email=email).first()
+
+        # Un membre RETIRÉ ne bloque plus son identifiant ni son e-mail : on peut recréer la personne
+        freed = _free_identifiers_of_retired(username, email)
+        if freed:
+            flash(freed, 'info')
+
+        # Vérification des doublons (membres actifs)
+        existing_member = Member.query.filter(db.func.lower(Member.email) == (email or '').strip().lower()).first()
         if existing_member:
-            flash(f'L\'email "{email}" est déjà utilisé.', 'danger')
+            flash(f"L'e-mail « {email} » est déjà utilisé par {existing_member.full_name}. Le membre n'a PAS été créé.", 'danger')
             return render_template('member_form.html', title="Ajouter un membre", form=form)
-        
+
         existing_user = find_user(username, g.tenant_id)
         if existing_user:
-            flash(f'Le nom d\'utilisateur "{username}" est déjà pris.', 'danger')
+            owner = existing_user.member.full_name if existing_user.member else existing_user.username
+            flash(f"L'identifiant « {username} » est déjà utilisé par {owner}. Choisissez-en un autre "
+                  "(ex. ajoutez l'initiale du nom). Le membre n'a PAS été créé.", 'danger')
             return render_template('member_form.html', title="Ajouter un membre", form=form)
         
         # Création du membre
@@ -1115,6 +1150,9 @@ def edit_member(member_id):
 @president_required
 def delete_member(member_id):
     member = db.get_or_404(Member, member_id)
+    if member.id == current_user.member_id:   # (comparer la fiche MEMBRE, pas le numéro du compte de connexion)
+        flash("Vous ne pouvez pas vous retirer vous-même de la tontine.", 'warning')
+        return redirect(url_for('members'))
     member.is_active = False
     
     user = User.query.filter_by(member_id=member.id).first()
@@ -2564,6 +2602,15 @@ def cycle_penalty_label(tontine):
     return f"amende de {value:.0f} %" if mode == 'PERCENT' else f"amende de {_fmt(value)} FCFA"
 
 
+def open_seance_for_cycle(cycle):
+    """Séance ouverte aujourd'hui qui encaisse ce cycle : les paiements et versements faits depuis la page du
+    cycle y sont rattachés automatiquement (séance et cycle restent d'accord)"""
+    for seance in Seance.query.filter(Seance.is_closed == False, Seance.date == date.today()).order_by(Seance.id.desc()).all():  # noqa: E712
+        if f'c{cycle.id}' in (seance.columns or '').split(','):
+            return seance
+    return None
+
+
 def settle_cycle_shortfalls(cycle, user_id=None, seance_id=None, payment_mode='ESPECE'):
     """Un retardataire a payé : sa part est reversée au(x) bénéficiaire(s) qui ont reçu une cagnotte réduite.
     Part libérée = parts dues encore ouvertes - retard qui reste (le retard est remboursé en premier)."""
@@ -2619,14 +2666,17 @@ def regularize_cycle(cycle_id):
     payment_mode = _payment_mode_from_form()
     reference = _payment_reference_from_form()
     member = row['member']
+    today_seance = open_seance_for_cycle(cycle)
     if action == 'encaisser':
         db.session.add(Transaction(member_id=member.id, type='TONTINE', amount=amount, date=date.today(), cycle_id=cycle.id,
                                    contribution_type_id=cycle.contribution_type_id, payment_mode=payment_mode,
                                    payment_reference=reference, created_by=current_user.id,
+                                   seance_id=today_seance.id if today_seance else None,
                                    description=f"Rattrapage de cotisations - {cycle.display_name}"))
         message = f"{_fmt(amount)} FCFA de cotisations encaissés pour {member.full_name}."
         db.session.commit()
-        released = settle_cycle_shortfalls(cycle, current_user.id, payment_mode=payment_mode)
+        released = settle_cycle_shortfalls(cycle, current_user.id, today_seance.id if today_seance else None,
+                                           payment_mode=payment_mode)
         if released:
             message += f" {_fmt(released)} FCFA reversés au(x) bénéficiaire(s) qui avaient reçu une cagnotte réduite."
     elif action in ('rendre', 'epargne'):
@@ -2740,6 +2790,8 @@ def register_benefit(cycle_id):
     if cycle.status != 'EN_COURS':
         flash('Ce cycle est terminé.', 'warning')
         return back
+    if seance is None:   # versement depuis la page du cycle : rattaché à la séance ouverte du jour, s'il y en a une
+        seance = open_seance_for_cycle(cycle)
 
     expected_turn = request.form.get('expected_turn', type=int)
     if expected_turn is not None and expected_turn != cycle.beneficiaries_count + 1:
@@ -2778,7 +2830,23 @@ def register_benefit(cycle_id):
     late = [r for r in status['rows'] if r['gap'] < 0]
     late_mode = request.form.get('late_mode') or ('hors_app' if request.form.get('confirm_offline') == 'on' else '')
     shortfalls = []   # (membre, part manquante de CE tour)
-    if late:
+    checklist = bool(late and request.form.get('payers_form'))
+    settle_after = False
+    if checklist:
+        # Une seule étape : on coche ceux qui ont payé leur part (elle est encaissée maintenant) ; les autres
+        # voient leur part retirée de la cagnotte (reversée quand ils paieront) et reçoivent l'amende prévue.
+        payers = [r for r in late if request.form.get(f"paid_{r['member'].id}") == 'on']
+        for r in payers:
+            db.session.add(Transaction(member_id=r['member'].id, type='TONTINE', amount=-r['gap'], date=date.today(),
+                                       cycle_id=cycle.id, contribution_type_id=cycle.contribution_type_id,
+                                       description=f"{cycle.display_name} - part du tour {status['turn']}"
+                                                   + (f" (dont retard {_fmt(-r['gap'] - r['current_due'])})"
+                                                      if -r['gap'] > r['current_due'] else ''),
+                                       created_by=current_user.id, payment_mode=payment_mode,
+                                       seance_id=seance.id if seance else None))
+        shortfalls = [(r['member'], r['current_due']) for r in late if r not in payers and r['current_due'] > 0]
+        settle_after = bool(payers)   # retards payés : reversés aux bénéficiaires qui avaient reçu une cagnotte réduite
+    elif late:
         if late_mode not in ('reduite', 'hors_app'):
             names = ', '.join(f"{r['member'].full_name} : {_fmt(-r['gap'])}" for r in late[:6])
             label = cycle_penalty_label(current_tontine())
@@ -2786,9 +2854,12 @@ def register_benefit(cycle_id):
                   "Choisissez « verser la cagnotte réduite »" + (f" ({label} pour les retardataires)" if label else '')
                   + " ou « encaissées hors application ».", 'danger')
             return back
-    if late and late_mode == 'reduite':
+    if checklist:
+        pass
+    elif late and late_mode == 'reduite':
         shortfalls = [(r['member'], r['current_due']) for r in late if r['current_due'] > 0]
     elif late:
+        settle_after = True
         for r in late:   # régularisation : les cotisations déclarées encaissées sont enregistrées
             db.session.add(Transaction(member_id=r['member'].id, type='TONTINE', amount=-r['gap'], date=date.today(),
                                        cycle_id=cycle.id, contribution_type_id=cycle.contribution_type_id,
@@ -2857,7 +2928,7 @@ def register_benefit(cycle_id):
         cycle.status = 'TERMINE'
         cycle.end_date = date.today()
     db.session.commit()
-    if late and late_mode == 'hors_app':   # retards payés hors application : reversés aux bénéficiaires concernés
+    if settle_after:   # retards payés : reversés aux bénéficiaires concernés
         settle_cycle_shortfalls(cycle, current_user.id, seance.id if seance else None, payment_mode)
 
     log_activity(current_user.id, current_user.role,

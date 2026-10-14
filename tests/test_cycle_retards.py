@@ -79,8 +79,8 @@ for n in ('Ana', 'Ben', 'Dan'):
     pay[f'amt_{ids[n]}_c{cid}'] = '25000'
 c.post(f'/seances/{s1}', data=pay)
 h = text(c.get(f'/seances/{s1}'))
-check('Verser la cagnotte réduite' in h and '75 000 FCFA au lieu de 100 000' in h and 'amende de 10 %' in h,
-      'le versement propose la cagnotte réduite (75 000 au lieu de 100 000) avec amende de 10 %')
+check('Qui a payé sa part ?' in h and h.count('paie 25 000 FCFA') == 1 and 'amende de 10 %' in h,
+      "le versement liste le membre qui doit encore sa part (25 000), avec l'amende de 10 % s'il est décoché")
 r = c.post(f'/tontine-cycles/{cid}/register-benefit', data={'expected_turn': 1, 'seance_id': s1, 'payment_mode': 'ESPECE'},
            follow_redirects=True)
 with app.app_context(), tenant_bypass():

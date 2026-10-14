@@ -111,7 +111,7 @@
                             <td class="nowrap">{{ tx.date.strftime('%d/%m/%y') }}</td>
                             <td>
                                 <strong>{{ tx.member_name }}</strong>
-                                {% if tx.member_id != current_user.id and current_user.is_admin() %}
+                                {% if tx.member_id != current_user.member_id and current_user.is_admin() %}
                                 <a href="{{ url_for('member_detail', member_id=tx.member_id) }}" class="text-muted ml-1" title="Voir le profil">
                                     <i class="fas fa-eye fa-xs"></i>
                                 </a>

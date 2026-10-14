@@ -59,7 +59,7 @@ check(names == ['patrick', 'paul.talla', 'rose'], f'identifiants enregistrés sa
 r = add('PATRICK', 'Autre2026x', 4)
 with app.app_context(), tenant_bypass():
     check(User.query.filter(User.tontine_id == tid, db.func.lower(User.username) == 'patrick').count() == 1
-          and 'déjà pris' in text(r), '« PATRICK » refusé : « patrick » existe déjà (pas de doublon selon les majuscules)')
+          and 'déjà utilisé par' in text(r), '« PATRICK » refusé : « patrick » existe déjà (pas de doublon selon les majuscules)')
 
 
 def login(username, password, slug='connexion'):
