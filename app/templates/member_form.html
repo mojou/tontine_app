@@ -81,6 +81,44 @@
                             se choisit au lancement de chaque cycle : il n'y a plus de « type de groupe » à définir ici.
                         </div>
 
+{% if member %}
+                        <!-- Compte de connexion (modification) -->
+                        <hr>
+                        <h5>Compte de connexion</h5>
+                        {% if account %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="username">Identifiant</label>
+                                    <input type="text" name="username" id="username" class="form-control" value="{{ account.username }}"
+                                           autocapitalize="none" autocorrect="off" spellcheck="false">
+                                    <small class="text-muted">Sans majuscules ni espaces. Rôle actuel : <strong>{{ account.get_role_display() }}</strong>
+                                        (il se change depuis la fiche du membre).</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="new_password">Nouveau mot de passe</label>
+                                    <input type="password" name="new_password" id="new_password" class="form-control" minlength="8"
+                                           autocomplete="new-password" placeholder="Laisser vide pour ne pas le changer">
+                                    <small class="text-muted">Au moins 8 caractères avec des lettres et des chiffres.
+                                        {% if config.FORCE_PASSWORD_CHANGE %}Il est <strong>provisoire</strong> : le membre le changera à sa prochaine connexion.{% endif %}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="new_password_confirm">Confirmer le nouveau mot de passe</label>
+                                    <input type="password" name="new_password_confirm" id="new_password_confirm" class="form-control" autocomplete="new-password">
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-muted small">Ce membre n'a pas de compte de connexion.</p>
+                        {% endif %}
+
+{% else %}
                         <!-- Compte Utilisateur -->
                         <hr>
                         <h5>Compte Utilisateur</h5>
@@ -125,14 +163,12 @@
                             </div>
                         </div>
                         
+{% endif %}
                         <div class="form-group">
                             <label>Photo</label>
                             <input type="file" name="photo" class="form-control-file" accept="image/*">
                         </div>
                         
-                        <div class="alert alert-info mt-3">
-                            <i class="fas fa-info-circle"></i> Le membre sera en attente de validation par le trésorier.
-                        </div>
                         
                         <button type="submit" class="btn btn-success">Enregistrer</button>
                         <a href="{{ url_for('members') }}" class="btn btn-secondary">Annuler</a>

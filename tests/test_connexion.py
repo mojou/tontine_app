@@ -93,6 +93,33 @@ check('name="username"' in h and 'autocapitalize="none"' in h, 'création de mem
 h = app.test_client().get('/login').get_data(as_text=True)
 check('autocapitalize="none"' in h, 'page de connexion : champ identifiant sans majuscule automatique')
 
+# ---------------------------------------------------------------- le président change le mot de passe d'un membre
+with app.app_context(), tenant_bypass():
+    pat_id = User.query.filter_by(tontine_id=tid, username='patrick').one().member_id
+edit = {'first_name': 'Membre1', 'last_name': 'Talla', 'email': 'm1@cx.cm', 'phone': '699111221'}
+h = pres.get(f'/members/{pat_id}/edit').get_data(as_text=True)
+check('value="patrick"' in h and 'name="new_password"' in h and 'Laisser vide pour ne pas le changer' in h,
+      'page « Modifier » : identifiant prérempli, nouveau mot de passe facultatif')
+r = pres.post(f'/members/{pat_id}/edit', data={**edit, 'username': 'patrick', 'new_password': 'Edea2026x',
+                                               'new_password_confirm': 'Edea2026x'}, follow_redirects=True)
+check('Nouveau mot de passe enregistré' in text(r), 'le président enregistre un nouveau mot de passe')
+check(login('patrick', 'Edea2026x') and not login('patrick', 'kribi2026'),
+      'le membre se connecte avec le NOUVEAU mot de passe ; l\'ancien ne marche plus')
+pres.post(f'/members/{pat_id}/edit', data={**edit, 'username': 'patrick', 'new_password': '', 'new_password_confirm': ''})
+check(login('patrick', 'Edea2026x'), 'mot de passe laissé vide : il ne change pas')
+r = pres.post(f'/members/{pat_id}/edit', data={**edit, 'username': 'patrick', 'new_password': 'Autre2026x',
+                                               'new_password_confirm': 'Autre2026y'}, follow_redirects=True)
+check("ne sont pas identiques" in text(r) and login('patrick', 'Edea2026x'), 'confirmation différente : refus clair, rien ne change')
+# la secrétaire bloquée par 5 essais ratés : un nouveau mot de passe donné par le président lève le blocage
+with app.app_context(), tenant_bypass():
+    paul_id = User.query.filter_by(tontine_id=tid, username='paul.talla').one().member_id
+for _ in range(5):
+    login('paul.talla', 'Mauvais2026')
+check(not login('paul.talla', 'Paul2026'), 'après 5 essais ratés, le compte est bloqué 15 minutes')
+pres.post(f'/members/{paul_id}/edit', data={'first_name': 'Membre2', 'last_name': 'Talla', 'email': 'm2@cx.cm', 'phone': '699111222',
+                                            'username': 'paul.talla', 'new_password': 'Limbe2026x', 'new_password_confirm': 'Limbe2026x'})
+check(login('paul.talla', 'Limbe2026x'), 'nouveau mot de passe donné par le président : blocage levé, connexion OK')
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

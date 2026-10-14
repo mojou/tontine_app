@@ -1116,7 +1116,32 @@ def add_member():
 def edit_member(member_id):
     member = db.get_or_404(Member, member_id)
     form = MemberEditForm(obj=member)
-    
+    account = User.query.filter_by(tontine_id=g.tenant_id, member_id=member.id).first()
+
+    def page():
+        return render_template('member_form.html', form=form, member=member, account=account, title="Modifier membre")
+
+    # Compte de connexion : identifiant et nouveau mot de passe (vide = on garde l'ancien)
+    new_username = normalize_username(request.form.get('username')) if request.method == 'POST' else ''
+    new_password = (request.form.get('new_password') or '') if request.method == 'POST' else ''
+    if request.method == 'POST' and account:
+        if new_username and new_username != account.username:
+            other = find_user(new_username, g.tenant_id)
+            if other and other.id != account.id:
+                flash(f"L'identifiant « {new_username} » est déjà utilisé : rien n'a été modifié.", 'danger')
+                return page()
+            if len(new_username) < 3 or not re.fullmatch(r'[a-z0-9._-]+', new_username):
+                flash("Identifiant invalide (3 caractères au moins : lettres sans accent, chiffres, . _ -) : rien n'a été modifié.", 'danger')
+                return page()
+        if new_password:
+            problems = password_problems(new_password, None if app.config['FORCE_PASSWORD_CHANGE'] else (new_username or account.username))
+            if problems:
+                flash(password_error_message(problems) + " Rien n'a été modifié.", 'danger')
+                return page()
+            if new_password != (request.form.get('new_password_confirm') or ''):
+                flash("Les deux nouveaux mots de passe ne sont pas identiques : rien n'a été modifié.", 'danger')
+                return page()
+
     if form.validate_on_submit() and email_taken(form.email.data, member.id):
         flash(f"L'email {form.email.data} est déjà utilisé par un autre membre de la tontine.", 'danger')
     elif form.validate_on_submit():
@@ -1138,12 +1163,31 @@ def edit_member(member_id):
             if filename:
                 member.photo = filename
         
+        extra = []
+        if account and new_username and new_username != account.username:
+            account.username = new_username
+            extra.append(f"identifiant de connexion : « {new_username} »")
+        if account and new_password:
+            account.set_password(new_password)
+            account.must_change_password = app.config['FORCE_PASSWORD_CHANGE']
+            account.is_active = member.is_active
+            # Les essais ratés avec l'ancien mot de passe ne doivent pas bloquer le membre
+            slug = current_tontine().slug
+            LoginAttempt.query.filter(LoginAttempt.scope == 'login', db.func.lower(db.func.trim(LoginAttempt.identifier))
+                                      .in_([f"{slug}:{account.username}", f"{slug}:{new_username}"])).delete(synchronize_session=False)
+            extra.append("nouveau mot de passe enregistré" + (" (provisoire : le membre le changera à sa prochaine connexion)"
+                                                              if account.must_change_password else ''))
         db.session.commit()
-        log_activity(current_user.id, current_user.role, f"Modification membre: {member.full_name}", request.remote_addr)
-        flash('Membre modifié avec succès !', 'success')
+        log_activity(current_user.id, current_user.role, f"Modification membre: {member.full_name}"
+                     + (" (mot de passe changé)" if new_password else ''), request.remote_addr)
+        flash('Membre modifié avec succès !' + (' ' + ' ; '.join(extra).capitalize() + '.' if extra else ''), 'success')
         return redirect(url_for('member_detail', member_id=member.id))
-    
-    return render_template('member_form.html', form=form, member=member, title="Modifier membre")
+    elif request.method == 'POST':
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"{getattr(form, field).label.text} : {error}. Rien n'a été modifié.", 'danger')
+
+    return page()
 
 @app.route('/members/<int:member_id>/delete', methods=['POST'])
 @login_required
