@@ -120,6 +120,37 @@ pres.post(f'/members/{paul_id}/edit', data={'first_name': 'Membre2', 'last_name'
                                             'username': 'paul.talla', 'new_password': 'Limbe2026x', 'new_password_confirm': 'Limbe2026x'})
 check(login('paul.talla', 'Limbe2026x'), 'nouveau mot de passe donné par le président : blocage levé, connexion OK')
 
+# ---------------------------------------------------------------- faire entrer un membre simple au bureau
+h = pres.get(f'/members/{paul_id}').get_data(as_text=True)
+check('Rôle dans le bureau' in h and 'Changer le rôle' in h and 'Membre (pas au bureau)' in h,
+      'fiche du membre : réglage « Rôle dans le bureau » visible pour le président')
+paul = app.test_client()
+paul.post('/login', data={'tontine': 'connexion', 'username': 'paul.talla', 'password': 'Limbe2026x'})
+check('Historique des actions' not in paul.get('/dashboard').get_data(as_text=True), 'avant : Paul a le menu d\'un simple membre')
+r = pres.post(f'/members/{paul_id}/change-role', data={'role': 'SECRETAIRE'}, follow_redirects=True)
+check('est maintenant au bureau : Secrétaire' in text(r), 'le président nomme Paul secrétaire (message clair)')
+h = paul.get('/dashboard').get_data(as_text=True)
+check('Historique des actions' in h and 'Secrétaire' in h, 'Paul, déjà connecté, a tout de suite le menu du bureau (secrétaire)')
+check(paul.get('/members/add').status_code == 200, 'Paul secrétaire peut inscrire des membres')
+with app.app_context(), tenant_bypass():
+    germain = User.query.filter_by(tontine_id=tid, username='germain').one()
+r = pres.post(f'/members/{germain.member_id}/change-role', data={'role': 'MEMBRE'}, follow_redirects=True)
+check('se change par un vote' in text(r), 'impossible de retirer le président à la main (il faut une élection)')
+r = pres.post(f'/members/{paul_id}/change-role', data={'role': 'ROI'}, follow_redirects=True)
+check('Rôle invalide' in text(r), 'rôle inconnu refusé')
+r = pres.post(f'/members/{paul_id}/change-role', data={'role': 'PRESIDENT'}, follow_redirects=True)
+with app.app_context(), tenant_bypass():
+    check('se change par un vote' in text(r) and User.query.filter_by(tontine_id=tid, username='paul.talla').one().role == 'SECRETAIRE',
+          'nommer un président à la main est refusé : le président se change par un vote')
+m_c = app.test_client()
+m_c.post('/login', data={'tontine': 'connexion', 'username': 'rose', 'password': 'Fleur@2026!'})
+with app.app_context(), tenant_bypass():
+    rose_mid = User.query.filter_by(tontine_id=tid, username='rose').one().member_id
+check(m_c.post(f'/members/{rose_mid}/change-role', data={'role': 'PRESIDENT'}).status_code in (302, 403),
+      'un simple membre ne peut pas changer les rôles')
+with app.app_context(), tenant_bypass():
+    check(User.query.filter_by(tontine_id=tid, username='rose').one().role == 'MEMBRE', '… et Rose reste simple membre')
+
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:
     print('  -', f)

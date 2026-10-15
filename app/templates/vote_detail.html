@@ -28,6 +28,17 @@
                         {% if poll.is_open %}<span class="badge badge-success">Ouvert</span>{% else %}<span class="badge badge-secondary">Clos</span>{% endif %}
                     </div>
                     {% if poll.description %}<p class="text-muted">{{ poll.description|nl2br }}</p>{% endif %}
+                    {% if poll.is_election %}
+                    <div class="alert {{ 'alert-success' if poll.result_applied_at and 'élu' in (poll.result_note or '') else 'alert-info' }} small">
+                        <i class="fas fa-user-tie"></i> <strong>Élection au bureau : {{ election_label }}.</strong>
+                        {% if poll.result_applied_at %}
+                        <br><strong>Résultat :</strong> {{ poll.result_note }}
+                        {% else %}
+                        À la clôture, le candidat qui a le plus de voix devient {{ election_label|lower }} automatiquement ;
+                        l'ancien titulaire redevient simple membre. Égalité : rien ne change, il faut revoter.
+                        {% endif %}
+                    </div>
+                    {% endif %}
 
                     {% if can_vote %}
                     <form method="POST" action="{{ url_for('cast_vote', poll_id=poll.id) }}" id="voteForm">
@@ -63,7 +74,7 @@
                         </div>
                     </div>
                     {% endfor %}
-                    {% if not poll.is_open and winners|length > 1 %}
+                    {% if not poll.is_open and winners|length > 1 and not poll.is_election %}
                     <div class="alert alert-info small">Égalité entre plusieurs choix : le bureau doit trancher ou organiser un second tour.</div>
                     {% endif %}
                     {% else %}
@@ -109,10 +120,16 @@
 
             {% if can_manage %}
             <div class="card"><div class="card-body">
-                {% if poll.status == 'OUVERT' and current_user.role in ['PRESIDENT', 'SECRETAIRE'] %}
+                {% if (poll.status == 'OUVERT' or (poll.is_election and not poll.result_applied_at)) and current_user.role in ['PRESIDENT', 'SECRETAIRE'] %}
                 <form method="POST" action="{{ url_for('close_vote', poll_id=poll.id) }}" class="mb-2">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if poll.is_election %}
+                    <button type="submit" class="btn btn-warning btn-block"
+                            onclick="return confirm('Clore l\'élection et proclamer le résultat ? Le gagnant devient {{ election_label|lower }} tout de suite.');">
+                        <i class="fas fa-flag-checkered"></i> Clore et proclamer le résultat</button>
+                    {% else %}
                     <button type="submit" class="btn btn-warning btn-block" onclick="return confirm('Clore ce vote ? Plus personne ne pourra voter.');"><i class="fas fa-lock"></i> Clore le vote</button>
+                    {% endif %}
                 </form>
                 {% endif %}
                 {% if current_user.role == 'PRESIDENT' %}

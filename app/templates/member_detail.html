@@ -50,6 +50,27 @@
                 </span>
             </div>
             <div class="member-detail">
+                <strong>Rôle :</strong>
+                {% if account %}
+                <span class="badge {{ 'badge-secondary' if account.role == 'MEMBRE' else 'badge-primary' }}" style="font-size: 0.9rem;">
+                    {{ account.get_role_display() if account.role != 'MEMBRE' else 'Membre (pas au bureau)' }}</span>
+                {% else %}<span class="text-muted">pas de compte de connexion</span>{% endif %}
+            </div>
+            {% if can_change_role and account and member.is_active and account.role == 'PRESIDENT' %}
+            <div class="small text-muted mb-2"><i class="fas fa-vote-yea"></i> Le président se change par un vote des membres :
+                <a href="{{ url_for('add_vote') }}">organiser une élection</a>.</div>
+            {% elif can_change_role and account and member.is_active %}
+            <form method="POST" action="{{ url_for('change_member_role', member_id=member.id) }}" class="form-inline mt-1 mb-2 role-form"
+                  onsubmit="return confirm('Changer le rôle de {{ member.full_name|replace("'", " ") }} ?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="small mr-2 mb-1" for="role">Rôle dans le bureau</label>
+                <select name="role" id="role" class="form-control form-control-sm mr-2 mb-1">
+                    {% for code, label in role_choices %}<option value="{{ code }}" {% if code == account.role %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="btn btn-sm btn-primary mb-1"><i class="fas fa-user-tie"></i> Changer le rôle</button>
+            </form>
+            {% endif %}
+            <div class="member-detail">
                 <strong>Situation dans la tontine :</strong>
                 {% if member.tontine_status == 'VERT' %}
                     <span class="badge badge-success" style="font-size: 0.9rem;">

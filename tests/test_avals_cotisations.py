@@ -152,6 +152,7 @@ with app.app_context():
 # Marc rembourse le reste -> prêt soldé
 with app.app_context():
     rest = int(db.session.get(Loan, loan_id).remaining_amount)
+pres.post(f'/loans/{loan_id}/interets', data={'payment_mode': 'ESPECE'})   # règle : intérêts du trimestre commencé d'abord
 pres.post(f'/loans/{loan_id}/repay', data={'amount': rest, 'payment_mode': 'ESPECE'})
 with app.app_context():
     check(db.session.get(Loan, loan_id).status == 'REMBOURSE', 'prêt soldé')

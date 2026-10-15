@@ -83,7 +83,8 @@ check(rows['Rose']['late'] == Decimal('10000') and rows['Rose']['current_due'] =
       'Rose : 10 000 en retard (tour 1 versé) + 10 000 pour le tour 2')
 check(rows['Paul']['late'] == 0 and rows['Paul']['current_due'] == Decimal('10000'), 'Paul : à jour, 10 000 pour le tour 2')
 h = text(c.get(url))
-check('10 000 FCFA en retard' in h and 'Régulariser' in h, 'la page distingue le retard et propose « Régulariser »')
+check('10 000 FCFA en retard' in h and 'Échecs à régler' in h and 'Régler' in h and 'Régulariser' not in h,
+      'la page distingue le retard et propose « Régler » dans les échecs (plus de « Régulariser »)')
 
 # ---------------------------------------------------------------- régulariser un retard
 r = c.post(f'{url}/regulariser', data={'member_id': ids['Rose'], 'action': 'encaisser', 'amount': '30000',

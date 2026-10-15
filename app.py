@@ -54,6 +54,7 @@ csrf = CSRFProtect()
 csrf.init_app(app)
 
 from models import db
+from dateutil.relativedelta import relativedelta
 from extensions import utcnow
 db.init_app(app)
 
@@ -990,7 +991,9 @@ def member_detail(member_id):
                            total_contributions=total_contributions,
                            total_loans=total_loans,
                            can_edit=can_edit,
-                           can_change_role=can_change_role)
+                           can_change_role=can_change_role,
+                           account=User.query.filter_by(tontine_id=g.tenant_id, member_id=member.id).first(),
+                           role_choices=[(k, v) for k, v in ROLE_LABELS_FR.items() if k != 'PRESIDENT'])
 
 def _free_identifiers_of_retired(username, email):
     """Un membre retiré garde son historique mais libère son identifiant et son e-mail (renommés « …ancienN »),
@@ -1285,6 +1288,10 @@ def update_member_status(member_id):
     return redirect(url_for('member_detail', member_id=member_id))
 
 
+ROLE_LABELS_FR = {'MEMBRE': 'Membre (pas au bureau)', 'PRESIDENT': 'Président(e)', 'SECRETAIRE': 'Secrétaire',
+                  'TRESORIER': 'Trésorier(ère)', 'CENSEUR': 'Censeur', 'COMMUNICATION': 'Chargé(e) de communication'}
+
+
 @app.route('/members/<int:member_id>/change-role', methods=['POST'])
 @login_required
 @president_required
@@ -1298,15 +1305,40 @@ def change_member_role(member_id):
         flash('Rôle invalide.', 'danger')
         return redirect(url_for('member_detail', member_id=member_id))
     
-    user = User.query.filter_by(member_id=member.id).first()
-    if user:
-        old_role = user.role
-        user.role = new_role
-        db.session.commit()
-        log_activity(current_user.id, current_user.role, f"Changement rôle de {member.full_name}: {old_role} -> {new_role}", request.remote_addr)
-        flash(f'Rôle de {member.full_name} modifié en {new_role}.', 'success')
+    user = User.query.filter_by(tontine_id=g.tenant_id, member_id=member.id).first()
+    if not user:
+        flash("Ce membre n'a pas de compte de connexion : créez-le d'abord.", 'danger')
+        return redirect(url_for('member_detail', member_id=member_id))
+    if not member.is_active or not user.is_active:
+        flash("Ce membre est retiré : remettez-le d'abord dans la liste.", 'warning')
+        return redirect(url_for('member_detail', member_id=member_id))
+    old_role = user.role
+    # Le président est choisi par les membres : il ne se change que par une élection (menu Votes)
+    if 'PRESIDENT' in (old_role, new_role) and old_role != new_role:
+        flash("Le président se change par un vote des membres : menu Votes → « Nouveau vote » → Élection "
+              "du président. Le gagnant devient président automatiquement à la clôture.", 'warning')
+        return redirect(url_for('member_detail', member_id=member_id))
+    if old_role == new_role:
+        flash(f"{member.full_name} a déjà ce rôle ({ROLE_LABELS_FR[new_role]}).", 'info')
+        return redirect(url_for('member_detail', member_id=member_id))
+    # La tontine doit toujours garder au moins un président actif
+    if old_role == 'PRESIDENT':
+        others = User.query.filter(User.tontine_id == g.tenant_id, User.role == 'PRESIDENT', User.is_active == True,  # noqa: E712
+                                   User.id != user.id).count()
+        if not others:
+            flash("Impossible : c'est le seul président. Nommez d'abord un autre président, puis changez ce rôle.", 'danger')
+            return redirect(url_for('member_detail', member_id=member_id))
+    user.role = new_role
+    db.session.commit()
+    log_activity(current_user.id, current_user.role,
+                 f"Changement de rôle de {member.full_name} : {old_role} -> {new_role}", request.remote_addr)
+    if new_role == 'MEMBRE':
+        flash(f"{member.full_name} ne fait plus partie du bureau (simple membre).", 'success')
     else:
-        flash('Ce membre n\'a pas de compte utilisateur.', 'danger')
+        flash(f"{member.full_name} est maintenant au bureau : {ROLE_LABELS_FR[new_role]}. "
+              "Son menu du bureau apparaît dès sa prochaine page.", 'success')
+    if user.id == current_user.id and new_role != 'PRESIDENT':
+        return redirect(url_for('dashboard'))   # le président a quitté lui-même la présidence
     
     return redirect(url_for('member_detail', member_id=member_id))
 
@@ -1461,7 +1493,7 @@ def add_transaction():
                 flash(f"Cotisation rattachée au {cycles[0].display_name}.", 'info')
             else:
                 flash("Cette cotisation n'est rattachée à aucun cycle : pour un cycle, utilisez la feuille de séance "
-                      "ou « Régulariser » sur la page du cycle.", 'warning')
+                      "ou « Régler » dans les échecs de la page du cycle.", 'warning')
 
         if transaction.type == 'TONTINE':
             member = db.session.get(Member, form.member_id.data)
@@ -1638,6 +1670,8 @@ def loans():
     for loan in pagination.items:
         if loan.is_overdue and loan.status == 'ACTIF':
             loan.status = 'OVERDUE'
+        elif loan.is_quarterly and loan.status == 'OVERDUE' and not loan.is_overdue:
+            loan.status = 'ACTIF'
     
     db.session.commit()
     
@@ -1694,9 +1728,10 @@ def loan_request():
             flash(f"Emprunt refusé : {reason}", "danger")
             return redirect(url_for('loans'))
     
-    # Calculer les intérêts
-    interest = amount * (interest_rate / Decimal('100'))
-    total_amount = amount + interest
+    # Nouvelle règle : intérêts payés tous les 3 mois sur le capital restant ; le capital (total_amount) se rembourse
+    # quand on veut, en une ou plusieurs fois, au plus tard 12 mois après l'approbation
+    interest = (amount * (interest_rate / Decimal('100'))).quantize(Decimal('1'))   # intérêts du 1er trimestre
+    total_amount = amount
 
     # Avalistes choisis par l'emprunteur
     guarantor_ids = []
@@ -1727,8 +1762,10 @@ def loan_request():
         request_date=date.today(),
         approval_date=None,
         start_date=None,
-        end_date=date.today() + timedelta(days=duration_months * 30),
+        end_date=date.today() + relativedelta(months=LOAN_MAX_MONTHS),
         status='PENDING',
+        interest_mode='TRIMESTRIEL',
+        interest_rate=interest_rate,
         description=purpose,
         approved_by=None,
         created_by=current_user.id,
@@ -1784,6 +1821,9 @@ def approve_loan(loan_id):
     loan.approval_date = date.today()
     loan.approved_by = current_user.id
     loan.start_date = date.today()
+    if loan.is_quarterly:   # 1res intérêts dans 3 mois ; capital à rendre au plus tard dans 12 mois
+        loan.next_due_date = date.today() + relativedelta(months=3)
+        loan.end_date = date.today() + relativedelta(months=LOAN_MAX_MONTHS)
     
     # Créer la transaction de décaissement
     transaction = Transaction(
@@ -1859,7 +1899,11 @@ def repay_loan(loan_id):
     if payment_amount > remaining:
         flash(f"Le montant écrit dépasse ce qui reste à rembourser ({remaining:,.0f} FCFA).", "danger")
         return redirect(url_for('loans'))
-    
+    if loan.is_quarterly and payment_amount >= remaining and not loan.current_quarter_paid:
+        flash(f"Avant de solder l'emprunt, payez les intérêts du trimestre commencé ({_fmt(loan.quarter_interest)} FCFA) "
+              "avec le bouton « Payer les intérêts ».", 'warning')
+        return redirect(url_for('loans'))
+
     loan.amount_paid += payment_amount
 
     if loan.amount_paid >= loan.total_amount:
@@ -1881,7 +1925,53 @@ def repay_loan(loan_id):
     db.session.commit()
     
     log_activity(current_user.id, current_user.role, f"Remboursement emprunt #{loan.id}", request.remote_addr)
-    flash("Le remboursement a été enregistré.", "success")
+    if loan.is_quarterly and loan.status != 'REMBOURSE':
+        flash(f"Remboursement de {_fmt(payment_amount)} FCFA enregistré. Capital restant : {_fmt(loan.remaining_amount)} FCFA ; "
+              f"les prochains intérêts baissent à {_fmt(loan.quarter_interest)} FCFA.", 'success')
+    elif loan.status == 'REMBOURSE':
+        flash("Emprunt entièrement remboursé : il est terminé et les avalistes sont libérés.", 'success')
+    else:
+        flash("Le remboursement a été enregistré.", "success")
+    return redirect(url_for('loans'))
+
+
+LOAN_MAX_MONTHS = 12   # le capital doit être rendu au plus tard 12 mois après l'approbation
+
+
+@app.route('/loans/<int:loan_id>/interets', methods=['POST'])
+@login_required
+def pay_loan_interest(loan_id):
+    """Intérêts du trimestre (taux x capital restant) : l'emprunt reste en cours, la prochaine échéance recule de 3 mois"""
+    if getattr(current_user, 'role', None) not in ['SECRETAIRE', 'PRESIDENT', 'TRESORIER']:
+        abort(403)
+    loan = db.get_or_404(Loan, loan_id)
+    if not loan.is_quarterly or loan.status not in ('ACTIF', 'OVERDUE'):
+        flash("Cet emprunt ne se paie pas par intérêts trimestriels.", 'warning')
+        return redirect(url_for('loans'))
+    if loan.next_due_date is None:
+        flash("Tous les intérêts sont déjà payés : il reste seulement le capital à rembourser.", 'info')
+        return redirect(url_for('loans'))
+    if request.form.get('expected_due') and request.form.get('expected_due') != loan.next_due_date.isoformat():
+        flash("Ces intérêts ont déjà été payés (double clic ou page ancienne).", 'warning')
+        return redirect(url_for('loans'))
+    amount = loan.quarter_interest
+    period_end = loan.next_due_date
+    db.session.add(Transaction(member_id=loan.member_id, type='INTERET_EMPRUNT', amount=amount, date=date.today(),
+                               loan_id=loan.id, created_by=current_user.id, payment_mode=_payment_mode_from_form(),
+                               payment_reference=_payment_reference_from_form(),
+                               description=f"Intérêts emprunt #{loan.id} : trimestre jusqu'au {period_end.strftime('%d/%m/%Y')}"))
+    nxt = period_end + relativedelta(months=3)
+    loan.next_due_date = nxt if loan.end_date is None or nxt <= loan.end_date else None
+    if loan.status == 'OVERDUE' and not loan.is_overdue:
+        loan.status = 'ACTIF'
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, f"Intérêts emprunt #{loan.id} : {_fmt(amount)} FCFA", request.remote_addr)
+    if loan.next_due_date:
+        flash(f"Intérêts de {_fmt(amount)} FCFA payés. L'emprunt reste en cours ; prochains intérêts le "
+              f"{loan.next_due_date.strftime('%d/%m/%Y')}.", 'success')
+    else:
+        flash(f"Intérêts de {_fmt(amount)} FCFA payés : c'étaient les derniers. Le capital restant ({_fmt(loan.remaining_amount)} FCFA) "
+              f"doit être rendu au plus tard le {loan.end_date.strftime('%d/%m/%Y')}.", 'success')
     return redirect(url_for('loans'))
 
 
@@ -2619,6 +2709,96 @@ def cycle_contribution_status(cycle, through_turn=None):
             'advance_total': sum((r['advance'] for r in rows), Decimal('0'))}
 
 
+def cycle_failures(cycle):
+    """Échecs d'un cycle : membres qui n'ont pas payé leur part pour des tours déjà versés, avec leurs amendes.
+    Un échec se règle en entier (part + amende) : pas de paiement partiel dans un cycle."""
+    status = cycle_contribution_status(cycle)
+    fines = {}
+    for s in Sanction.query.filter(Sanction.status == 'PENDING', Sanction.origin_key.like(f"cycle{cycle.id}:%")).all():
+        fines.setdefault(s.member_id, []).append(s)
+    rows = []
+    for r in status['rows']:
+        if not r['member']:
+            continue
+        member_fines = fines.get(r['member'].id, [])
+        penalty = sum((Decimal(str(s.amount)) for s in member_fines), Decimal('0'))
+        if r['late'] > 0 or penalty > 0:
+            amount = Decimal(str(cycle.amount_per_member)) * r['hands']
+            turns = int((r['late'] / amount).to_integral_value(rounding='ROUND_UP')) if amount else 0
+            rows.append({'member': r['member'], 'late': r['late'], 'turns': turns, 'penalty': penalty,
+                         'fines': member_fines, 'total': r['late'] + penalty})
+    return rows
+
+
+def move_cycle_advances_to_savings(cycle, user_id=None):
+    """Cycle terminé : ce qu'un membre a payé en trop est versé automatiquement dans son épargne"""
+    if cycle.status != 'TERMINE':
+        return Decimal('0')
+    moved = Decimal('0')
+    for r in cycle_contribution_status(cycle)['rows']:
+        if r['member'] and r['advance'] > 0:
+            db.session.add(Transaction(member_id=r['member'].id, type='RESTITUTION_TONTINE', amount=r['advance'],
+                                       date=date.today(), cycle_id=cycle.id, created_by=user_id,
+                                       description=f"Payé en trop - {cycle.display_name} : versé dans l'épargne"))
+            db.session.add(Transaction(member_id=r['member'].id, type='EPARGNE', amount=r['advance'], date=date.today(),
+                                       created_by=user_id,
+                                       description=f"Payé en trop sur le {cycle.display_name}, versé dans l'épargne"))
+            moved += r['advance']
+    if moved:
+        db.session.commit()
+    return moved
+
+
+@app.route('/tontine-cycles/<int:cycle_id>/regler/<int:member_id>', methods=['POST'])
+@login_required
+@role_required(CYCLE_MANAGERS)
+def settle_failure(cycle_id, member_id):
+    """« Régler » un échec : la part en retard ET l'amende, en une fois (jamais partiellement).
+    La part est reversée automatiquement au bénéficiaire qui avait reçu une cagnotte réduite."""
+    cycle = db.get_or_404(TontineCycleDetail, cycle_id)
+    seance = None
+    seance_id = request.form.get('seance_id', type=int)
+    if seance_id:
+        seance = Seance.query.filter_by(id=seance_id).first()
+    back_url = (url_for('seance_detail', seance_id=seance.id) + '#echecs') if seance else \
+        (url_for('tontine_cycle_detail', cycle_id=cycle.id) + '#echecs')
+    if seance is None:
+        seance = open_seance_for_cycle(cycle)
+    if seance and seance.is_closed:
+        flash('Cette séance est fermée : rouvrez-la pour régler un échec.', 'warning')
+        return redirect(back_url)
+    row = next((f for f in cycle_failures(cycle) if f['member'].id == member_id), None)
+    if row is None:
+        flash("Ce membre n'a rien à régler sur ce cycle.", 'info')
+        return redirect(back_url)
+    expected = request.form.get('expected_total')
+    if expected and _parse_decimal(expected, 0, 1_000_000_000) != row['total']:
+        flash("Le montant a changé entre-temps (déjà réglé ?) : vérifiez puis recommencez.", 'warning')
+        return redirect(back_url)
+    payment_mode = _payment_mode_from_form()
+    reference = _payment_reference_from_form()
+    member = row['member']
+    if row['late'] > 0:
+        db.session.add(Transaction(member_id=member.id, type='TONTINE', amount=row['late'], date=date.today(),
+                                   cycle_id=cycle.id, contribution_type_id=cycle.contribution_type_id,
+                                   payment_mode=payment_mode, payment_reference=reference, created_by=current_user.id,
+                                   seance_id=seance.id if seance else None,
+                                   description=f"Échec réglé - {cycle.display_name} : part(s) en retard"))
+    for s in row['fines']:
+        s.status = 'PAID'
+        db.session.add(Transaction(member_id=member.id, type='SANCTION', amount=Decimal(str(s.amount)), date=date.today(),
+                                   payment_mode=payment_mode, created_by=current_user.id, cycle_id=cycle.id,
+                                   seance_id=seance.id if seance else None,
+                                   description=f"Amende #{s.id} payée (échec réglé, {cycle.display_name})"))
+    db.session.commit()
+    released = settle_cycle_shortfalls(cycle, current_user.id, seance.id if seance else None, payment_mode)
+    log_activity(current_user.id, current_user.role,
+                 f"Échec réglé {cycle.display_name} : {member.full_name}, {_fmt(row['total'])} FCFA", request.remote_addr)
+    flash(f"{member.full_name} a réglé {_fmt(row['total'])} FCFA (part {_fmt(row['late'])} + amende {_fmt(row['penalty'])})."
+          + (f" {_fmt(released)} FCFA reversés au bénéficiaire qui avait reçu moins." if released else ''), 'success')
+    return redirect(back_url)
+
+
 def cycle_penalty_rule(tontine):
     """Règle d'amende de la tontine : ('PERCENT', 10) ou ('FIXED', 1000)"""
     mode = (tontine.cycle_penalty_mode or 'PERCENT') if tontine else 'PERCENT'
@@ -2758,14 +2938,13 @@ def cycle_next_steps(cycle, contrib):
     return [
         {'done': late_and_advance == 0, 'title': 'Finir de payer les cotisations du cycle',
          'detail': 'Tout le monde est à jour.' if late_and_advance == 0 else
-         f"{_fmt(contrib['late_total'])} FCFA en retard et {_fmt(contrib['advance_total'])} FCFA payés en avance à corriger "
-         "(bouton « Régulariser » dans l'état des cotisations).",
-         'url': '#etatCotisations', 'link': "Voir l'état des cotisations"},
+         f"{_fmt(contrib['late_total'])} FCFA de parts non payées : bouton « Régler » dans le tableau des échecs.",
+         'url': '#echecs', 'link': 'Voir les échecs'},
         {'done': fund == 0, 'title': 'Vérifier que la caisse du cycle est à 0',
          'detail': "Tout l'argent reçu a été donné aux bénéficiaires." if fund == 0 else
          f"Il reste {_fmt(fund)} FCFA : " + ('des cagnottes ont été données sans que les cotisations soient reçues.' if fund < 0
                                             else "de l'argent reste à donner ou à rendre."),
-         'url': '#etatCotisations', 'link': 'Régulariser'},
+         'url': '#echecs', 'link': 'Voir les échecs'},
         {'done': fines == 0, 'title': 'Faire payer les amendes des participants',
          'detail': 'Aucune amende en attente.' if fines == 0 else f"{_fmt(fines)} FCFA d'amendes encore à payer.",
          'url': url_for('sanctions'), 'link': 'Voir les sanctions'},
@@ -2793,8 +2972,11 @@ def tontine_cycle_detail(cycle_id):
     holders = {}
     for p in cycle.participants:
         holders.setdefault(p.member_id, {'member': p.member, 'parts': []})['parts'].append(p)
+    if cycle.status == 'TERMINE' and current_user.role in CYCLE_MANAGERS:
+        move_cycle_advances_to_savings(cycle, current_user.id)   # anciens cycles terminés avec un trop-payé
     contrib = cycle_contribution_status(cycle)
     return render_template('tontine_cycle_detail.html', cycle=cycle, beneficiaries=beneficiaries,
+                           failures=cycle_failures(cycle),
                            next_steps=cycle_next_steps(cycle, contrib) if cycle.status == 'TERMINE' else None,
                            next_participant=next_participant, next_beneficiary=next_participant.member if next_participant else None,
                            pending_sanctions=pending_sanctions, collected=collected,
@@ -2974,6 +3156,9 @@ def register_benefit(cycle_id):
     db.session.commit()
     if settle_after:   # retards payés : reversés aux bénéficiaires concernés
         settle_cycle_shortfalls(cycle, current_user.id, seance.id if seance else None, payment_mode)
+    moved = move_cycle_advances_to_savings(cycle, current_user.id)   # cycle terminé : le trop-payé va dans l'épargne
+    if moved:
+        flash(f"Cycle terminé : {_fmt(moved)} FCFA payés en trop ont été versés dans l'épargne des membres concernés.", 'info')
 
     log_activity(current_user.id, current_user.role,
                  f"Cagnotte {cycle.display_name} tour {position} : {participant.label}, net {net:,.0f} FCFA", request.remote_addr)
@@ -3723,19 +3908,43 @@ def votes():
 @login_required
 @role_required(POLL_MANAGERS)
 def add_vote():
+    # Candidats possibles d'une élection : membres actifs qui ont un compte de connexion
+    eligible = [m_ for m_ in Member.query.filter_by(is_active=True, status='ACTIF').order_by(Member.last_name, Member.first_name).all()
+                if User.query.filter_by(tontine_id=g.tenant_id, member_id=m_.id, is_active=True).first()]
+
+    def form_page():
+        return render_template('vote_form.html', form_data=request.form if request.method == 'POST' else {},
+                               candidates=eligible, election_roles=ELECTION_ROLES)
+
     if request.method == 'POST':
+        kind = 'ELECTION' if request.form.get('kind') == 'ELECTION' else 'QUESTION'
+        election_role = None
         title = (request.form.get('title') or '').strip()
         description = (request.form.get('description') or '').strip()
-        labels = [l.strip() for l in (request.form.get('options') or '').splitlines() if l.strip()]
-        labels = list(dict.fromkeys(labels))  # supprime les doublons en gardant l'ordre
+        candidates = []
+        if kind == 'ELECTION':
+            election_role = request.form.get('election_role')
+            if election_role not in ELECTION_ROLES:
+                flash("Choisissez le poste à élire.", 'danger')
+                return form_page()
+            chosen = {int(x) for x in request.form.getlist('candidates') if x.isdigit()}
+            candidates = [m_ for m_ in eligible if m_.id in chosen]
+            if len(candidates) < 2:
+                flash("Une élection demande au moins deux candidats.", 'danger')
+                return form_page()
+            labels = [c.full_name for c in candidates]
+            title = title or f"Élection : {ELECTION_ROLES[election_role]}"
+        else:
+            labels = [l.strip() for l in (request.form.get('options') or '').splitlines() if l.strip()]
+            labels = list(dict.fromkeys(labels))  # supprime les doublons en gardant l'ordre
         end_date_str = request.form.get('end_date')
 
         if not title or len(title) > 200:
             flash('Le titre est obligatoire (200 caractères max).', 'danger')
-            return render_template('vote_form.html', form_data=request.form)
+            return form_page()
         if len(labels) < 2:
             flash('Il faut au moins deux choix différents.', 'danger')
-            return render_template('vote_form.html', form_data=request.form)
+            return form_page()
 
         end_date = None
         if end_date_str:
@@ -3743,10 +3952,10 @@ def add_vote():
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%dT%H:%M')
             except ValueError:
                 flash('Date de clôture invalide.', 'danger')
-                return render_template('vote_form.html', form_data=request.form)
+                return form_page()
             if end_date <= datetime.now():
                 flash('La date de clôture doit être dans le futur.', 'danger')
-                return render_template('vote_form.html', form_data=request.form)
+                return form_page()
 
         poll = Poll(
             title=title,
@@ -3754,18 +3963,22 @@ def add_vote():
             is_anonymous=request.form.get('is_anonymous') == 'on',
             end_date=end_date,
             status='OUVERT',
-            created_by=current_user.id
+            created_by=current_user.id,
+            kind=kind,
+            election_role=election_role,
         )
         for i, label in enumerate(labels):
-            poll.options.append(PollOption(label=label[:200], display_order=i))
+            poll.options.append(PollOption(label=label[:200], display_order=i,
+                                           candidate_member_id=candidates[i].id if candidates else None))
         db.session.add(poll)
         db.session.commit()
 
         log_activity(current_user.id, current_user.role, f"Création vote #{poll.id}: {poll.title}", request.remote_addr)
-        flash('Le vote a été ouvert aux membres.', 'success')
+        flash("L'élection est ouverte : à la clôture, le gagnant devient " + ELECTION_ROLES[election_role].lower() + '.'
+              if kind == 'ELECTION' else 'Le vote a été ouvert aux membres.', 'success')
         return redirect(url_for('vote_detail', poll_id=poll.id))
 
-    return render_template('vote_form.html', form_data={})
+    return form_page()
 
 
 @app.route('/votes/<int:poll_id>')
@@ -3785,7 +3998,8 @@ def vote_detail(poll_id):
     eligible = Member.query.filter_by(status='ACTIF', is_active=True).count()
     return render_template('vote_detail.html', poll=poll, my_vote=my_vote, can_vote=can_vote,
                            can_manage=can_manage, show_results=show_results,
-                           voters=voters, eligible=eligible)
+                           voters=voters, eligible=eligible,
+                           election_label=ELECTION_ROLES.get(poll.election_role, '') if poll.is_election else '')
 
 
 @app.route('/votes/<int:poll_id>/vote', methods=['POST'])
@@ -3829,15 +4043,61 @@ def cast_vote(poll_id):
 @role_required(['PRESIDENT', 'SECRETAIRE'])
 def close_vote(poll_id):
     poll = db.get_or_404(Poll, poll_id)
-    if poll.status == 'CLOS':
+    if poll.status == 'CLOS' and not (poll.is_election and not poll.result_applied_at):
         flash('Ce vote est déjà clos.', 'info')
     else:
-        poll.status = 'CLOS'
-        poll.closed_at = utcnow()
-        db.session.commit()
-        log_activity(current_user.id, current_user.role, f"Clôture vote #{poll.id}", request.remote_addr)
-        flash('Le vote est clos. Les résultats sont visibles par tous.', 'success')
+        if poll.status != 'CLOS':
+            poll.status = 'CLOS'
+            poll.closed_at = utcnow()
+            db.session.commit()
+            log_activity(current_user.id, current_user.role, f"Clôture vote #{poll.id}", request.remote_addr)
+        if poll.is_election:
+            ok, note = apply_election_result(poll)
+            flash(note, 'success' if ok else 'warning')
+        else:
+            flash('Le vote est clos. Les résultats sont visibles par tous.', 'success')
     return redirect(url_for('vote_detail', poll_id=poll.id))
+
+
+ELECTION_ROLES = {'PRESIDENT': 'Président(e)', 'SECRETAIRE': 'Secrétaire', 'TRESORIER': 'Trésorier(ère)',
+                  'CENSEUR': 'Censeur', 'COMMUNICATION': 'Chargé(e) de communication'}
+
+
+def apply_election_result(poll):
+    """Élection close : le gagnant prend le poste ; le(s) titulaire(s) précédent(s) redeviennent simples membres.
+    Égalité, aucun vote ou gagnant sans compte : rien ne change. Retourne (appliqué ?, message)."""
+    role, role_label = poll.election_role, ELECTION_ROLES.get(poll.election_role, poll.election_role)
+    winners = poll.winners()
+    note, ok = None, False
+    if poll.total_votes == 0:
+        note = "Aucun vote : personne n'a été élu, le bureau ne change pas."
+    elif len(winners) > 1:
+        note = ("Égalité entre " + ' et '.join(w.label for w in winners)
+                + " : personne n'a été élu, le bureau ne change pas. Ouvrez un nouveau vote entre eux.")
+    else:
+        winner = winners[0]
+        account = (User.query.filter_by(tontine_id=g.tenant_id, member_id=winner.candidate_member_id).first()
+                   if winner.candidate_member_id else None)
+        if not account or not account.is_active or not (winner.candidate and winner.candidate.is_active):
+            note = f"{winner.label} a gagné mais n'a pas de compte actif : le bureau ne change pas."
+        else:
+            replaced = User.query.filter(User.tontine_id == g.tenant_id, User.role == role, User.id != account.id).all()
+            for old in replaced:
+                old.role = 'MEMBRE'
+            previous_role = account.role
+            account.role = role
+            ok = True
+            note = (f"{winner.label} est élu(e) {role_label.lower()} avec "
+                    f"{poll.results()[poll.options.index(winner)][1]} voix sur {poll.total_votes}.")
+            if replaced:
+                note += " " + ', '.join((o.member.full_name if o.member else o.username) for o in replaced) + " redevient simple membre."
+            if previous_role not in ('MEMBRE', role):
+                note += f" Son ancien poste ({ROLE_LABELS_FR.get(previous_role, previous_role)}) est maintenant libre."
+    poll.result_applied_at = utcnow()
+    poll.result_note = note[:300]
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, f"Résultat de l'élection #{poll.id} : {note}", request.remote_addr)
+    return ok, note
 
 
 @app.route('/votes/<int:poll_id>/delete', methods=['POST'])
@@ -4754,6 +5014,8 @@ def seance_detail(seance_id):
                         'late': [r for r in status['rows'] if r['gap'] < 0] if status else []})
     return render_template('seance_detail.html', seance=seance, columns=columns, rows=rows, totals=totals,
                            grand_total=sum(totals.values(), Decimal('0')), payouts=payouts,
+                           seance_failures=[(col['cycle'], f) for col in columns if col['cycle']
+                                            for f in [cycle_failures(col['cycle'])] if f],
                            late_fines=seance_late_fines(seance) if not seance.is_closed else [],
                            seance_fines=Sanction.query.filter(Sanction.origin_key.like(f"seance{seance.id}:%"))
                            .order_by(Sanction.id).all(),
@@ -4900,14 +5162,20 @@ def loan_interest_received(start, end):
     """Intérêts d'emprunt réellement reçus entre deux dates : chaque remboursement contient sa part
     d'intérêt (intérêt de l'emprunt / total à rembourser). Retourne (total, liste par emprunt)."""
     cache, per_loan = {}, {}
-    for tx in Transaction.query.filter(Transaction.type == 'REMBOURSEMENT', Transaction.date >= start,
+    for tx in Transaction.query.filter(Transaction.type.in_(['REMBOURSEMENT', 'INTERET_EMPRUNT']), Transaction.date >= start,
                                        Transaction.date <= end).all():
         loan = _loan_of_transaction(tx, cache)
         if not loan or not loan.total_amount:
             continue
-        part = Decimal(str(tx.amount)) * Decimal(str(loan.interest or 0)) / Decimal(str(loan.total_amount))
+        if tx.type == 'INTERET_EMPRUNT':          # nouvelle règle : intérêts payés à part, tous les 3 mois
+            part = Decimal(str(tx.amount))
+        elif loan.is_quarterly:                   # nouvelle règle : un remboursement n'est que du capital
+            part = Decimal('0')
+        else:                                     # ancienne règle : chaque remboursement contient sa part d'intérêt
+            part = Decimal(str(tx.amount)) * Decimal(str(loan.interest or 0)) / Decimal(str(loan.total_amount))
         entry = per_loan.setdefault(loan.id, {'loan': loan, 'repaid': Decimal('0'), 'interest': Decimal('0')})
-        entry['repaid'] += Decimal(str(tx.amount))
+        if tx.type == 'REMBOURSEMENT':
+            entry['repaid'] += Decimal(str(tx.amount))
         entry['interest'] += part
     total = sum((e['interest'] for e in per_loan.values()), Decimal('0')).quantize(Decimal('1'), rounding='ROUND_DOWN')
     return total, sorted(per_loan.values(), key=lambda e: e['loan'].id)

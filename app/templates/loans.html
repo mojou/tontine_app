@@ -154,12 +154,22 @@
                                 {% elif loan.status == 'REJECTED' %}
                                     <span class="badge badge-secondary">Rejeté</span>
                                 {% endif %}
-                                {% if loan.is_overdue and loan.status == 'ACTIF' %}
+                                {% if loan.is_quarterly and loan.status in ['ACTIF', 'OVERDUE'] %}
+                                    {% if loan.next_due_date %}
+                                    <small class="d-block mt-1 {{ 'text-danger font-weight-bold' if loan.is_overdue else 'text-muted' }}">
+                                        Intérêts {{ (loan.quarter_interest|float)|fcfa }} F {{ 'dus depuis' if loan.is_overdue else 'le' }} {{ loan.next_due_date.strftime('%d/%m/%y') }}</small>
+                                    {% else %}
+                                    <small class="d-block mt-1 {{ 'text-danger font-weight-bold' if loan.is_overdue else 'text-muted' }}">
+                                        Capital à rendre avant le {{ loan.end_date.strftime('%d/%m/%y') }}</small>
+                                    {% endif %}
+                                {% elif loan.is_overdue and loan.status == 'ACTIF' %}
                                 <small class="d-block d-xl-none text-danger mt-1">+{{ loan.overdue_days }} jours</small>
                                 {% endif %}
                             </td>
                             <td class="d-none d-xl-table-cell">
-                                {% if loan.is_overdue and loan.status == 'ACTIF' %}
+                                {% if loan.is_quarterly %}
+                                    <span class="text-muted small">{{ "En rouge tant que ce n'est pas payé" if loan.is_overdue and loan.status in ['ACTIF', 'OVERDUE'] else '—' }}</span>
+                                {% elif loan.is_overdue and loan.status == 'ACTIF' %}
                                     <span class="text-danger font-weight-bold">
                                         <i class="fas fa-clock"></i> +{{ loan.overdue_days }} jours
                                     </span>
@@ -191,11 +201,21 @@
                                                 <i class="fas fa-times"></i> Rejeter
                                             </button>
                                         </form>
-                                    {% elif loan.status == 'ACTIF' %}
+                                    {% elif loan.status in ['ACTIF', 'OVERDUE'] %}
+                                        {% if loan.is_quarterly and loan.next_due_date %}
+                                        <form action="{{ url_for('pay_loan_interest', loan_id=loan.id) }}" method="POST" style="display: inline;"
+                                              onsubmit="return confirm('Payer les intérêts du trimestre : {{ (loan.quarter_interest|float)|fcfa|replace(' ', ' ') }} FCFA ?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="expected_due" value="{{ loan.next_due_date.isoformat() }}">
+                                            <button type="submit" class="btn btn-{{ 'danger' if loan.is_overdue else 'success' }} btn-sm mb-1">
+                                                <i class="fas fa-percent"></i> Payer les intérêts ({{ (loan.quarter_interest|float)|fcfa }} F)
+                                            </button>
+                                        </form>
+                                        {% endif %}
                                         <button type="button" class="btn btn-primary btn-sm mb-1" data-toggle="modal" data-target="#repayModal{{ loan.id }}">
-                                            <i class="fas fa-money-bill-wave"></i> Rembourser
+                                            <i class="fas fa-money-bill-wave"></i> {{ 'Rembourser du capital' if loan.is_quarterly else 'Rembourser' }}
                                         </button>
-                                        {% if loan.is_overdue %}
+                                        {% if loan.is_overdue and not loan.is_quarterly %}
                                             <button type="button" class="btn btn-warning btn-sm mb-1" onclick="deductFromTontine('{{ loan.id }}', '{{ loan.member.id }}')">
                                                 <i class="fas fa-coins"></i> Déduire 500 FCFA
                                             </button>
@@ -276,7 +296,7 @@
 </div>
 
 {% for loan in loans %}
-    {% if loan.status == 'ACTIF' %}
+    {% if loan.status in ['ACTIF', 'OVERDUE'] %}
     <div class="modal fade" id="repayModal{{ loan.id }}" tabindex="-1" role="dialog" aria-labelledby="repayModalLabel{{ loan.id }}" aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
@@ -294,7 +314,13 @@
                     <div class="modal-body text-left">
                         <div class="alert alert-info">
                             <strong>Emprunteur :</strong> {{ loan.member.first_name }} {{ loan.member.last_name }} <br>
+                            {% if loan.is_quarterly %}
+                            <strong>Capital restant :</strong> {{ (loan.remaining_amount)|fcfa }} FCFA<br>
+                            <span class="small">On peut rembourser une partie du capital : les intérêts des 3 mois suivants baissent d'autant.
+                                Pour tout solder, les intérêts du trimestre commencé doivent être payés.</span>
+                            {% else %}
                             <strong>Montant total requis :</strong> {{ (loan.remaining_amount)|fcfa }} FCFA
+                            {% endif %}
                         </div>
 
                         <div class="mb-3">
@@ -367,15 +393,18 @@
                         </div>
                         
                         <div class="form-group">
-                            <label for="interest_rate" class="font-weight-bold">Taux d'intérêt fixe (%)</label>
+                            <label for="interest_rate" class="font-weight-bold">Taux d'intérêt tous les 3 mois (%)</label>
                             <input type="number" class="form-control" id="interest_rate" step="0.1" readonly
                                    value="{{ (current_tontine.loan_interest_rate if current_tontine else 5)|float }}">
                             <small class="form-text text-muted">Fixé par le bureau dans les paramètres de la tontine.</small>
                         </div>
                         
-                        <div class="form-group">
-                            <label for="duration_months" class="font-weight-bold">Période de remboursement (en mois) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" id="duration_months" name="duration_months" min="1" max="24" required placeholder="Ex: 3">
+                        <input type="hidden" id="duration_months" name="duration_months" value="12">
+                        <div class="alert alert-light border small">
+                            <i class="fas fa-calendar-alt"></i> <strong>Règle des emprunts :</strong> tous les <strong>3 mois</strong>, on paie les
+                            <strong>intérêts</strong> (le taux ci-dessus sur le capital qui reste) : l'emprunt reste alors en cours, sans retard.
+                            Le capital se rembourse quand on veut, en une ou plusieurs fois, au plus tard <strong>12 mois</strong> après l'accord.
+                            Intérêts non payés à temps : l'emprunt passe <strong>en rouge</strong>.
                         </div>
 
                         <div class="form-group">
@@ -518,10 +547,7 @@ document.addEventListener('DOMContentLoaded', function() {
             showError('Le montant minimal autorisé pour un emprunt est fixé à 1 000 FCFA.');
             return false;
         }
-        if (!duration.value || parseInt(duration.value, 10) < 1 || parseInt(duration.value, 10) > 24) {
-            showError('La fenêtre de remboursement doit être comprise entre 1 et 24 mois.');
-            return false;
-        }
+
         return true;
     }
     
@@ -539,17 +565,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const months = parseInt(document.getElementById('duration_months').value, 10) || 0;
         const preview = document.getElementById('modalPreview');
         
-        if (preview && amount > 0 && months > 0) {
-            const interest = amount * (interestRate / 100);
-            const total = amount + interest;
-            const monthly = total / months;
+        if (preview && amount > 0) {
+            const interest = Math.round(amount * (interestRate / 100));
             preview.innerHTML = `
-                <i class="fas fa-calculator text-success"></i> <strong>Simulation de l'échéancier :</strong>
+                <i class="fas fa-calculator text-success"></i> <strong>Ce que cela donne :</strong>
                 <hr style="margin: 8px 0; border-top: 1px solid rgba(0,0,0,0.1);">
-                <div class="d-flex justify-content-between"><span>Capital net :</span> <b>${Math.round(amount).toLocaleString('fr-FR')} FCFA</b></div>
-                <div class="d-flex justify-content-between"><span>Intérêts cumulés (${interestRate}%) :</span> <b>${Math.round(interest).toLocaleString('fr-FR')} FCFA</b></div>
-                <div class="d-flex justify-content-between text-primary"><span>Montant dû total :</span> <b>${Math.round(total).toLocaleString('fr-FR')} FCFA</b></div>
-                <div class="d-flex justify-content-between text-success font-weight-bold" style="font-size: 105%;"><span>Mensualité (${months} mois) :</span> <span>${Math.round(monthly).toLocaleString('fr-FR')} FCFA / mois</span></div>
+                <div class="d-flex justify-content-between"><span>Capital emprunté :</span> <b>${Math.round(amount).toLocaleString('fr-FR')} FCFA</b></div>
+                <div class="d-flex justify-content-between text-success font-weight-bold"><span>Intérêts tous les 3 mois (${interestRate} %) :</span> <b>${interest.toLocaleString('fr-FR')} FCFA</b></div>
+                <div class="small text-muted mt-1">Si rien n'est remboursé sur 12 mois : 4 x ${interest.toLocaleString('fr-FR')} = ${(4 * interest).toLocaleString('fr-FR')} FCFA d'intérêts,
+                    puis le capital. Chaque partie de capital remboursée fait baisser les intérêts suivants.</div>
             `;
         } else if (preview) {
             preview.innerHTML = defaultPreviewText;

@@ -131,6 +131,8 @@
             </div>
             {% endif %}
 
+            {% include "_echecs.html" %}
+
             {# ---------------- État des cotisations ---------------- #}
             <div class="card" id="etatCotisations">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
@@ -147,7 +149,7 @@
                     <table class="table table-sm mb-0 etat-table">
                         <thead><tr><th>Membre</th><th class="text-center d-none d-sm-table-cell">Mains</th><th class="text-right">Payé</th>
                             <th class="text-right">En retard</th><th class="text-right">{{ ('Tour ' ~ contrib.turn ~ ' (à payer)') if cycle.status == 'EN_COURS' else '' }}</th>
-                            <th class="text-right">Avance</th>{% if can_manage %}<th></th>{% endif %}</tr></thead>
+                            <th class="text-right">Avance</th></tr></thead>
                         <tbody>
                         {% for r in contrib.rows %}
                         <tr>
@@ -157,50 +159,6 @@
                             <td class="text-right font-weight-bold {{ 'text-danger' if r.late > 0 else 'text-muted' }}">{{ fcfa(r.late) if r.late > 0 else '—' }}</td>
                             <td class="text-right {{ 'text-info' if r.current_due > 0 else 'text-muted' }}">{% if cycle.status == 'EN_COURS' %}{{ fcfa(r.current_due) if r.current_due > 0 else 'payé' }}{% endif %}</td>
                             <td class="text-right {{ 'text-warning font-weight-bold' if r.advance > 0 else 'text-muted' }}">{{ fcfa(r.advance) if r.advance > 0 else '—' }}</td>
-                            {% if can_manage %}
-                            <td class="text-right actions">
-                                {% if r.gap != 0 %}
-                                <button class="btn btn-sm btn-outline-primary" type="button" data-toggle="collapse" data-target="#regul{{ r.member.id }}">Régulariser</button>
-                                {% endif %}
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% if can_manage and r.gap != 0 %}
-                        <tr class="collapse" id="regul{{ r.member.id }}"><td colspan="7" style="background: var(--hl-cream)">
-                            <form method="POST" action="{{ url_for('regularize_cycle', cycle_id=cycle.id) }}" class="form-row align-items-end">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="member_id" value="{{ r.member.id }}">
-                                <div class="form-group col-md-4 mb-2">
-                                    <label class="small font-weight-bold">Que faire ?</label>
-                                    <select name="action" class="form-control form-control-sm">
-                                        {% if r.gap < 0 %}
-                                        <option value="encaisser">Recevoir ce qu'il doit ({{ fcfa(-r.gap) }} FCFA)</option>
-                                        {% else %}
-                                        <option value="epargne">Verser l'avance dans son épargne</option>
-                                        <option value="rendre">Lui rendre l'avance</option>
-                                        {% endif %}
-                                    </select>
-                                </div>
-                                <div class="form-group col-md-2 mb-2">
-                                    <label class="small font-weight-bold">Montant</label>
-                                    <input type="number" name="amount" class="form-control form-control-sm" min="1" step="1"
-                                           max="{{ (-r.gap if r.gap < 0 else r.advance)|int }}" value="{{ (-r.gap if r.gap < 0 else r.advance)|int }}" required>
-                                </div>
-                                <div class="form-group col-md-3 mb-2">
-                                    <label class="small font-weight-bold">Mode</label>
-                                    <select name="payment_mode" class="form-control form-control-sm">
-                                        {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
-                                    </select>
-                                </div>
-                                <div class="form-group col-md-3 mb-2">
-                                    <button type="submit" class="btn btn-sm btn-primary btn-block">Valider</button>
-                                </div>
-                                {% if r.gap > 0 and cycle.status == 'EN_COURS' %}
-                                <div class="col-12 small text-muted mb-2">Vous pouvez aussi laisser l'avance : elle comptera pour le prochain tour.</div>
-                                {% endif %}
-                            </form>
-                        </td></tr>
-                        {% endif %}
                         {% endfor %}
                         </tbody>
                     </table>
@@ -208,7 +166,8 @@
                     <p class="small text-muted px-3 py-2 mb-0">
                         <strong>En retard</strong> : cotisations des tours dont la cagnotte est déjà versée, non payées.
                         {% if cycle.status == 'EN_COURS' %}<strong>Tour {{ contrib.turn }}</strong> : à encaisser avant de verser la cagnotte (normal en début de tour).{% endif %}
-                        <strong>Avance</strong> : payé en trop (souvent écrit deux fois) — à laisser pour le tour suivant, verser en épargne ou rendre.
+                        <strong>Avance</strong> : payé en trop ; elle compte pour le tour suivant, et à la fin du cycle ce qui reste va
+                        automatiquement dans l'épargne du membre.
                     </p>
                 </div>
             </div>

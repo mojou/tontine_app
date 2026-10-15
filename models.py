@@ -448,6 +448,12 @@ class Loan(TenantMixin, db.Model):
     status = db.Column(db.String(20), default='PENDING')
     description = db.Column(db.Text, nullable=True)
 
+    # Règle des nouveaux emprunts : intérêts payés tous les 3 mois sur le CAPITAL RESTANT, capital remboursable en
+    # partie quand on veut, 12 mois au plus. total_amount = capital ; interest = intérêts du 1er trimestre.
+    interest_mode = db.Column(db.String(20), nullable=True)          # 'TRIMESTRIEL' (NULL = ancienne règle)
+    interest_rate = db.Column(db.Numeric(6, 2), nullable=True)       # taux par trimestre, en %
+    next_due_date = db.Column(db.Date, nullable=True)                # fin du trimestre dont les intérêts sont dus
+
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
@@ -482,7 +488,33 @@ class Loan(TenantMixin, db.Model):
         return self.remaining_amount
 
     @property
+    def is_quarterly(self):
+        return self.interest_mode == 'TRIMESTRIEL'
+
+    @property
+    def quarter_interest(self):
+        """Intérêts du trimestre en cours : taux x capital restant (arrondi au franc)"""
+        if not self.is_quarterly:
+            return Decimal('0')
+        return (self.remaining_amount * Decimal(str(self.interest_rate or 0)) / Decimal('100')).quantize(Decimal('1'))
+
+    @property
+    def quarter_start(self):
+        return (self.next_due_date - relativedelta(months=3)) if self.next_due_date else None
+
+    @property
+    def current_quarter_paid(self):
+        """Les intérêts du trimestre commencé sont-ils payés ? (sinon on ne peut pas tout solder)"""
+        return self.next_due_date is None or date.today() < self.quarter_start
+
+    @property
     def is_overdue(self):
+        if self.is_quarterly:
+            if self.status not in ('ACTIF', 'OVERDUE'):
+                return False
+            interest_late = self.next_due_date is not None and date.today() > self.next_due_date
+            capital_late = self.end_date is not None and date.today() > self.end_date and self.remaining_amount > 0
+            return interest_late or capital_late
         if self.status != 'ACTIF' or not self.end_date:
             return False
         return date.today() > self.end_date
@@ -1013,8 +1045,17 @@ class Poll(TenantMixin, db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=utcnow)
     closed_at = db.Column(db.DateTime, nullable=True)
+    # Élection : le gagnant prend le poste à la clôture (l'ancien titulaire redevient simple membre)
+    kind = db.Column(db.String(20), nullable=True, default='QUESTION')     # QUESTION / ELECTION
+    election_role = db.Column(db.String(20), nullable=True)                 # PRESIDENT, SECRETAIRE, ...
+    result_applied_at = db.Column(db.DateTime, nullable=True)
+    result_note = db.Column(db.String(300), nullable=True)
 
     creator = db.relationship('User', foreign_keys=[created_by], backref='polls_created')
+
+    @property
+    def is_election(self):
+        return self.kind == 'ELECTION' and bool(self.election_role)
     options = db.relationship('PollOption', backref='poll', cascade='all, delete-orphan',
                               order_by='PollOption.display_order')
     votes = db.relationship('PollVote', backref='poll', cascade='all, delete-orphan', lazy='dynamic')
@@ -1063,6 +1104,8 @@ class PollOption(TenantMixin, db.Model):
     poll_id = db.Column(db.Integer, db.ForeignKey('polls.id', ondelete='CASCADE'), nullable=False)
     label = db.Column(db.String(200), nullable=False)
     display_order = db.Column(db.Integer, default=0)
+    candidate_member_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=True)   # élection : le candidat
+    candidate = db.relationship('Member', foreign_keys=[candidate_member_id])
 
 
 class PollVote(TenantMixin, db.Model):

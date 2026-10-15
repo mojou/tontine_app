@@ -4,6 +4,7 @@
 {% block page_title %}<i class="fas fa-vote-yea"></i> Nouveau vote{% endblock %}
 
 {% block content %}
+{% set kind = form_data.get('kind', 'QUESTION') %}
 <div class="row fade-in">
     <div class="col-lg-8 mx-auto">
         <div class="card">
@@ -13,9 +14,55 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="form-group">
-                        <label class="font-weight-bold" for="title">Question / intitulé <span class="text-danger">*</span></label>
-                        <input type="text" name="title" id="title" class="form-control" maxlength="200" required
-                               placeholder="Ex : Élection du trésorier 2027" value="{{ form_data.get('title', '') }}">
+                        <label class="font-weight-bold">Type de vote</label>
+                        <div class="custom-control custom-radio">
+                            <input type="radio" class="custom-control-input vote-kind" id="kindQuestion" name="kind" value="QUESTION"
+                                   {% if kind != 'ELECTION' %}checked{% endif %}>
+                            <label class="custom-control-label" for="kindQuestion"><strong>Une question</strong>
+                                <span class="text-muted small">(Pour / Contre, un choix entre plusieurs idées…)</span></label>
+                        </div>
+                        <div class="custom-control custom-radio">
+                            <input type="radio" class="custom-control-input vote-kind" id="kindElection" name="kind" value="ELECTION"
+                                   {% if kind == 'ELECTION' %}checked{% endif %}>
+                            <label class="custom-control-label" for="kindElection"><strong>Une élection au bureau</strong>
+                                <span class="text-muted small">(président, secrétaire, trésorier… : le gagnant prend le poste à la clôture)</span></label>
+                        </div>
+                    </div>
+
+                    <div id="electionBox" class="border rounded p-3 mb-3" style="background: var(--hl-cream, #faf7ef); {% if kind != 'ELECTION' %}display:none{% endif %}">
+                        <div class="form-group">
+                            <label class="font-weight-bold" for="election_role">Poste à élire <span class="text-danger">*</span></label>
+                            <select name="election_role" id="election_role" class="form-control">
+                                {% for code, label in election_roles.items() %}
+                                <option value="{{ code }}" {% if form_data.get('election_role') == code %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <label class="font-weight-bold">Candidats <span class="text-danger">*</span> <span class="small text-muted">(au moins deux)</span></label>
+                        <div class="row">
+                            {% set chosen = form_data.getlist('candidates') if form_data.getlist else [] %}
+                            {% for m in candidates %}
+                            <div class="col-sm-6">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" name="candidates" value="{{ m.id }}" id="cand{{ m.id }}"
+                                           {% if m.id|string in chosen %}checked{% endif %}>
+                                    <label class="custom-control-label" for="cand{{ m.id }}">{{ m.full_name }}</label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="alert alert-info small mt-3 mb-0">
+                            <i class="fas fa-info-circle"></i> Chaque membre actif vote une fois. À la <strong>clôture</strong>, le candidat qui a
+                            le plus de voix prend le poste et l'ancien titulaire redevient simple membre. En cas d'égalité, rien ne change :
+                            il faut revoter.
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="title">Question / intitulé <span class="text-danger question-only">*</span></label>
+                        <input type="text" name="title" id="title" class="form-control" maxlength="200"
+                               placeholder="Ex : Faut-il augmenter la cotisation ?" value="{{ form_data.get('title', '') }}">
+                        <small class="form-text text-muted election-only" {% if kind != 'ELECTION' %}style="display:none"{% endif %}>Pas obligatoire pour une élection : « Élection : Président(e) » par défaut.</small>
                     </div>
 
                     <div class="form-group">
@@ -24,11 +71,11 @@
                                   placeholder="Contexte, règles du vote...">{{ form_data.get('description', '') }}</textarea>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group question-only" {% if kind == 'ELECTION' %}style="display:none"{% endif %}>
                         <label class="font-weight-bold" for="options">Choix possibles <span class="text-danger">*</span></label>
-                        <textarea name="options" id="options" class="form-control" rows="5" required
+                        <textarea name="options" id="options" class="form-control" rows="5"
                                   placeholder="Un choix par ligne&#10;Pour&#10;Contre&#10;Abstention">{{ form_data.get('options', '') }}</textarea>
-                        <small class="form-text text-muted">Un choix par ligne, au moins deux. Pour une élection, mettez un candidat par ligne.</small>
+                        <small class="form-text text-muted">Un choix par ligne, au moins deux.</small>
                     </div>
 
                     <div class="form-row">
@@ -55,4 +102,14 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$('.vote-kind').on('change', function() {
+    var election = $('#kindElection').is(':checked');
+    $('#electionBox, .election-only').toggle(election);
+    $('.question-only').toggle(!election);
+});
+</script>
 {% endblock %}

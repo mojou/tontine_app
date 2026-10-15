@@ -140,6 +140,15 @@
     </div>
     {% endif %}
 
+    {# ---------- Échecs à régler (parts non payées + amende) des cycles de la séance ---------- #}
+    {% if seance_failures %}
+    <div id="echecs" class="mt-4">
+    {% for cycle, failures in seance_failures %}
+        {% with can_manage=can_pay_out %}{% include "_echecs.html" %}{% endwith %}
+    {% endfor %}
+    </div>
+    {% endif %}
+
     {% if payouts %}
     <div class="card mt-4" id="cagnottes">
         <div class="card-header"><i class="fas fa-hand-holding-usd"></i> Cagnottes du jour</div>

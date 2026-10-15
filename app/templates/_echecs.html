@@ -1,0 +1,61 @@
+{# Échecs d'un cycle : parts non payées (tours déjà versés) + amende, réglés EN ENTIER avec « Régler ».
+   Variables : cycle, failures, can_manage, payment_modes, seance (facultatif) #}
+{% macro fcfa_e(v) %}{{ (v|float)|fcfa }}{% endmacro %}
+<div class="card echecs-card" id="echecs{{ '-' ~ cycle.id if seance else '' }}" style="border-left: 5px solid #dc3545">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+        <span><i class="fas fa-exclamation-triangle text-danger"></i> Échecs à régler{% if seance %} · {{ cycle.display_name }}{% endif %}</span>
+        {% if failures %}<span class="badge badge-danger">{{ failures|length }} membre(s)</span>{% endif %}
+    </div>
+    {% if failures %}
+    <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Membre</th><th class="text-right">Parts non payées</th><th class="text-right">Pénalité</th>
+                <th class="text-right">Total à régler</th>{% if can_manage %}<th></th>{% endif %}</tr></thead>
+            <tbody>
+            {% for f in failures %}
+            <tr>
+                <td><strong>{{ f.member.full_name }}</strong></td>
+                <td class="text-right">{{ fcfa_e(f.late) }}{% if f.turns %} <span class="small text-muted">({{ f.turns }} tour{{ 's' if f.turns > 1 }})</span>{% endif %}</td>
+                <td class="text-right text-danger">{{ fcfa_e(f.penalty) if f.penalty else '0' }}</td>
+                <td class="text-right font-weight-bold">{{ fcfa_e(f.total) }} F</td>
+                {% if can_manage %}
+                <td class="text-right actions">
+                    <button type="button" class="btn btn-sm btn-danger" data-toggle="collapse" data-target="#regler{{ cycle.id }}_{{ f.member.id }}">
+                        <i class="fas fa-hand-holding-usd"></i> Régler</button>
+                </td>
+                {% endif %}
+            </tr>
+            {% if can_manage %}
+            <tr class="collapse" id="regler{{ cycle.id }}_{{ f.member.id }}"><td colspan="5" style="background: var(--hl-cream, #faf7ef)">
+                <form method="POST" action="{{ url_for('settle_failure', cycle_id=cycle.id, member_id=f.member.id) }}" class="form-row align-items-end"
+                      onsubmit="return confirm('{{ f.member.full_name|replace("'", " ") }} paie {{ fcfa_e(f.total)|trim }} FCFA (part + amende) ?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="expected_total" value="{{ f.total|int }}">
+                    {% if seance %}<input type="hidden" name="seance_id" value="{{ seance.id }}">{% endif %}
+                    <div class="form-group col-sm-4 mb-2">
+                        <label class="small font-weight-bold">Montant à payer</label>
+                        <div class="form-control form-control-sm bg-white font-weight-bold">{{ fcfa_e(f.total) }} FCFA</div>
+                        <small class="text-muted">On paie tout : part + amende.</small>
+                    </div>
+                    <div class="form-group col-sm-4 mb-2">
+                        <label class="small font-weight-bold">Mode de paiement</label>
+                        <select name="payment_mode" class="form-control form-control-sm">
+                            {% for code, label in payment_modes.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group col-sm-4 mb-2">
+                        <button type="submit" class="btn btn-sm btn-danger btn-block"><i class="fas fa-check"></i> Confirmer le paiement</button>
+                    </div>
+                </form>
+            </td></tr>
+            {% endif %}
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted px-3 py-2 mb-0">Dans un cycle, une part se paie en entier ou c'est un échec. « Régler » encaisse la part
+        et l'amende ensemble ; la part est reversée tout de suite au bénéficiaire qui avait reçu moins.</p>
+    {% else %}
+    <div class="card-body text-muted small"><i class="fas fa-check-circle text-success"></i> Aucun échec : tout le monde est à jour.</div>
+    {% endif %}
+</div>
