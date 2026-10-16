@@ -49,50 +49,69 @@
         {% endif %}
     </div>
 
-    {# ---------------- Pays de paiement (devises SasPay) ---------------- #}
+    {# ---------------- Paiement SasPay par l'API (aucun lien à copier) ---------------- #}
     <div class="card" id="paiementPays">
-        <div class="card-header"><i class="fas fa-globe-africa"></i> Pays de paiement SasPay</div>
-        <div class="card-body small text-muted pb-0">
-            Les présidents paient dans la devise de leur pays. Le <strong>franc CFA</strong> (XAF et XOF, même valeur) est toujours proposé,
-            au prix de la plateforme ({{ price_per_member }} FCFA par membre et par mois). Pour une autre devise, fixez le
-            <strong>prix par membre</strong> dans cette devise et cochez « Proposer » : elle apparaît alors aux présidents de ces pays.
-            Le <strong>lien de paiement</strong> est le lien SasPay à montant libre créé dans cette devise.
+        <div class="card-header"><i class="fas fa-plug"></i> Paiement en ligne SasPay (API)</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <div class="small text-muted">Clé secrète de l'API</div>
+                    {% if saspay_api_ready %}<span class="badge badge-success"><i class="fas fa-check"></i> Configurée</span>
+                    {% else %}<span class="badge badge-danger"><i class="fas fa-times"></i> Manquante</span>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="small text-muted">Confirmation automatique (webhook)</div>
+                    {% if saspay_webhook_ready %}<span class="badge badge-success"><i class="fas fa-check"></i> Configurée</span>
+                    {% else %}<span class="badge badge-warning">Non configurée</span>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                    <form method="POST" action="{{ url_for('superadmin_saspay_test') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary" {% if not saspay_api_ready %}disabled{% endif %}>
+                            <i class="fas fa-satellite-dish"></i> Tester la connexion</button>
+                    </form>
+                </div>
+            </div>
+            <p class="small text-muted mb-0">
+                Les présidents cliquent sur « Payer maintenant avec SasPay » : l'application crée elle-même la page de paiement
+                (montant, devise, tontine) grâce à l'API, puis rétablit l'accès dès que SasPay confirme. <strong>Aucun lien à copier.</strong>
+                {% if not saspay_api_ready %}<br><span class="text-danger">Pour activer le paiement : mettez la clé dans le fichier WSGI
+                de PythonAnywhere (<code>SASPAY_SECRET_KEY</code>), puis « Reload ».</span>{% endif %}
+            </p>
+        </div>
+        <div class="card-body small text-muted pt-0 pb-0">
+            <strong>Prix par devise.</strong> Le <strong>franc CFA</strong> (XAF et XOF, même valeur) est toujours proposé, au prix de la
+            plateforme ({{ price_per_member }} FCFA par membre et par mois). Pour une autre devise, fixez le prix par membre dans cette
+            devise et cochez « Proposer ».
         </div>
         <div class="table-container">
             <table class="table table-sm mb-0">
-                <thead><tr><th>Devise</th><th>Pays</th><th>Prix par membre / mois</th><th>Lien de paiement SasPay</th><th></th></tr></thead>
+                <thead><tr><th>Devise</th><th>Pays</th><th>Prix par membre / mois</th><th></th></tr></thead>
                 <tbody>
                 {% for c in currencies %}
                 <tr>
                     <td><strong>{{ c.code }}</strong><br><small class="text-muted">{{ c.name }}</small></td>
                     <td class="small">{{ c.countries }}</td>
-                    <td colspan="3">
+                    <td colspan="2">
+                        {% if c.fcfa %}
+                        <span class="badge badge-success">{{ price_per_member }} FCFA · toujours proposé</span>
+                        {% else %}
                         <form method="POST" action="{{ url_for('superadmin_payment_currency') }}" class="form-row align-items-center">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="code" value="{{ c.code }}">
-                            <div class="col-md-3 mb-1">
-                                {% if c.fcfa %}
-                                <span class="badge badge-success">{{ price_per_member }} FCFA · toujours proposé</span>
-                                {% else %}
+                            <div class="col-md-5 mb-1">
                                 <div class="input-group input-group-sm">
                                     <input type="number" name="price_per_member" class="form-control" min="0" step="0.01"
                                            value="{{ c.row.price_per_member if c.row and c.row.price_per_member else '' }}" placeholder="prix">
                                     <div class="input-group-append"><span class="input-group-text">{{ c.code }}</span></div>
                                 </div>
-                                {% endif %}
                             </div>
-                            <div class="col-md-6 mb-1">
-                                <input type="url" name="payment_url" class="form-control form-control-sm" maxlength="300"
-                                       value="{{ c.row.payment_url if c.row and c.row.payment_url else '' }}"
-                                       placeholder="{{ c.env_url or 'https://pay.saspay.me/…' }}">
-                            </div>
-                            <div class="col-md-3 mb-1 text-nowrap">
-                                {% if not c.fcfa %}
+                            <div class="col-md-7 mb-1 text-nowrap">
                                 <label class="mb-0 mr-2"><input type="checkbox" name="is_active" {% if c.row and c.row.is_active %}checked{% endif %}> Proposer</label>
-                                {% endif %}
                                 <button type="submit" class="btn btn-sm btn-outline-primary">Enregistrer</button>
                             </div>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

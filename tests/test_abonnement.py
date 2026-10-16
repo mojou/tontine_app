@@ -69,9 +69,13 @@ h = text(pres.get('/abonnement'))
 check('11 × 200 = 2 200 FCFA / mois' in h and 'Payante' in h, '11 membres : 11 x 200 = 2 200 FCFA/mois')
 grace_end = (date.today() + timedelta(days=6)).strftime('%d/%m/%Y')
 check(f'Abonnement à régler avant le {grace_end}' in text(pres.get('/dashboard')), f'bandeau : 7 jours de grâce (jusqu\'au {grace_end})')
-check('Payer avec SasPay' in h, 'bouton « Payer avec SasPay »')
-check('data-url="https://pay.example/ghelia?montant=2200&amp;ref=grande"' in pres.get('/abonnement').get_data(as_text=True),
-      'lien SasPay rempli avec le montant et la référence de la tontine')
+raw = pres.get('/abonnement').get_data(as_text=True)
+check("Le paiement en ligne n'est pas encore activé" in h, "sans clé de l'API SasPay : message clair (pas de lien de secours)")
+check('data-url' not in raw and 'Valider mon paiement' not in raw and 'pay.example' not in raw,
+      'aucun lien à copier ni référence à recopier sur la page Abonnement')
+app.config['SASPAY_SECRET_KEY'] = 'sk_test_x'
+check('Payer maintenant avec SasPay' in text(pres.get('/abonnement')), "avec la clé de l'API : bouton « Payer maintenant avec SasPay »")
+app.config['SASPAY_SECRET_KEY'] = ''
 membre = app.test_client()
 membre.post('/login', data={'tontine': 'grande', 'username': 'membre3', 'password': 'Passw0rd1'})
 check('Le président ou le trésorier doit régler' in text(membre.get('/dashboard')), 'un membre voit le rappel, sans bouton de paiement')

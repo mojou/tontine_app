@@ -196,7 +196,7 @@ def load_user(user_id):
 # Pages accessibles au super-admin (qui n'appartient à aucune tontine)
 SUPERADMIN_ENDPOINTS = {'superadmin', 'superadmin_add_tontine', 'superadmin_toggle_tontine', 'change_password',
                         'superadmin_billing_payment', 'superadmin_billing_offer', 'superadmin_delete_tontine',
-                        'superadmin_payment_currency',
+                        'superadmin_payment_currency', 'superadmin_saspay_test',
                         'logout', 'static', 'index', 'tontine_home', 'login', 'signup', 'guide', 'administration_login',
                         'superadmin_reset_president', 'reset_password'}
 # Pages publiques qui fixent elles-mêmes la tontine (via l'URL ou le formulaire)
@@ -5648,7 +5648,8 @@ def _superadmin_render(tontines, counts, form_data):
         return render_template('superadmin.html', tontines=tontines, counts=counts, form_data=form_data,
                                currencies=currencies, price_per_member=billing.PRICE_PER_MEMBER,
                                billing_info=billing_info, pending_payments=pending, recent_payments=recent,
-                               monthly_total=due_total)
+                               monthly_total=due_total, saspay_api_ready=bool(app.config.get('SASPAY_SECRET_KEY')),
+                               saspay_webhook_ready=bool(app.config.get('SASPAY_WEBHOOK_SECRET')))
 
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
@@ -6168,7 +6169,7 @@ def abonnement_payer():
     info = g.get('billing') or tontine_billing(tontine)
     months = request.form.get('months', type=int) or 0
     if not app.config.get('SASPAY_SECRET_KEY'):
-        flash("Le paiement en un clic n'est pas encore activé : utilisez le lien de paiement SasPay.", 'warning')
+        flash("Le paiement en ligne n'est pas encore activé : l'administrateur de la plateforme doit terminer la configuration.", 'warning')
         return redirect(url_for('abonnement'))
     if not 1 <= months <= billing.MAX_MONTHS or not info['monthly']:
         flash(f"Choisissez entre 1 et {billing.MAX_MONTHS} mois.", 'danger')
@@ -6263,16 +6264,11 @@ def superadmin_billing_payment(payment_id):
 @login_required
 @superadmin_required
 def superadmin_payment_currency():
-    """Prix par membre et lien de paiement SasPay pour chaque devise"""
+    """Prix par membre pour chaque devise (le paiement passe par l'API SasPay : aucun lien à enregistrer)"""
     code = (request.form.get('code') or '').upper()
     if code not in saspay.CURRENCIES:
         abort(400)
     row = db.session.get(PaymentCurrency, code) or PaymentCurrency(code=code)
-    url = (request.form.get('payment_url') or '').strip()
-    if url and not re.match(r'^https://[^\s"<>]{4,290}$', url):
-        flash("Lien de paiement invalide : il doit commencer par https://", 'danger')
-        return redirect(url_for('superadmin') + '#paiementPays')
-    row.payment_url = url or None
     if code in saspay.FCFA_CURRENCIES:
         row.price_per_member, row.is_active = None, True
     else:
@@ -6285,6 +6281,19 @@ def superadmin_payment_currency():
     log_activity(current_user.id, current_user.role, f"Paiement en {code} : prix {row.price_per_member or '-'}, {state}",
                  request.remote_addr)
     flash(f"Devise {code} enregistrée ({state}).", 'success')
+    return redirect(url_for('superadmin') + '#paiementPays')
+
+
+@app.route('/superadmin/saspay/test', methods=['POST'])
+@login_required
+@superadmin_required
+def superadmin_saspay_test():
+    """Teste la connexion à l'API SasPay (sans créer de paiement)"""
+    if not app.config.get('SASPAY_SECRET_KEY'):
+        flash("La clé SASPAY_SECRET_KEY n'est pas réglée dans le fichier WSGI.", 'danger')
+    else:
+        ok, message = saspay.test_connection(app.config['SASPAY_API_BASE'], app.config['SASPAY_SECRET_KEY'])
+        flash(message, 'success' if ok else 'danger')
     return redirect(url_for('superadmin') + '#paiementPays')
 
 

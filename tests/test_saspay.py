@@ -24,7 +24,7 @@ app, db = m.app, m.db
 SECRET = 'whsec_test_123'
 app.config.update(WTF_CSRF_ENABLED=False, TESTING=True, UPLOAD_FOLDER=os.path.join(S, 'uploads'),
                   SASPAY_WEBHOOK_SECRET=SECRET, SASPAY_SECRET_KEY='', SASPAY_PAYMENT_URL='https://pay.saspay.me/l/ghelia')
-from models import Tontine, Member, BillingPayment, SasPayEvent, Transaction  # noqa: E402
+from models import Tontine, Member, BillingPayment, SasPayEvent, Transaction, PaymentCurrency  # noqa: E402
 from tenancy import tenant_bypass  # noqa: E402
 
 failed = []
@@ -72,8 +72,8 @@ with app.app_context(), tenant_bypass():
     monthly = 12 * 200
 check('Lecture seule' in text(pres.get('/dashboard')), 'situation de départ : 12 membres, abonnement impayé, lecture seule')
 h = text(pres.get('/abonnement'))
-check('validé automatiquement' in h and 'Payer avec SasPay' in h and 'Valider mon paiement' in h,
-      "page Abonnement : lien SasPay et « validé automatiquement » (plus de validation par l'administrateur)")
+check("pas encore activé" in h and 'Valider mon paiement' not in h,
+      "page Abonnement : paiement par l'API seulement (pas de lien ni de référence à recopier)")
 
 # ---------------------------------------------------------------- notifications : sécurité
 v = app.test_client()
@@ -139,8 +139,7 @@ fcfa_countries = ['Bénin', 'Burkina Faso', "Côte d'Ivoire", 'Mali', 'Niger', '
 check(all(f'{c} (XO' in html.unescape(raw) or f'{c} (XAF)' in html.unescape(raw) for c in fcfa_countries),
       'les 8 pays du franc CFA couverts par SasPay sont proposés')
 check('Ghana (GHS)' not in raw and 'Gabon' not in raw, "pays sans prix fixé (Ghana) ou non couverts par SasPay (Gabon) : non proposés")
-check('value="BJ" data-currency="XOF"' in raw and 'data-url="https://pay.saspay.me/l/ghelia-xof"' in raw,
-      'le Bénin utilise le lien de paiement en XOF')
+check('value="BJ" data-currency="XOF"' in raw and 'data-url' not in raw, 'le Bénin paie en XOF (aucun lien à copier)')
 app.config['SASPAY_PAYMENT_URL_XOF'] = ''
 
 with app.app_context(), tenant_bypass():
@@ -152,8 +151,9 @@ with app.app_context(), tenant_bypass():
 sa = app.test_client()
 sa.post('/login', data={'tontine': m.PLATFORM_LOGIN, 'username': su_name, 'password': 'Super2026x'})
 h = text(sa.get('/superadmin'))
-check('Pays de paiement SasPay' in h and 'GHS' in h and 'NGN' in h and 'KES' in h and 'ZMW' in h,
-      'super-admin : réglage des 12 devises (dont cedi, naira, shilling kényan, kwacha)')
+check('Paiement en ligne SasPay (API)' in h and 'Aucun lien à copier' in h and 'GHS' in h and 'NGN' in h and 'KES' in h and 'ZMW' in h,
+      "super-admin : état de l'API SasPay et prix des 12 devises (sans lien à copier)")
+check('name="payment_url"' not in sa.get('/superadmin').get_data(as_text=True), "plus de case « lien de paiement » dans l'administration")
 sa.post('/superadmin/paiement-pays', data={'code': 'GHS', 'price_per_member': '4', 'payment_url': 'https://pay.saspay.me/l/ghelia-ghs',
                                            'is_active': 'on'})
 raw = pres.get('/abonnement').get_data(as_text=True)
@@ -170,7 +170,8 @@ with app.app_context(), tenant_bypass():
     check(db.session.get(BillingPayment, pg.id).status == 'VALIDE', 'SasPay confirme 96 GHS : validé automatiquement')
 r = sa.post('/superadmin/paiement-pays', data={'code': 'NGN', 'price_per_member': '300', 'payment_url': 'http://pas-https'},
             follow_redirects=True)
-check('Lien de paiement invalide' in text(r), 'lien de paiement non sécurisé (http) refusé')
+with app.app_context(), tenant_bypass():
+    check(db.session.get(PaymentCurrency, 'NGN').payment_url in (None, ''), "un lien envoyé quand même est ignoré : seule l'API sert au paiement")
 check(pres.post('/superadmin/paiement-pays', data={'code': 'NGN', 'price_per_member': '1'}).status_code in (302, 403),
       'un président ne peut pas régler les devises')
 r = pres.post('/abonnement', data={'months': '1', 'country': 'NG', 'reference': 'TXN-NIGERIA'}, follow_redirects=True)
@@ -263,6 +264,19 @@ check(app.test_client().get('/webhooks/saspay').status_code == 405, 'la notifica
 
 app.config['SASPAY_WEBHOOK_SECRET'] = ''
 check(webhook(v, tx('t-9', 'TXN-9', monthly)).status_code == 404, "secret non configuré : l'adresse de notification n'existe pas (404)")
+
+# ---------------------------------------------------------------- « Tester la connexion » (administration)
+app.config['SASPAY_SECRET_KEY'] = ''
+r = sa.post('/superadmin/saspay/test', follow_redirects=True)
+check("SASPAY_SECRET_KEY n'est pas réglée" in text(r), 'tester sans clé : message clair')
+import saspay as sp  # noqa: E402
+saved = sp.test_connection
+sp.test_connection = lambda base, key, timeout=15: (True, "Connexion réussie : l'API SasPay répond et accepte la clé.")
+app.config['SASPAY_SECRET_KEY'] = 'sk_test_simule'
+r = sa.post('/superadmin/saspay/test', follow_redirects=True)
+check('Connexion réussie' in text(r), "tester avec une clé : l'administrateur voit si l'API répond")
+sp.test_connection = saved
+app.config['SASPAY_SECRET_KEY'] = ''
 
 print('\nRESULTAT :', 'ECHEC (%d)' % len(failed) if failed else 'TOUT OK')
 for f in failed:

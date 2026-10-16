@@ -57,7 +57,7 @@
                         <label class="small font-weight-bold" for="payCountry">Pays du paiement (Mobile Money)</label>
                         <select id="payCountry" class="form-control">
                             {% for o in options %}
-                            <option value="{{ o.code }}" data-currency="{{ o.currency }}" data-monthly="{{ o.monthly|int }}" data-url="{{ o.url }}"
+                            <option value="{{ o.code }}" data-currency="{{ o.currency }}" data-monthly="{{ o.monthly|int }}"
                                     data-networks="{{ o.networks }}" {% if o.code == default_country %}selected{% endif %}>{{ o.name }} ({{ o.currency }})</option>
                             {% endfor %}
                         </select>
@@ -80,28 +80,13 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="country" value="{{ default_country }}"><input type="hidden" name="months" value="1">
                         <button type="submit" class="btn btn-gold btn-block"><i class="fas fa-lock"></i> Payer maintenant avec SasPay</button>
-                        <p class="small text-muted mt-2 mb-0">L'accès est rétabli automatiquement dès que le paiement est confirmé.</p>
+                        <p class="small text-muted mt-2 mb-0">Vous allez sur la page sécurisée de SasPay (Mobile Money). L'accès est rétabli
+                            automatiquement dès que le paiement est confirmé : rien à recopier.</p>
                     </form>
-                    <hr>
-                    <p class="small text-muted mb-2">Vous avez déjà payé avec un lien SasPay ? Collez la référence :</p>
                     {% else %}
-                    <ol class="small pl-3">
-                        <li>Payez avec <strong>SasPay</strong> le montant indiqué.</li>
-                        <li>Collez ici la <strong>référence de la transaction</strong> (reçu ou SMS SasPay).</li>
-                        <li>Dès que SasPay confirme le paiement, l'abonnement est <strong>validé automatiquement</strong>.</li>
-                    </ol>
-                    <a href="#" target="_blank" rel="noopener" class="btn btn-gold btn-block mb-3" id="payLink"><i class="fas fa-external-link-alt"></i> Payer avec SasPay</a>
-                    <p class="small text-warning mb-3" id="payNoLink" style="display:none">Le lien de paiement de ce pays n'est pas encore disponible.</p>
+                    <div class="alert alert-warning small mb-0"><i class="fas fa-tools"></i> Le paiement en ligne n'est pas encore activé.
+                        L'administrateur de la plateforme termine sa configuration.</div>
                     {% endif %}
-                    <form method="POST" action="{{ url_for('abonnement') }}" id="declarerReference" class="pay-form">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="country" value="{{ default_country }}"><input type="hidden" name="months" value="1">
-                        <div class="form-group">
-                            <label class="small font-weight-bold">Référence de la transaction SasPay</label>
-                            <input type="text" name="reference" class="form-control" maxlength="80" required placeholder="Ex : TXN-20261010-000512">
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-check"></i> Valider mon paiement</button>
-                    </form>
                     <p class="small text-muted mt-3 mb-0">Le franc CFA d'Afrique centrale (XAF) et celui d'Afrique de l'Ouest (XOF) ont la même valeur.</p>
                     {% else %}
                     <p class="text-muted mb-0">Le paiement en ligne n'est pas encore ouvert. Contactez l'administrateur de la plateforme.</p>
@@ -154,8 +139,6 @@
         document.getElementById('payTotal').textContent = fmt(monthly * n) + ' ' + label;
         document.getElementById('payDetail').textContent = n + ' mois × ' + fmt(monthly) + ' ' + label + ' (' + cur + ')';
         document.getElementById('payNetworks').textContent = 'Opérateurs : ' + o.dataset.networks;
-        var link = document.getElementById('payLink'), none = document.getElementById('payNoLink');
-        if (link) { link.style.display = o.dataset.url ? '' : 'none'; link.href = o.dataset.url || '#'; none.style.display = o.dataset.url ? 'none' : ''; }
         document.querySelectorAll('.pay-form').forEach(function (f) { f.country.value = o.value; f.months.value = n; });
     }
     country.addEventListener('change', update); months.addEventListener('change', update); update();

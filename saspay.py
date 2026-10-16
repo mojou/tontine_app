@@ -125,5 +125,23 @@ def checkout_session(base_url, secret_key, session_id):
     return _call('GET', f"{base_url.rstrip('/')}/checkout-sessions/{session_id}/", secret_key)
 
 
+def test_connection(base_url, secret_key, timeout=15):
+    """Vérifie que l'API répond et accepte la clé, sans rien créer. Retourne (ok, message en français)."""
+    req = urllib.request.Request(f"{base_url.rstrip('/')}/checkout-sessions/test-connexion-ghelia/", method='GET',
+                                 headers={'Authorization': f'Bearer {secret_key}', 'Accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True, "Connexion réussie : l'API SasPay répond et accepte la clé."
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return False, f"SasPay refuse la clé ({exc.code}) : vérifiez SASPAY_SECRET_KEY (clé secrète « sk_live_… » active)."
+        if exc.code == 404:   # la session de test n'existe pas : l'API est joignable et la clé acceptée
+            return True, "Connexion réussie : l'API SasPay répond et accepte la clé."
+        return False, f"SasPay répond avec une erreur ({exc.code}). Réessayez plus tard."
+    except (urllib.error.URLError, OSError) as exc:
+        return False, (f"SasPay injoignable ({exc}). Sur un compte PythonAnywhere gratuit, l'adresse api.saspay.me doit "
+                       "être autorisée par PythonAnywhere (demande à leur support), ou passez à un compte payant.")
+
+
 def session_is_paid(session):
     return (str(session.get('status', '')).upper() in PAID_SESSION_STATUSES) or bool(session.get('paid_at'))
