@@ -7,6 +7,18 @@
 
 {% block extra_css %}
 <style>
+    @media print {
+        @page { size: A4 landscape; margin: 10mm; }
+        .sidebar, .navbar-custom, .no-print, .alert-dismissible, .sidebar-overlay, .pay-box, .amt, #cagnottes form, .echecs-card form,
+        .echecs-card .btn, .card-footer .btn, #checkAll, #uncheckAll, select { display: none !important; }
+        .content { margin: 0 !important; width: 100% !important; }
+        .main-content { padding: 0 !important; }
+        .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
+        .table-container { max-height: none !important; overflow: visible !important; }
+        .print-title { display: block !important; }
+    }
+    .print-title { display: none; }
+    .hist-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .sheet th, .sheet td { white-space: nowrap; vertical-align: middle; }
     .sheet .amt { width: 95px; display: inline-block; }
     .sheet td.paid { background: var(--hl-green-100); color: var(--hl-green); font-weight: 600; }
@@ -17,6 +29,7 @@
 
 {% block content %}
 <div class="fade-in">
+    <h4 class="print-title">{{ current_tontine.name }} — {{ seance.display_name }} — résumé</h4>
     <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
         <a href="{{ url_for('seances') }}" class="btn btn-link px-0"><i class="fas fa-arrow-left"></i> Toutes les séances</a>
         <div>
@@ -24,17 +37,39 @@
             {% if seance.total_paid_out > 0 %}
             <span class="h6 mb-0 mr-3">Cagnottes versées : <strong class="text-danger">{{ fcfa(seance.total_paid_out) }} FCFA</strong></span>
             {% endif %}
-            {% if current_user.role in ['PRESIDENT', 'TRESORIER'] %}
-            <form method="POST" action="{{ url_for('close_seance', seance_id=seance.id) }}" class="d-inline">
+            <button type="button" class="btn btn-sm btn-outline-secondary no-print" onclick="window.print()"><i class="fas fa-print"></i> Imprimer le résumé</button>
+            {% if current_user.role in ['PRESIDENT', 'TRESORIER'] and not seance.is_closed %}
+            <form method="POST" action="{{ url_for('close_seance', seance_id=seance.id) }}" class="d-inline no-print"
+                  onsubmit="return confirm('Fermer la séance ? Elle sera rangée dans les Archives (lecture seule).{% if late_fines %} {{ late_fines|length }} amende(s) de retard vont être infligées.{% endif %}');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm {{ 'btn-outline-success' if seance.is_closed else 'btn-outline-secondary' }}"
-                        {% if not seance.is_closed and late_fines %}onclick="return confirm('Clôturer la séance ? {{ late_fines|length }} amende(s) de retard vont être infligées (voir la liste en bas de la feuille).');"{% endif %}>
-                    <i class="fas {{ 'fa-lock-open' if seance.is_closed else 'fa-lock' }}"></i> {{ 'Rouvrir' if seance.is_closed else 'Clôturer la séance' }}
-                </button>
+                <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-lock"></i> Fermer et archiver</button>
+            </form>
+            {% endif %}
+            {% if current_user.role in ['PRESIDENT', 'TRESORIER', 'SECRETAIRE'] and seance.is_empty %}
+            <form method="POST" action="{{ url_for('delete_seance', seance_id=seance.id) }}" class="d-inline no-print"
+                  onsubmit="return confirm('Supprimer cette séance vide (ouverte par erreur) ?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i> Supprimer (vide)</button>
             </form>
             {% endif %}
         </div>
     </div>
+
+    {% if seance.is_closed %}
+    <div class="alert alert-secondary d-flex justify-content-between align-items-center flex-wrap">
+        <span><i class="fas fa-archive"></i> <strong>Séance archivée</strong>
+            {% if seance.closed_at %} le {{ seance.closed_at.strftime('%d/%m/%Y à %H:%M') }}{% if seance.closer %} par {{ seance.closer.username }}{% endif %}{% endif %}
+            : lecture seule, tout est gardé dans l'historique ci-dessous.</span>
+        {% if current_user.role == 'PRESIDENT' %}
+        <form method="POST" action="{{ url_for('close_seance', seance_id=seance.id) }}" class="form-inline mt-2 mt-md-0 no-print">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="reason" class="form-control form-control-sm mr-2" maxlength="250" required minlength="3"
+                   placeholder="Motif de la réouverture">
+            <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-lock-open"></i> Rouvrir</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <form method="POST" id="sheetForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -227,6 +262,26 @@
         </div>
     </div>
     {% endif %}
+
+    {# ---------- Historique de la séance ---------- #}
+    <div class="card mt-4" id="historique">
+        <div class="card-header"><i class="fas fa-history"></i> Historique de la séance</div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th style="width: 150px">Quand</th><th>Qui</th><th>Ce qui s'est passé</th></tr></thead>
+                <tbody>
+                {% set colors = {'open': '#28a745', 'in': '#17a2b8', 'payout': '#c9a227', 'out': '#dc3545', 'close': '#6c757d', 'reopen': '#fd7e14'} %}
+                {% for h in history %}
+                <tr>
+                    <td class="nowrap small">{{ h.at.strftime('%d/%m/%Y %H:%M') if h.at else '—' }}</td>
+                    <td class="small">{{ h.who }}</td>
+                    <td><span class="hist-dot" style="background: {{ colors.get(h.kind, '#999') }}"></span>{{ h.what }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
 

@@ -123,7 +123,7 @@ from models import (
     ContributionPlanning, CycleReport, CaisseBalance,
     Poll, PollOption, PollVote, TontineDraw, TontineDrawResult, GalleryPhoto, Tontine,
     ContributionType, LoanGuarantor, CycleParticipant, Seance, ExerciseClosure, PasswordResetRequest, BillingPayment, SasPayEvent, PaymentCurrency, CycleShortfall,
-    LoginAttempt, AidType
+    LoginAttempt, AidType, SeanceEvent
 )
 import finance
 import report_export
@@ -4878,11 +4878,16 @@ def _seance_cycle_dues(seance, columns):
 @role_required(SEANCE_MANAGERS + ['CENSEUR'])
 def seances():
     ensure_contribution_types(current_tontine())
-    seance_list = Seance.query.order_by(Seance.date.desc(), Seance.id.desc()).all()
+    archives = request.args.get('vue') == 'archives'
+    opened = db.or_(Seance.is_closed == False, Seance.is_closed.is_(None))  # noqa: E712
+    seance_list = (Seance.query.filter(Seance.is_closed == True if archives else opened)  # noqa: E712
+                   .order_by(Seance.date.desc(), Seance.id.desc()).all())
     rubriques = ContributionType.query.filter(ContributionType.is_active == True,
                                               ContributionType.category != 'TONTINE').order_by(ContributionType.display_order).all()
     cycles = TontineCycleDetail.query.filter_by(status='EN_COURS').all()
-    return render_template('seances.html', seances=seance_list, rubriques=rubriques, cycles=cycles,
+    return render_template('seances.html', seances=seance_list, rubriques=rubriques, cycles=cycles, archives=archives,
+                           open_count=Seance.query.filter(db.or_(Seance.is_closed == False, Seance.is_closed.is_(None))).count(),  # noqa: E712
+                           archived_count=Seance.query.filter_by(is_closed=True).count(),
                            can_manage=current_user.role in SEANCE_MANAGERS, today=date.today().isoformat())
 
 
@@ -5013,6 +5018,7 @@ def seance_detail(seance_id):
                         'shortfall': status['current_total'] if status else Decimal('0'),
                         'late': [r for r in status['rows'] if r['gap'] < 0] if status else []})
     return render_template('seance_detail.html', seance=seance, columns=columns, rows=rows, totals=totals,
+                           history=seance_history(seance),
                            grand_total=sum(totals.values(), Decimal('0')), payouts=payouts,
                            seance_failures=[(col['cycle'], f) for col in columns if col['cycle']
                                             for f in [cycle_failures(col['cycle'])] if f],
@@ -5099,6 +5105,7 @@ def seance_late_fines(seance):
 @login_required
 @role_required(['PRESIDENT', 'TRESORIER'])
 def close_seance(seance_id):
+    """Fermer une séance = l'archiver (lecture seule). Rouvrir : président seulement, avec un motif écrit."""
     seance = db.get_or_404(Seance, seance_id)
     back = redirect(url_for('seance_detail', seance_id=seance.id))
     if not seance.is_closed:
@@ -5107,25 +5114,90 @@ def close_seance(seance_id):
             db.session.add(Sanction(member_id=f['member'].id, type_sanction='RETARD_COTISATION', amount=f['amount'],
                                     sanction_date=seance.date, status='PENDING', origin_key=f['key'],
                                     description=f"Retard de cotisation : {f['reason']} - {seance.display_name}"))
-        seance.is_closed = True
-        db.session.commit()
         total = sum((f['amount'] for f in fines), Decimal('0'))
+        seance.is_closed = True
+        seance.closed_at = utcnow()
+        seance.closed_by = current_user.id
+        db.session.add(SeanceEvent(seance_id=seance.id, action='FERMEE', user_id=current_user.id,
+                                   detail=f"Séance fermée et archivée : reçu {_fmt(seance.total_collected)} FCFA, "
+                                          f"{len(fines)} amende(s) de retard" + (f" ({_fmt(total)} FCFA)" if fines else '')))
+        db.session.commit()
         log_activity(current_user.id, current_user.role,
                      f"Clôture {seance.display_name} : {len(fines)} amende(s) de retard, {_fmt(total)} FCFA", request.remote_addr)
-        flash(f"Séance fermée. {len(fines)} amende(s) de retard infligée(s) pour {_fmt(total)} FCFA."
-              if fines else 'Séance fermée. Aucun retard de cotisation.', 'success')
+        flash((f"Séance fermée et rangée dans les Archives. {len(fines)} amende(s) de retard infligée(s) pour {_fmt(total)} FCFA."
+               if fines else 'Séance fermée et rangée dans les Archives. Aucun retard de cotisation.'), 'success')
         return back
-    # Réouverture : les amendes automatiques non payées sont annulées (recalculées à la prochaine clôture)
+    # Réouverture d'une séance archivée : président seulement, motif obligatoire (écrit dans l'historique)
+    if current_user.role != 'PRESIDENT':
+        flash("Seul le président peut rouvrir une séance archivée.", 'danger')
+        return back
+    reason = (request.form.get('reason') or '').strip()[:250]
+    if len(reason) < 3:
+        flash("Écrivez le motif de la réouverture (ex. « oubli du paiement de Rose »).", 'danger')
+        return back
+    # Les amendes automatiques non payées sont annulées (recalculées à la prochaine fermeture)
     cancelled = Sanction.query.filter(Sanction.origin_key.like(f"seance{seance.id}:%"), Sanction.status == 'PENDING').all()
     for s in cancelled:
         db.session.delete(s)
     seance.is_closed = False
+    db.session.add(SeanceEvent(seance_id=seance.id, action='ROUVERTE', user_id=current_user.id,
+                               detail=f"Rouverte - motif : {reason}"
+                                      + (f" ({len(cancelled)} amende(s) non payée(s) annulée(s))" if cancelled else '')))
     db.session.commit()
     log_activity(current_user.id, current_user.role,
-                 f"Réouverture {seance.display_name} : {len(cancelled)} amende(s) de retard annulée(s)", request.remote_addr)
+                 f"Réouverture {seance.display_name} (motif : {reason}) : {len(cancelled)} amende(s) annulée(s)", request.remote_addr)
     flash('Séance rouverte.' + (f" {len(cancelled)} amende(s) de retard non payée(s) annulée(s) : elles seront "
-                                "recalculées à la clôture." if cancelled else ''), 'info')
+                                "recalculées à la fermeture." if cancelled else ''), 'info')
     return back
+
+
+@app.route('/seances/<int:seance_id>/delete', methods=['POST'])
+@login_required
+@role_required(SEANCE_MANAGERS)
+def delete_seance(seance_id):
+    """Supprimer une séance ouverte par erreur : seulement si elle ne contient aucun argent ni amende"""
+    seance = db.get_or_404(Seance, seance_id)
+    if not seance.is_empty:
+        flash("Cette séance contient des paiements : on ne peut pas la supprimer, elle reste dans les Archives "
+              "(les comptes de la tontine en dépendent).", 'danger')
+        return redirect(url_for('seance_detail', seance_id=seance.id))
+    name = seance.display_name
+    db.session.delete(seance)
+    db.session.commit()
+    log_activity(current_user.id, current_user.role, f"Suppression de la {name} (vide, ouverte par erreur)", request.remote_addr)
+    flash(f"{name} supprimée (elle était vide). La suppression est notée dans l'historique des actions.", 'success')
+    return redirect(url_for('seances'))
+
+
+def seance_history(seance):
+    """Historique d'une séance, du plus ancien au plus récent : ouverture, paiements reçus (groupés par personne
+    et par minute), cagnottes versées, échecs réglés, fermeture / réouverture."""
+    def who(user):
+        if not user:
+            return '—'
+        return (user.member.full_name if user.member else user.username) + f" ({user.get_role_display().lower()})"
+    rows = [{'at': seance.created_at, 'who': who(seance.creator), 'what': 'Séance ouverte', 'kind': 'open'}]
+    groups = {}
+    for tx in seance.transactions.order_by(Transaction.created_at, Transaction.id).all():
+        if tx.type == 'BENEFICE_TONTINE':
+            rows.append({'at': tx.created_at, 'who': who(tx.creator),
+                         'what': f"{tx.description} : {_fmt(tx.amount)} FCFA à {tx.member_name}", 'kind': 'payout'})
+            continue
+        if finance.is_outflow(tx.type):
+            rows.append({'at': tx.created_at, 'who': who(tx.creator), 'what': f"{tx.description} : {_fmt(tx.amount)} FCFA", 'kind': 'out'})
+            continue
+        key = (tx.created_by, tx.created_at.replace(second=0, microsecond=0) if tx.created_at else None)
+        g_ = groups.setdefault(key, {'at': tx.created_at, 'user_id': tx.created_by, 'count': 0, 'total': Decimal('0')})
+        g_['count'] += 1
+        g_['total'] += Decimal(str(tx.amount))
+    for g_ in groups.values():
+        user = db.session.get(User, g_['user_id']) if g_['user_id'] else None
+        rows.append({'at': g_['at'], 'who': who(user), 'kind': 'in',
+                     'what': f"{g_['count']} paiement(s) reçu(s) : {_fmt(g_['total'])} FCFA"})
+    for ev in seance.events:
+        rows.append({'at': ev.created_at, 'who': who(ev.user), 'what': ev.detail or ev.action,
+                     'kind': 'close' if ev.action == 'FERMEE' else 'reopen'})
+    return sorted(rows, key=lambda r: r['at'] or datetime.min)
 
 
 # ============================================================

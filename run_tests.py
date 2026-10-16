@@ -45,6 +45,7 @@ SUITES = [
     ('test_election.py', 'el.db', 'Votes et élections au bureau (président élu par vote)'),
     ('test_echecs.py', 'ec.db', 'Échecs à régler (part + pénalité, tout ou rien)'),
     ('test_emprunt_trimestre.py', 'et.db', 'Emprunts : intérêts tous les 3 mois, capital en partie, 12 mois'),
+    ('test_seance_archive.py', 'sa2.db', 'Séances : fermer = archiver, supprimer si vide, historique'),
     ('test_sanctions.py', 'sa.db', 'Sanctions + contrôle de toutes les pages'),
     ('test_aides.py', 'ai.db', 'Aides sociales (règles, barème, versement)'),
     ('test_rapports.py', 'rp.db', 'Rapports PDF / CSV / Excel'),

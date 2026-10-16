@@ -1276,11 +1276,23 @@ class Seance(TenantMixin, db.Model):
     title = db.Column(db.String(120), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     columns = db.Column(db.String(500), nullable=True)   # colonnes de la feuille : "r12,c3,..." (rubriques / cycles)
-    is_closed = db.Column(db.Boolean, default=False)
+    is_closed = db.Column(db.Boolean, default=False)   # fermée = archivée (lecture seule)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=utcnow)
+    closed_at = db.Column(db.DateTime, nullable=True)
+    closed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     transactions = db.relationship('Transaction', backref='seance', lazy='dynamic')
+    creator = db.relationship('User', foreign_keys=[created_by])
+    closer = db.relationship('User', foreign_keys=[closed_by])
+    events = db.relationship('SeanceEvent', backref='seance', cascade='all, delete-orphan',
+                             order_by='SeanceEvent.created_at')
+
+    @property
+    def is_empty(self):
+        """Aucun argent ni amende : la séance peut être supprimée (ouverte par erreur)"""
+        return (self.transactions.count() == 0
+                and not Sanction.query.filter(Sanction.origin_key.like(f"seance{self.id}:%")).first())
 
     @property
     def display_name(self):
@@ -1299,6 +1311,21 @@ class Seance(TenantMixin, db.Model):
         result = db.session.query(db.func.sum(Transaction.amount)).filter(
             Transaction.seance_id == self.id, Transaction.type == 'BENEFICE_TONTINE').scalar()
         return Decimal(str(result or 0))
+
+
+class SeanceEvent(TenantMixin, db.Model):
+    """Historique d'une séance : fermeture / archivage, réouverture (avec motif)…
+    (les paiements et cagnottes viennent directement des écritures rattachées à la séance)"""
+    __tablename__ = 'seance_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    seance_id = db.Column(db.Integer, db.ForeignKey('seances.id', ondelete='CASCADE'), nullable=False)
+    action = db.Column(db.String(20), nullable=False)        # FERMEE / ROUVERTE
+    detail = db.Column(db.String(300), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+
+    user = db.relationship('User')
 
 
 # ============================================================

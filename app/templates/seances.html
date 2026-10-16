@@ -56,27 +56,39 @@
     </div>
     {% endif %}
 
+    <ul class="nav nav-pills mb-2">
+        <li class="nav-item"><a class="nav-link {{ '' if archives else 'active' }}" href="{{ url_for('seances') }}">
+            <i class="fas fa-door-open"></i> En cours <span class="badge badge-light">{{ open_count }}</span></a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if archives else '' }}" href="{{ url_for('seances', vue='archives') }}">
+            <i class="fas fa-archive"></i> Archives <span class="badge badge-light">{{ archived_count }}</span></a></li>
+    </ul>
     <div class="card">
-        <div class="card-header"><i class="fas fa-history"></i> Séances</div>
+        <div class="card-header"><i class="fas {{ 'fa-archive' if archives else 'fa-door-open' }}"></i>
+            {{ 'Séances fermées (archives, lecture seule)' if archives else 'Séances en cours' }}</div>
         {% if seances %}
         <div class="table-container">
             <table class="table mb-0">
-                <thead><tr><th>Date</th><th>Séance</th><th class="text-right">Reçu</th><th>État</th><th></th></tr></thead>
+                <thead><tr><th>Date</th><th>Séance</th><th class="text-right">Reçu</th>
+                    <th class="text-right d-none d-md-table-cell">Cagnottes versées</th>
+                    <th class="d-none d-md-table-cell">{{ 'Fermée le' if archives else 'État' }}</th><th></th></tr></thead>
                 <tbody>
                 {% for s in seances %}
                 <tr>
-                    <td>{{ s.date.strftime('%d/%m/%Y') }}</td>
+                    <td class="nowrap">{{ s.date.strftime('%d/%m/%Y') }}</td>
                     <td>{{ s.display_name }}</td>
                     <td class="text-right font-weight-bold">{{ fcfa(s.total_collected) }} FCFA</td>
-                    <td>{% if s.is_closed %}<span class="badge badge-secondary">Clôturée</span>{% else %}<span class="badge badge-success">Ouverte</span>{% endif %}</td>
-                    <td class="text-right"><a href="{{ url_for('seance_detail', seance_id=s.id) }}" class="btn btn-sm btn-outline-primary">Ouvrir</a></td>
+                    <td class="text-right d-none d-md-table-cell">{{ fcfa(s.total_paid_out) }}</td>
+                    <td class="d-none d-md-table-cell">{% if s.is_closed %}<span class="badge badge-secondary"><i class="fas fa-archive"></i> Archivée</span>
+                        {% if s.closed_at %}<small class="text-muted d-block">{{ s.closed_at.strftime('%d/%m/%Y') }}{% if s.closer %} · {{ s.closer.username }}{% endif %}</small>{% endif %}
+                        {% else %}<span class="badge badge-success">Ouverte</span>{% endif %}</td>
+                    <td class="text-right actions"><a href="{{ url_for('seance_detail', seance_id=s.id) }}" class="btn btn-sm btn-outline-primary">{{ 'Voir' if s.is_closed else 'Ouvrir' }}</a></td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="card-body text-muted">Aucune séance pour le moment.</div>
+        <div class="card-body text-muted">{{ 'Aucune séance archivée.' if archives else 'Aucune séance en cours : ouvrez une feuille de séance ci-dessus.' }}</div>
         {% endif %}
     </div>
 </div>

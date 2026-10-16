@@ -137,7 +137,7 @@ with app.app_context():
 c.post(f'/sanctions/{rose_pres}/pay', data={'payment_mode': 'ESPECE'})
 
 # ---------------------------------------------------------------- réouverture : correction d'un oubli
-r = c.post(f'/seances/{sid}/close', follow_redirects=True)
+r = c.post(f'/seances/{sid}/close', data={'reason': 'paiement de Jean oublié'}, follow_redirects=True)
 check('4 amende(s) de retard non payée(s) annulée(s)' in text(r), 'réouverture : les 4 amendes non payées sont annulées')
 pay('Jean', [(pr, 1050)])   # Jean avait en fait payé sa présence
 c.post(f'/seances/{sid}/close')
