@@ -2,10 +2,11 @@
 # Fichier WSGI pour PythonAnywhere (Ghelia Finance)
 # ============================================================
 # À COPIER dans l'onglet « Web » de PythonAnywhere -> lien « WSGI configuration file »
-# (remplacer tout le contenu existant), puis cliquer sur « Reload ».
+# (/var/www/germainbob_pythonanywhere_com_wsgi.py : remplacer tout le contenu), puis « Reload ».
+# ATTENTION : ce n'est PAS le fichier ~/tontine_app/deploy/pythonanywhere_wsgi.py qui est lu par le site.
 #
-# Seule la ligne BREVO_API_KEY est à compléter : la clé API Brevo (commence par « xkeysib- »).
-# Ce fichier reste privé sur votre compte PythonAnywhere : ne le recopiez JAMAIS dans GitHub
+# Trois lignes à compléter : BREVO_API_KEY, SASPAY_SECRET_KEY, SASPAY_WEBHOOK_SECRET.
+# Ce fichier reste privé sur votre compte PythonAnywhere : ne recopiez JAMAIS les clés dans GitHub
 # ni dans un message.
 
 import os
@@ -22,17 +23,14 @@ os.environ.setdefault('TRUST_PROXY', '1')
 os.environ.setdefault('SESSION_COOKIE_SECURE', 'True')
 
 # E-mails de confirmation : PythonAnywhere gratuit bloque le SMTP (Gmail), on passe par l'API Brevo.
-# Collez ici la clé API Brevo (expéditeur ghelia.finance@gmail.com validé dans Brevo)
+# Clé API Brevo (commence par « xkeysib- », expéditeur ghelia.finance@gmail.com validé dans Brevo)
 os.environ['BREVO_API_KEY'] = 'COLLEZ_ICI_LA_CLE_BREVO'
 
-# ---- SasPay : abonnements payés et validés automatiquement (sans intervention de l'administrateur)
-# Liens de paiement SasPay (publics, montant libre) : un en XAF (Cameroun, Gabon, Congo…)
-# et, si vous avez des tontines en Afrique de l'Ouest, un en XOF (Bénin, Côte d'Ivoire, Sénégal…)
-os.environ.setdefault('SASPAY_PAYMENT_URL', 'COLLEZ_ICI_LE_LIEN_XAF')
-os.environ.setdefault('SASPAY_PAYMENT_URL_XOF', '')
-# Secret de signature du webhook SasPay (adresse : https://germainbob.pythonanywhere.com/webhooks/saspay)
+# ---- SasPay : abonnements payés par l'API (aucun lien à copier), validés automatiquement
+# Clé SECRÈTE de l'API SasPay (commence par « sk_live_ »)
+os.environ['SASPAY_SECRET_KEY'] = 'COLLEZ_ICI_LA_CLE_SECRETE_SASPAY'
+# « Signing secret » du webhook SasPay (adresse : https://germainbob.pythonanywhere.com/webhooks/saspay)
 os.environ['SASPAY_WEBHOOK_SECRET'] = 'COLLEZ_ICI_LE_SIGNING_SECRET'
-# Paiement en un clic : clé secrète sk_live_… — à remplir SEULEMENT quand PythonAnywhere aura autorisé api.saspay.me
-os.environ['SASPAY_SECRET_KEY'] = ''
 
+# TOUJOURS EN DERNIER : l'application lit les réglages ci-dessus au démarrage
 from app import app as application  # noqa: E402
